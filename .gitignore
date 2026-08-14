@@ -13,7 +13,6 @@ xcuserdata/
 *.moved-aside
 
 # Release artifacts
-dist/
 *.xcarchive
 *.dSYM
 *.dSYM.zip

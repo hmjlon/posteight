@@ -10,7 +10,6 @@ Posteight is a macOS SwiftUI sticky-note checklist app. It keeps today's work vi
 - `Posteight.xcodeproj`: Xcode app target; builds the real `.app` bundle
 - `Package.swift`: Swift Package Manager configuration, for fast command-line builds
 - `Packaging/Info.plist`: macOS app bundle metadata, shared by both build paths
-- `build_app.sh`: creates the local `dist/Posteight.app` release bundle
 
 The landing page is not in this repository. It lives in [posteight-landing](https://github.com/hmjlon/posteight-landing); send web changes there.
 
@@ -38,11 +37,7 @@ Fast compile check, no bundle:
 swift build
 ```
 
-Create the double-clickable release bundle in `dist/`:
-
-```bash
-./build_app.sh
-```
+For a distributable bundle, use Product > Archive in Xcode.
 
 `swift run` still works, but it launches an unbundled binary: `Bundle.main.bundleIdentifier`
 is `nil`, so macOS logs `linkd`/Process Instance Registry XPC failures and window positions
@@ -53,8 +48,8 @@ The project targets macOS 14 or later on Apple silicon only; `ARCHS` is pinned t
 so the app does not run on Intel Macs. `Sources/Posteight` is a file system synchronized
 group, so adding or deleting a Swift file needs no `project.pbxproj` change.
 
-`build_app.sh` is a thin wrapper around the Xcode target. Keep every build setting in
-`Posteight.xcodeproj` so the script and the app cannot drift apart.
+Keep every build setting in `Posteight.xcodeproj`. It is the only thing that builds the
+app, and a second build path drifts out of sync with it.
 
 ## Implementation Notes
 
