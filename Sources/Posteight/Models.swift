@@ -136,7 +136,7 @@ struct StickerOption: Identifiable {
 
 enum DesignTokens {
     static let defaultNoteSize = NoteSize(width: 244, height: 292)
-    static let minimumNoteSize = NoteSize(width: 190, height: 220)
+    static let minimumNoteSize = NoteSize(width: 244, height: 220)
     static let maximumNoteSize = NoteSize(width: 430, height: 560)
 
     static let paperColors: [ColorOption] = [

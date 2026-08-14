@@ -113,22 +113,23 @@ private struct StrikeLine: View {
     var body: some View {
         GeometryReader { geometry in
             let width = max(0, geometry.size.width * progress)
-            let y = (geometry.size.height - style.strokeHeight) * 0.5
+            let centerY = geometry.size.height * 0.5
 
-            ZStack(alignment: .leading) {
+            ZStack(alignment: .topLeading) {
                 Rectangle()
                     .fill(color.opacity(style.opacity))
                     .frame(width: width, height: style.strokeHeight)
-                    .offset(y: y)
+                    .position(x: width * 0.5, y: centerY)
 
                 if showPen {
                     Image(systemName: style.systemImage)
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(color)
                         .rotationEffect(.degrees(-14))
-                        .offset(x: max(0, width - 8), y: y - 12)
+                        .position(x: max(7, width), y: centerY - 8)
                 }
             }
+            .frame(width: geometry.size.width, height: geometry.size.height)
         }
         .clipped()
     }

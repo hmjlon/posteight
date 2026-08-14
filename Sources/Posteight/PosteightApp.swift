@@ -8,10 +8,11 @@ struct PosteightApp: App {
         WindowGroup {
             WorkspaceView()
                 .environmentObject(store)
-                .frame(minWidth: 860, minHeight: 620)
-                .background(WindowConfigurator())
+                .fixedSize()
+                .background(WorkspaceWindowConfigurator())
         }
         .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentSize)
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button("New Sticky Note") {
@@ -20,10 +21,22 @@ struct PosteightApp: App {
                 .keyboardShortcut("n", modifiers: [.command])
             }
         }
+
+        WindowGroup("Posteight", for: UUID.self) { $noteID in
+            if let noteID {
+                StickyNoteWindowView(noteID: noteID)
+                    .environmentObject(store)
+            }
+        }
+        .windowStyle(.hiddenTitleBar)
+        .defaultSize(
+            width: DesignTokens.defaultNoteSize.width,
+            height: DesignTokens.defaultNoteSize.height
+        )
     }
 }
 
-private struct WindowConfigurator: NSViewRepresentable {
+private struct WorkspaceWindowConfigurator: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
 
@@ -33,14 +46,13 @@ private struct WindowConfigurator: NSViewRepresentable {
             NSApp.activate(ignoringOtherApps: true)
             window.title = "Posteight"
             window.level = .floating
-            window.isMovableByWindowBackground = false
+            window.isMovableByWindowBackground = true
             window.titleVisibility = .hidden
             window.titlebarAppearsTransparent = true
             window.backgroundColor = .clear
             window.isOpaque = false
-            window.hasShadow = false
+            window.hasShadow = true
             window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-            window.setFrame(NSRect(x: 180, y: 180, width: 980, height: 700), display: true)
         }
 
         return view

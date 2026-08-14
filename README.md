@@ -18,6 +18,16 @@ Posteight is a macOS sticky-note checklist app prototype for keeping today's wor
 swift run
 ```
 
+## Landing Page
+
+The static landing page lives in `Landing/`. Preview it locally without installing web dependencies:
+
+```bash
+make landing
+```
+
+Then open `http://localhost:4173`.
+
 ## Current Scope
 
 This version focuses on the local macOS experience and interaction design. The Notion API connection is intentionally left as a later feature after the daily log format feels right.

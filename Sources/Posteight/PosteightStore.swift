@@ -25,21 +25,22 @@ final class PosteightStore: ObservableObject {
         load()
     }
 
-    func addNote() {
+    @discardableResult
+    func addNote() -> UUID {
         let offset = Double(notes.count % 4) * 34
-        notes.append(
-            StickyNote(
-                title: Self.todayTitle(),
-                stickerSymbol: "tag",
-                paperHex: DesignTokens.paperColors[0].hex,
-                penHex: DesignTokens.penColors[0].hex,
-                includeInNotionLog: false,
-                position: NotePoint(x: 270 + offset, y: 240 + offset),
-                items: [
-                    TodoItem(title: "")
-                ]
-            )
+        let note = StickyNote(
+            title: Self.todayTitle(),
+            stickerSymbol: "tag",
+            paperHex: DesignTokens.paperColors[0].hex,
+            penHex: DesignTokens.penColors[0].hex,
+            includeInNotionLog: false,
+            position: NotePoint(x: 270 + offset, y: 240 + offset),
+            items: [
+                TodoItem(title: "")
+            ]
         )
+        notes.append(note)
+        return note.id
     }
 
     func moveNoteToTrash(_ noteID: UUID) {
@@ -68,6 +69,12 @@ final class PosteightStore: ObservableObject {
         updateNote(noteID) { note in
             note.position.x += translation.width
             note.position.y += translation.height
+        }
+    }
+
+    func updateNotePosition(_ noteID: UUID, position: NotePoint) {
+        updateNote(noteID) { note in
+            note.position = position
         }
     }
 

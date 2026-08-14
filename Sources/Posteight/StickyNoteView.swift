@@ -2,18 +2,43 @@ import SwiftUI
 
 struct StickyNoteView: View {
     @EnvironmentObject private var store: PosteightStore
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     let note: StickyNote
-    let onDelete: () -> Void
-    let onMoveChanged: (CGSize) -> Void
-    let onMoveEnded: (CGSize) -> Void
     let onResizeChanged: (CGSize) -> Void
     let onResizeEnded: (CGSize) -> Void
-    @State private var isPencilCaseOpen = false
+    @Binding var isPencilCaseOpen: Bool
     @FocusState private var focusedItemID: UUID?
 
     var body: some View {
+        noteBody
+        .overlay(alignment: .bottomTrailing) {
+            resizeHandle
+        }
+        .overlay {
+            ZStack {
+                Rectangle()
+                    .stroke(.white.opacity(0.34), lineWidth: 0.8)
+
+                Rectangle()
+                    .stroke(.black.opacity(0.08), lineWidth: 1)
+            }
+        }
+        .shadow(color: .black.opacity(0.18), radius: 16, x: 0, y: 9)
+        .animation(.spring(response: 0.28, dampingFraction: 0.86), value: isPencilCaseOpen)
+    }
+
+    private var noteBody: some View {
         VStack(alignment: .leading, spacing: 9) {
-            header
+            PlainEditableTextField(
+                text: Binding(
+                    get: { store.noteTitle(note.id) ?? note.title },
+                    set: { store.updateNoteTitle(note.id, title: $0) }
+                ),
+                fontSize: 13,
+                fontWeight: .medium,
+                textOpacity: 0.72
+            )
+            .frame(height: 22)
 
             if isPencilCaseOpen {
                 PencilCaseView(note: note)
@@ -28,7 +53,7 @@ struct StickyNoteView: View {
                     TodoItemRow(note: note, item: item, focusedItemID: $focusedItemID)
                 }
             }
-            .padding(.top, isPencilCaseOpen ? 8 : 32)
+            .padding(.top, isPencilCaseOpen ? 8 : 5)
 
             Spacer(minLength: 0)
 
@@ -45,92 +70,38 @@ struct StickyNoteView: View {
             .buttonStyle(.plain)
             .help("할 일 추가")
         }
-        .padding(13)
+        .padding(.horizontal, 13)
+        .padding(.top, 9)
+        .padding(.bottom, 13)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background {
             ZStack {
-                Rectangle()
-                    .fill(Color(hex: note.paperHex))
+                if reduceTransparency {
+                    Rectangle()
+                        .fill(Color(hex: note.paperHex))
+                } else {
+                    Rectangle()
+                        .fill(.thinMaterial)
+
+                    Rectangle()
+                        .fill(Color(hex: note.paperHex).opacity(0.72))
+
+                    LinearGradient(
+                        colors: [
+                            .white.opacity(0.2),
+                            .clear,
+                            Color(hex: note.penHex).opacity(0.035)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                }
 
                 NotebookLines()
-                    .padding(.top, 44)
+                    .padding(.top, 34)
                     .padding(.horizontal, 12)
             }
         }
-        .overlay(alignment: .bottomTrailing) {
-            resizeHandle
-        }
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(.white.opacity(0.36))
-                .frame(height: 1)
-        }
-        .overlay {
-            Rectangle()
-                .stroke(.black.opacity(0.09), lineWidth: 1)
-        }
-        .shadow(color: .black.opacity(0.16), radius: 14, x: 0, y: 8)
-        .animation(.spring(response: 0.28, dampingFraction: 0.86), value: isPencilCaseOpen)
-    }
-
-    private var header: some View {
-        HStack(spacing: 8) {
-            moveHandle
-
-            Image(systemName: note.stickerSymbol)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Color(hex: note.penHex).opacity(0.88))
-                .frame(width: 20, height: 20)
-                .background(.white.opacity(0.38), in: Rectangle())
-
-            PlainEditableTextField(
-                text: Binding(
-                    get: { store.noteTitle(note.id) ?? note.title },
-                    set: { store.updateNoteTitle(note.id, title: $0) }
-                ),
-                fontSize: 13,
-                fontWeight: .regular,
-                textOpacity: 0.58
-            )
-            .frame(height: 22)
-
-            Button {
-                isPencilCaseOpen.toggle()
-            } label: {
-                Image(systemName: "pencil.and.outline")
-                    .frame(width: 21, height: 21)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.black.opacity(0.62))
-            .help("필통")
-
-            Button {
-                onDelete()
-            } label: {
-                Image(systemName: "xmark")
-                    .frame(width: 20, height: 20)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.black.opacity(0.42))
-            .help("삭제")
-        }
-    }
-
-    private var moveHandle: some View {
-        Image(systemName: "arrow.up.and.down.and.arrow.left.and.right")
-            .font(.system(size: 10, weight: .bold))
-            .foregroundStyle(.black.opacity(0.38))
-            .frame(width: 18, height: 20)
-            .contentShape(Rectangle())
-            .gesture(
-                DragGesture(minimumDistance: 1)
-                    .onChanged { value in
-                        onMoveChanged(value.translation)
-                    }
-                    .onEnded { value in
-                        onMoveEnded(value.translation)
-                    }
-            )
-            .help("포스트잇 이동")
     }
 
     private var resizeHandle: some View {
@@ -168,10 +139,17 @@ private struct NotebookLines: View {
             let lineCount = max(0, Int(geometry.size.height / lineSpacing))
 
             ForEach(0..<lineCount, id: \.self) { index in
-                Rectangle()
-                    .fill(.gray.opacity(0.13))
-                    .frame(height: 0.8)
-                    .offset(y: CGFloat(index) * lineSpacing)
+                ZStack {
+                    Rectangle()
+                        .fill(.black.opacity(0.075))
+                        .frame(height: 0.7)
+
+                    Rectangle()
+                        .fill(.white.opacity(0.16))
+                        .frame(height: 0.5)
+                        .offset(y: 0.7)
+                }
+                .offset(y: CGFloat(index) * lineSpacing)
             }
         }
         .allowsHitTesting(false)
