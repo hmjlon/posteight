@@ -14,8 +14,16 @@ Posteight is a macOS sticky-note checklist app prototype for keeping today's wor
 
 ## Run
 
+Open the app project in Xcode and hit Run:
+
 ```bash
-swift run
+xed Posteight.xcodeproj
+```
+
+For a quick compile check without building the app bundle:
+
+```bash
+swift build
 ```
 
 ## Landing Page

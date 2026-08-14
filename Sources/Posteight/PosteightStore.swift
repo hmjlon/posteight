@@ -21,6 +21,15 @@ final class PosteightStore: ObservableObject {
     private let legacyStorageKey = "posteat.notes.v1"
     private let legacyTrashStorageKey = "posteat.trash.v1"
 
+    // `swift run` launches an unbundled binary, so its standard domain is not the app
+    // bundle's; point it at the bundle's domain so both ways of running share notes.
+    // Inside the real bundle, standard already is that domain, and passing a suite name
+    // equal to your own bundle identifier is rejected by UserDefaults.
+    private let defaults: UserDefaults = {
+        guard Bundle.main.bundleIdentifier == nil else { return .standard }
+        return UserDefaults(suiteName: "com.younjiyoung.posteight") ?? .standard
+    }()
+
     init() {
         load()
     }
@@ -211,10 +220,17 @@ final class PosteightStore: ObservableObject {
         loadTrashedNotes()
     }
 
+    /// Reads the current key, then the `Posteat` key, then the unbundled `swift run` domain
+    /// for both, so notes written before the suite change still load.
+    private func storedData(_ key: String, legacy: String) -> Data? {
+        defaults.data(forKey: key) ?? defaults.data(forKey: legacy)
+            ?? UserDefaults.standard.data(forKey: key)
+            ?? UserDefaults.standard.data(forKey: legacy)
+    }
+
     private func loadNotes() {
         guard
-            let data = UserDefaults.standard.data(forKey: storageKey) ??
-                UserDefaults.standard.data(forKey: legacyStorageKey),
+            let data = storedData(storageKey, legacy: legacyStorageKey),
             let decoded = try? JSONDecoder().decode([StickyNote].self, from: data)
         else {
             notes = Self.sampleNotes
@@ -226,8 +242,7 @@ final class PosteightStore: ObservableObject {
 
     private func loadTrashedNotes() {
         guard
-            let data = UserDefaults.standard.data(forKey: trashStorageKey) ??
-                UserDefaults.standard.data(forKey: legacyTrashStorageKey),
+            let data = storedData(trashStorageKey, legacy: legacyTrashStorageKey),
             let decoded = try? JSONDecoder().decode([TrashedStickyNote].self, from: data)
         else {
             trashedNotes = []
@@ -239,12 +254,12 @@ final class PosteightStore: ObservableObject {
 
     private func saveNotes() {
         guard let data = try? JSONEncoder().encode(notes) else { return }
-        UserDefaults.standard.set(data, forKey: storageKey)
+        defaults.set(data, forKey: storageKey)
     }
 
     private func saveTrashedNotes() {
         guard let data = try? JSONEncoder().encode(trashedNotes) else { return }
-        UserDefaults.standard.set(data, forKey: trashStorageKey)
+        defaults.set(data, forKey: trashStorageKey)
     }
 
     private func compacted(_ decodedNotes: [StickyNote]) -> [StickyNote] {

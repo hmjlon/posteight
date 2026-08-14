@@ -80,7 +80,7 @@ struct WorkspaceView: View {
         .buttonStyle(.plain)
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
+        .background(.background, in: RoundedRectangle(cornerRadius: 10))
         .overlay {
             RoundedRectangle(cornerRadius: 10)
                 .stroke(.black.opacity(0.08), lineWidth: 1)

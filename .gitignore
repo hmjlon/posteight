@@ -1,7 +1,22 @@
+# Swift Package Manager
 .build/
 .swiftpm/
+
+# Xcode build output
 DerivedData/
-*.xcodeproj/project.xcworkspace/xcuserdata/
+build/
+
+# Xcode per-user state (schemes under xcshareddata/ stay tracked)
+xcuserdata/
 *.xcuserstate
-.DS_Store
+*.xcscmblueprint
+*.moved-aside
+
+# Release artifacts
 dist/
+*.xcarchive
+*.dSYM
+*.dSYM.zip
+*.dmg
+
+.DS_Store

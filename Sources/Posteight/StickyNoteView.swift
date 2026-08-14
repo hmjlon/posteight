@@ -76,16 +76,12 @@ struct StickyNoteView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background {
             ZStack {
-                if reduceTransparency {
-                    Rectangle()
-                        .fill(Color(hex: note.paperHex))
-                } else {
-                    Rectangle()
-                        .fill(.thinMaterial)
+                // Paper is opaque: a sticky note that shows the desktop through it is
+                // unreadable over busy windows.
+                Rectangle()
+                    .fill(Color(hex: note.paperHex))
 
-                    Rectangle()
-                        .fill(Color(hex: note.paperHex).opacity(0.72))
-
+                if !reduceTransparency {
                     LinearGradient(
                         colors: [
                             .white.opacity(0.2),

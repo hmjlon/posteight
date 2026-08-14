@@ -33,7 +33,6 @@ struct StickyNoteWindowView: View {
 
         return VStack(spacing: 0) {
             noteHeader(note)
-                .frame(height: Self.titlebarHeight)
 
             StickyNoteView(
                 note: note,
@@ -105,18 +104,16 @@ struct StickyNoteWindowView: View {
             .help("삭제")
         }
         .padding(.horizontal, 10)
+        // Size before painting: the row's natural height is shorter than the titlebar, and
+        // a background applied first leaves an unpainted band the clear window shows through.
+        .frame(height: Self.titlebarHeight)
         .background {
             ZStack {
-                if reduceTransparency {
-                    Rectangle()
-                        .fill(Color(hex: note.paperHex))
-                } else {
-                    Rectangle()
-                        .fill(.ultraThinMaterial)
+                // Matches the note body: opaque paper, sheen only as decoration.
+                Rectangle()
+                    .fill(Color(hex: note.paperHex))
 
-                    Rectangle()
-                        .fill(Color(hex: note.paperHex).opacity(0.24))
-
+                if !reduceTransparency {
                     LinearGradient(
                         colors: [.white.opacity(0.2), .clear],
                         startPoint: .top,
