@@ -6,13 +6,13 @@ import SwiftUI
 final class PosteightStore: ObservableObject {
     @Published private(set) var notes: [StickyNote] = [] {
         didSet {
-            saveNotes()
+            scheduleSave()
         }
     }
 
     @Published private(set) var trashedNotes: [TrashedStickyNote] = [] {
         didSet {
-            saveTrashedNotes()
+            scheduleSave()
         }
     }
 
@@ -21,17 +21,40 @@ final class PosteightStore: ObservableObject {
     private let legacyStorageKey = "posteat.notes.v1"
     private let legacyTrashStorageKey = "posteat.trash.v1"
 
-    // `swift run` launches an unbundled binary, so its standard domain is not the app
-    // bundle's; point it at the bundle's domain so both ways of running share notes.
-    // Inside the real bundle, standard already is that domain, and passing a suite name
-    // equal to your own bundle identifier is rejected by UserDefaults.
+    // Notes now live in Application Support. These two domains are read-only fallbacks for
+    // data written before that move: `swift run` launches an unbundled binary whose standard
+    // domain is not the app bundle's, so both were used at different times.
     private let defaults: UserDefaults = {
         guard Bundle.main.bundleIdentifier == nil else { return .standard }
         return UserDefaults(suiteName: "com.younjiyoung.posteight") ?? .standard
     }()
 
-    init() {
+    static let storeDirectory: URL = FileManager.default
+        .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("Posteight", isDirectory: true)
+
+    private let directory: URL
+    private let notesURL: URL
+    private let trashURL: URL
+
+    private var saveTask: Task<Void, Never>?
+
+    /// `directory` is only overridden by tests, so they never touch the real notes on disk.
+    init(directory: URL = PosteightStore.storeDirectory) {
+        self.directory = directory
+        self.notesURL = directory.appendingPathComponent("notes.json")
+        self.trashURL = directory.appendingPathComponent("trash.json")
+
         load()
+
+        // A debounced save loses up to `saveDelay` of work if the app quits first.
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.flush() }
+        }
     }
 
     @discardableResult
@@ -89,7 +112,7 @@ final class PosteightStore: ObservableObject {
 
     func resizeNote(_ noteID: UUID, to size: NoteSize) {
         updateNote(noteID) { note in
-            note.size = clamped(size)
+            note.size = Self.clamped(size)
         }
     }
 
@@ -170,6 +193,10 @@ final class PosteightStore: ObservableObject {
     }
 
     func dailyLogMarkdown(for date: Date = Date()) -> String {
+        Self.dailyLogMarkdown(notes: notes, date: date)
+    }
+
+    nonisolated static func dailyLogMarkdown(notes: [StickyNote], date: Date = Date()) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
 
@@ -220,29 +247,30 @@ final class PosteightStore: ObservableObject {
         loadTrashedNotes()
     }
 
-    /// Reads the current key, then the `Posteat` key, then the unbundled `swift run` domain
-    /// for both, so notes written before the suite change still load.
-    private func storedData(_ key: String, legacy: String) -> Data? {
-        defaults.data(forKey: key) ?? defaults.data(forKey: legacy)
+    /// Application Support first, then the two `UserDefaults` domains notes used to live in
+    /// (bundled and unbundled), then the `Posteat` keys from before the rename.
+    private func storedData(_ url: URL, key: String, legacy: String) -> Data? {
+        (try? Data(contentsOf: url))
+            ?? defaults.data(forKey: key) ?? defaults.data(forKey: legacy)
             ?? UserDefaults.standard.data(forKey: key)
             ?? UserDefaults.standard.data(forKey: legacy)
     }
 
     private func loadNotes() {
         guard
-            let data = storedData(storageKey, legacy: legacyStorageKey),
+            let data = storedData(notesURL, key: storageKey, legacy: legacyStorageKey),
             let decoded = try? JSONDecoder().decode([StickyNote].self, from: data)
         else {
             notes = Self.sampleNotes
             return
         }
 
-        notes = compacted(decoded)
+        notes = Self.compacted(decoded)
     }
 
     private func loadTrashedNotes() {
         guard
-            let data = storedData(trashStorageKey, legacy: legacyTrashStorageKey),
+            let data = storedData(trashURL, key: trashStorageKey, legacy: legacyTrashStorageKey),
             let decoded = try? JSONDecoder().decode([TrashedStickyNote].self, from: data)
         else {
             trashedNotes = []
@@ -252,28 +280,52 @@ final class PosteightStore: ObservableObject {
         trashedNotes = decoded
     }
 
-    private func saveNotes() {
-        guard let data = try? JSONEncoder().encode(notes) else { return }
-        defaults.set(data, forKey: storageKey)
+    private static let saveDelay = Duration.milliseconds(500)
+
+    /// Every keystroke mutates `notes`, so coalesce the writes instead of re-encoding the
+    /// whole store per character.
+    private func scheduleSave() {
+        saveTask?.cancel()
+        saveTask = Task { [weak self] in
+            try? await Task.sleep(for: Self.saveDelay)
+            guard !Task.isCancelled else { return }
+            self?.flush()
+        }
     }
 
-    private func saveTrashedNotes() {
-        guard let data = try? JSONEncoder().encode(trashedNotes) else { return }
-        defaults.set(data, forKey: trashStorageKey)
+    /// Writes any pending change immediately. Called on quit so the debounce cannot eat it.
+    func flush() {
+        saveTask?.cancel()
+        saveTask = nil
+        write(notes, to: notesURL)
+        write(trashedNotes, to: trashURL)
     }
 
-    private func compacted(_ decodedNotes: [StickyNote]) -> [StickyNote] {
+    private func write(_ value: some Encodable, to url: URL) {
+        do {
+            let data = try JSONEncoder().encode(value)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try data.write(to: url, options: .atomic)
+        } catch {
+            NSLog("Posteight: failed to save \(url.lastPathComponent): \(error)")
+        }
+    }
+
+    nonisolated static func compacted(_ decodedNotes: [StickyNote]) -> [StickyNote] {
         decodedNotes.map { note in
             var compactNote = note
             compactNote.size = clamped(note.size)
-            if compactNote.title == "새 포스트잇" || Self.isLegacyDateTitle(compactNote.title) {
-                compactNote.title = Self.todayTitle()
+            if compactNote.title == "새 포스트잇" {
+                compactNote.title = todayTitle()
+            } else if let legacyDate = legacyTitleDate(compactNote.title) {
+                // Reformat to the short style, keeping the day the note was actually made.
+                compactNote.title = todayTitle(date: legacyDate)
             }
             return compactNote
         }
     }
 
-    private func clamped(_ size: NoteSize) -> NoteSize {
+    nonisolated static func clamped(_ size: NoteSize) -> NoteSize {
         NoteSize(
             width: min(max(size.width, DesignTokens.minimumNoteSize.width), DesignTokens.maximumNoteSize.width),
             height: min(max(size.height, DesignTokens.minimumNoteSize.height), DesignTokens.maximumNoteSize.height)
@@ -310,19 +362,25 @@ final class PosteightStore: ObservableObject {
         )
     ]
 
-    private static func todayTitle(date: Date = Date()) -> String {
+    nonisolated static func todayTitle(date: Date = Date()) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "ko_KR")
         formatter.dateFormat = "yy.MM.dd(E)"
         return formatter.string(from: date)
     }
 
-    private static func isLegacyDateTitle(_ title: String) -> Bool {
-        ["yyyy.MM.dd(E)", "yyyy.MM.dd"].contains { format in
+    /// The old title style used a four-digit year. `DateFormatter` reads "25.08.11" as year 25
+    /// under `yyyy`, so require the four digits first — without that guard every note in the
+    /// current short style is mistaken for a legacy one and rewritten on load.
+    nonisolated static func legacyTitleDate(_ title: String) -> Date? {
+        guard title.prefix(4).allSatisfy(\.isNumber) else { return nil }
+
+        for format in ["yyyy.MM.dd(E)", "yyyy.MM.dd"] {
             let formatter = DateFormatter()
             formatter.locale = Locale(identifier: "ko_KR")
             formatter.dateFormat = format
-            return formatter.date(from: title) != nil
+            if let date = formatter.date(from: title) { return date }
         }
+        return nil
     }
 }

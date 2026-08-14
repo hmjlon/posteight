@@ -7,6 +7,7 @@ Posteight is a macOS SwiftUI sticky-note checklist app. It keeps today's work vi
 ## Repository Structure
 
 - `Sources/Posteight/`: SwiftUI views, models, and local persistence
+- `Tests/PosteightTests/`: unit tests for the store's pure logic and its save path
 - `Posteight.xcodeproj`: Xcode app target; builds the real `.app` bundle
 - `Package.swift`: Swift Package Manager configuration, for fast command-line builds
 - `Packaging/Info.plist`: macOS app bundle metadata, shared by both build paths
@@ -37,6 +38,12 @@ Fast compile check, no bundle:
 swift build
 ```
 
+Run the tests:
+
+```bash
+swift test
+```
+
 For a distributable bundle, use Product > Archive in Xcode.
 
 `swift run` still works, but it launches an unbundled binary: `Bundle.main.bundleIdentifier`
@@ -55,12 +62,17 @@ app, and a second build path drifts out of sync with it.
 
 - Keep the visible product name as `Posteight`.
 - Preserve the current local note and trash behavior unless a change is intentional.
-- The store migrates data from the legacy `Posteat` storage keys; do not remove that compatibility without a migration plan.
+- Notes live in `~/Library/Application Support/Posteight/`. Writes are debounced, so any new
+  quit or sleep path must call `PosteightStore.flush()` or it drops the last half second of edits.
+- The store still reads the legacy `UserDefaults` and `Posteat` keys so older installs migrate
+  on first launch; do not remove that fallback without a migration plan.
+- Title migration rewrites what users typed, so it is covered by tests. Change
+  `legacyTitleDate` only with a test proving current-style titles stay untouched.
 - Keep interactive changes focused and test text editing, checklist completion, note movement, resizing, trash, and persistence when those areas change.
 
 ## Git Workflow
 
 - Commit to `main` directly. This project does not use feature branches.
 - Keep commits focused on one feature or change.
-- Run `swift build` before every commit.
+- Run `swift test` before every commit.
 - Do not commit `.build/` or `dist/`; both are generated locally and ignored by Git.

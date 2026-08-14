@@ -30,6 +30,16 @@ swift build
 
 The landing page lives in its own repository: [posteight-landing](https://github.com/hmjlon/posteight-landing).
 
+## Tests
+
+```bash
+swift test
+```
+
+## License
+
+Proprietary. See [LICENSE](LICENSE). This is not open source.
+
 ## Current Scope
 
 This version focuses on the local macOS experience and interaction design. The Notion API connection is intentionally left as a later feature after the daily log format feels right.

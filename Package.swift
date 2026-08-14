@@ -11,6 +11,7 @@ let package = Package(
         .executable(name: "Posteight", targets: ["Posteight"])
     ],
     targets: [
-        .executableTarget(name: "Posteight")
+        .executableTarget(name: "Posteight"),
+        .testTarget(name: "PosteightTests", dependencies: ["Posteight"])
     ]
 )
