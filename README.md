@@ -20,13 +20,7 @@ swift run
 
 ## Landing Page
 
-The static landing page lives in `Landing/`. Preview it locally without installing web dependencies:
-
-```bash
-make landing
-```
-
-Then open `http://localhost:4173`.
+The landing page lives in its own repository: [posteight-landing](https://github.com/hmjlon/posteight-landing).
 
 ## Current Scope
 

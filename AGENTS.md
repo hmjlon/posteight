@@ -11,6 +11,8 @@ Posteight is a macOS SwiftUI sticky-note checklist app. It keeps today's work vi
 - `Packaging/Info.plist`: macOS app bundle metadata
 - `build_app.sh`: creates the local `dist/Posteight.app` release bundle
 
+The landing page is not in this repository. It lives in [posteight-landing](https://github.com/hmjlon/posteight-landing); send web changes there.
+
 ## Development Commands
 
 Run the debug app:
