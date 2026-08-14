@@ -44,7 +44,7 @@ The project targets macOS 14 or later.
 
 ## Git Workflow
 
-- Use a feature branch for each feature or fix.
+- Commit to `main` directly. This project does not use feature branches.
 - Keep commits focused on one feature or change.
-- Run `swift build` before opening a pull request.
+- Run `swift build` before every commit.
 - Do not commit `.build/` or `dist/`; both are generated locally and ignored by Git.
