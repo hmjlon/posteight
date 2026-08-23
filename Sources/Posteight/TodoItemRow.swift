@@ -9,6 +9,7 @@ struct TodoItemRow: View {
     @State private var strikeProgress: CGFloat = 0
     @State private var showPen = false
     @State private var isEditingText = false
+    @State private var isRowHovered = false
 
     var body: some View {
         HStack(alignment: .center, spacing: 8) {
@@ -68,9 +69,12 @@ struct TodoItemRow: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(.black.opacity(0.24))
+            .opacity(isRowHovered || isEditingText ? 1 : 0.12)
             .help("삭제")
         }
         .contentShape(Rectangle())
+        .onHover { isRowHovered = $0 }
+        .animation(.easeOut(duration: 0.12), value: isRowHovered)
         .onTapGesture {
             guard !isEditingText else { return }
             toggleDone()

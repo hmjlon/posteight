@@ -336,7 +336,7 @@ final class PosteightStore: ObservableObject {
         StickyNote(
             title: "오늘 업무",
             stickerSymbol: "building.2",
-            paperHex: "#FADDE5",
+            paperHex: "#EED9D8",
             penHex: "#B84A62",
             penStyle: .ballpoint,
             includeInNotionLog: true,
@@ -350,7 +350,7 @@ final class PosteightStore: ObservableObject {
         StickyNote(
             title: "개인 메모",
             stickerSymbol: "house",
-            paperHex: "#DCF8E8",
+            paperHex: "#D9E4D5",
             penHex: "#2C7A5A",
             penStyle: .highlighter,
             includeInNotionLog: false,

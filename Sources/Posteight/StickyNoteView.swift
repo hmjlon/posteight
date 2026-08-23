@@ -2,7 +2,6 @@ import SwiftUI
 
 struct StickyNoteView: View {
     @EnvironmentObject private var store: PosteightStore
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     let note: StickyNote
     let onResizeChanged: (CGSize) -> Void
     let onResizeEnded: (CGSize) -> Void
@@ -14,16 +13,6 @@ struct StickyNoteView: View {
         .overlay(alignment: .bottomTrailing) {
             resizeHandle
         }
-        .overlay {
-            ZStack {
-                Rectangle()
-                    .stroke(.white.opacity(0.34), lineWidth: 0.8)
-
-                Rectangle()
-                    .stroke(.black.opacity(0.08), lineWidth: 1)
-            }
-        }
-        .shadow(color: .black.opacity(0.18), radius: 16, x: 0, y: 9)
         .animation(.spring(response: 0.28, dampingFraction: 0.86), value: isPencilCaseOpen)
     }
 
@@ -74,30 +63,6 @@ struct StickyNoteView: View {
         .padding(.top, 9)
         .padding(.bottom, 13)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background {
-            ZStack {
-                // Paper is opaque: a sticky note that shows the desktop through it is
-                // unreadable over busy windows.
-                Rectangle()
-                    .fill(Color(hex: note.paperHex))
-
-                if !reduceTransparency {
-                    LinearGradient(
-                        colors: [
-                            .white.opacity(0.2),
-                            .clear,
-                            Color(hex: note.penHex).opacity(0.035)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                }
-
-                NotebookLines()
-                    .padding(.top, 34)
-                    .padding(.horizontal, 12)
-            }
-        }
     }
 
     private var resizeHandle: some View {
@@ -124,30 +89,5 @@ struct StickyNoteView: View {
                 }
         )
         .help("크기 조절")
-    }
-}
-
-private struct NotebookLines: View {
-    private let lineSpacing: CGFloat = 30
-
-    var body: some View {
-        GeometryReader { geometry in
-            let lineCount = max(0, Int(geometry.size.height / lineSpacing))
-
-            ForEach(0..<lineCount, id: \.self) { index in
-                ZStack {
-                    Rectangle()
-                        .fill(.black.opacity(0.075))
-                        .frame(height: 0.7)
-
-                    Rectangle()
-                        .fill(.white.opacity(0.16))
-                        .frame(height: 0.5)
-                        .offset(y: 0.7)
-                }
-                .offset(y: CGFloat(index) * lineSpacing)
-            }
-        }
-        .allowsHitTesting(false)
     }
 }

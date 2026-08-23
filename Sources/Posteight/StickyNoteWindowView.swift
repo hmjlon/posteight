@@ -4,7 +4,6 @@ import SwiftUI
 struct StickyNoteWindowView: View {
     @EnvironmentObject private var store: PosteightStore
     @Environment(\.dismissWindow) private var dismissWindow
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     let noteID: UUID
 
@@ -13,6 +12,7 @@ struct StickyNoteWindowView: View {
     @State private var liveSize: NoteSize?
     @State private var isMovingToTrash = false
     @State private var isPencilCaseOpen = false
+    @State private var isCardHovered = false
 
     var body: some View {
         Group {
@@ -31,20 +31,28 @@ struct StickyNoteWindowView: View {
     private func noteWindow(_ note: StickyNote) -> some View {
         let displayedSize = liveSize ?? note.size
 
-        return VStack(spacing: 0) {
-            noteHeader(note)
-
-            StickyNoteView(
-                note: note,
-                onResizeChanged: { translation in
-                    resizeWindow(note: note, translation: translation)
-                },
-                onResizeEnded: { translation in
-                    finishResizingWindow(note: note, translation: translation)
-                },
-                isPencilCaseOpen: $isPencilCaseOpen
+        return ZStack {
+            FoldedCardSurface(
+                paperColor: Color(hex: note.paperHex),
+                inkColor: Color(hex: note.penHex)
             )
-            .frame(width: displayedSize.width, height: displayedSize.height)
+
+            VStack(spacing: 0) {
+                noteHeader(note)
+
+                StickyNoteView(
+                    note: note,
+                    onResizeChanged: { translation in
+                        resizeWindow(note: note, translation: translation)
+                    },
+                    onResizeEnded: { translation in
+                        finishResizingWindow(note: note, translation: translation)
+                    },
+                    isPencilCaseOpen: $isPencilCaseOpen
+                )
+                .frame(width: displayedSize.width, height: displayedSize.height)
+            }
+            .clipShape(FoldedCardShape())
         }
         .frame(
             width: displayedSize.width,
@@ -55,6 +63,8 @@ struct StickyNoteWindowView: View {
         .rotationEffect(isMovingToTrash ? .degrees(12) : .zero)
         .opacity(isMovingToTrash ? 0 : 1)
         .allowsHitTesting(!isMovingToTrash)
+        .onHover { isCardHovered = $0 }
+        .environment(\.colorScheme, .light)
         .background {
             NoteWindowConfigurator(note: note) { configuredWindow in
                 if window !== configuredWindow {
@@ -65,76 +75,65 @@ struct StickyNoteWindowView: View {
     }
 
     private func noteHeader(_ note: StickyNote) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 7) {
             ZStack {
-                Image(systemName: "arrow.up.and.down.and.arrow.left.and.right")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(.primary.opacity(0.45))
+                Image(systemName: note.stickerSymbol)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Color(hex: note.penHex).opacity(0.82))
 
                 WindowMoveHandle(onDragEnded: saveWindowPosition)
             }
-            .frame(width: 22, height: 22)
-            .help("포스트잇 이동")
+            .frame(width: 20, height: 20)
+            .help("카드를 끌어 이동")
 
-            Image(systemName: note.stickerSymbol)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Color(hex: note.penHex).opacity(0.9))
-                .frame(width: 20, height: 20)
+            Text(remainingLabel(for: note))
+                .font(.system(size: 9, weight: .bold, design: .rounded))
+                .tracking(0.8)
+                .foregroundStyle(.primary.opacity(0.38))
 
             Spacer(minLength: 0)
 
-            Button {
-                isPencilCaseOpen.toggle()
-            } label: {
-                Image(systemName: "pencil.and.outline")
-                    .frame(width: 20, height: 20)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.primary.opacity(0.62))
-            .help("필통")
-
-            Button {
-                moveToTrash()
-            } label: {
-                Image(systemName: "xmark")
-                    .frame(width: 19, height: 20)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.primary.opacity(0.46))
-            .help("삭제")
-        }
-        .padding(.horizontal, 10)
-        // Size before painting: the row's natural height is shorter than the titlebar, and
-        // a background applied first leaves an unpainted band the clear window shows through.
-        .frame(height: Self.titlebarHeight)
-        .background {
-            ZStack {
-                // Matches the note body: opaque paper, sheen only as decoration.
-                Rectangle()
-                    .fill(Color(hex: note.paperHex))
-
-                if !reduceTransparency {
-                    LinearGradient(
-                        colors: [.white.opacity(0.2), .clear],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
+            HStack(spacing: 4) {
+                Button {
+                    isPencilCaseOpen.toggle()
+                } label: {
+                    Image(systemName: "slider.horizontal.3")
+                        .frame(width: 20, height: 20)
                 }
+                .help("카드 꾸미기")
+
+                Button {
+                    moveToTrash()
+                } label: {
+                    Image(systemName: "xmark")
+                        .frame(width: 19, height: 20)
+                }
+                .help("삭제")
             }
+            .buttonStyle(.plain)
+            .foregroundStyle(.primary.opacity(0.54))
+            .opacity(isCardHovered || isPencilCaseOpen ? 1 : 0.16)
+            .animation(.easeOut(duration: 0.14), value: isCardHovered)
+            .animation(.easeOut(duration: 0.14), value: isPencilCaseOpen)
         }
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(.white.opacity(0.3))
-                .frame(height: 0.8)
-        }
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(.black.opacity(0.08))
-                .frame(height: 1)
-        }
+        .padding(.leading, 13)
+        .padding(.trailing, FoldedCardMetrics.foldSize + 7)
+        .frame(height: Self.titlebarHeight)
     }
 
     private static let titlebarHeight: CGFloat = 32
+
+    private func remainingLabel(for note: StickyNote) -> String {
+        let remainingCount = note.items.filter {
+            !$0.isDone && !$0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }.count
+
+        if remainingCount > 0 {
+            return "\(remainingCount) LEFT"
+        }
+
+        return note.items.contains(where: \.isDone) ? "DONE" : "NEW"
+    }
 
     private func resizeWindow(note: StickyNote, translation: CGSize) {
         guard let window else { return }

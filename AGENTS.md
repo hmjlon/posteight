@@ -4,6 +4,13 @@
 
 Posteight is a macOS SwiftUI sticky-note checklist app. It keeps today's work visible on screen and stores notes locally for the current prototype.
 
+## Product and Design Direction
+
+Before changing product behavior, UX, or visual design, read the `Product Direction`
+section in `README.md`. Treat it as the current source of truth for product positioning,
+experience principles, menu bar behavior, design direction, priorities, and non-goals.
+When those decisions change, update `README.md` in the same change.
+
 ## Repository Structure
 
 - `Sources/Posteight/`: SwiftUI views, models, and local persistence

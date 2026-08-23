@@ -140,12 +140,12 @@ enum DesignTokens {
     static let maximumNoteSize = NoteSize(width: 430, height: 560)
 
     static let paperColors: [ColorOption] = [
-        ColorOption(name: "Pink", hex: "#FADDE5"),
-        ColorOption(name: "Butter", hex: "#FFF1A8"),
-        ColorOption(name: "Mint", hex: "#DCF8E8"),
-        ColorOption(name: "Sky", hex: "#DDEEFF"),
-        ColorOption(name: "Lavender", hex: "#E8DDFB"),
-        ColorOption(name: "White", hex: "#FFFDF7")
+        ColorOption(name: "Blush", hex: "#EED9D8"),
+        ColorOption(name: "Butter", hex: "#F0E4BA"),
+        ColorOption(name: "Sage", hex: "#D9E4D5"),
+        ColorOption(name: "Mist", hex: "#DCE5E7"),
+        ColorOption(name: "Lilac", hex: "#E3DCE9"),
+        ColorOption(name: "Ivory", hex: "#F3EFE5")
     ]
 
     static let penColors: [ColorOption] = [

@@ -2,10 +2,81 @@
 
 Posteight is a local macOS sticky-note checklist app that keeps today's work visible across the desktop.
 
-## Features
+## Product Direction
+
+Posteight began with a simple workplace problem: paper sticky notes keep today's
+tasks visible, but their contents remain exposed on a shared desk. Traditional
+task managers are private, but the next action often disappears inside another
+app.
+
+Posteight combines the useful parts of both:
+
+> Private sticky notes for your Mac — visible on your terms.
+
+The product is intended for people who work on a Mac in open offices, shared
+workspaces, or screen-sharing-heavy environments. Notes should remain easy for
+the owner to see during work and easy to hide when the situation changes.
+
+This is visual privacy, not a security-vault promise. Posteight can reduce
+accidental exposure when the user steps away or shares a screen, but it cannot
+prevent someone nearby from reading content that is currently visible on an
+unlocked display.
+
+### Experience Principles
+
+- **Quick to place:** capture a task without leaving the current workflow.
+- **Hard to forget:** keep independent notes where the work happens.
+- **Easy to hide:** provide one clear control for hiding and restoring every note.
+- **Private by default:** keep notes local and make any external export explicit.
+- **Satisfying to finish:** preserve the pen-like completion interaction as the
+  app's signature moment.
+- **Quiet when idle:** remain available without adding visual noise or Dock clutter.
+
+### Planned Menu Bar Experience
+
+Posteight should behave primarily as a compact macOS menu bar utility. Its menu
+bar popover will be the control center for quick capture, remaining-task status,
+showing or hiding all notes, and entering a manual meeting mode. Floating notes
+remain the main working surface; the popover should not become a second full
+editor. A menu-bar-only mode with an optional Dock icon is the intended direction.
+
+### Design Direction: Folded Card
+
+The selected visual foundation is **Folded Card**: a warm, matte task card with a
+single folded top-right corner as Posteight's signature silhouette.
+
+- Treat each note as one continuous piece of paper, without an app-like title bar.
+- Use the folded corner, not glassmorphism or a grid pattern, as the primary visual
+  identity.
+- Keep texture close to subtle natural paper fibers rather than a visible
+  decorative pattern.
+- Use a restrained palette of ivory, blush, sage, mist, butter, and lilac paper.
+- Keep the checklist visually dominant and reveal editing controls on hover.
+- Keep the future menu bar and popover compact, native, and mostly monochrome.
+- Use motion sparingly; the pen strike-through remains the signature completion
+  moment.
+
+The folded-card shell is implemented in the current prototype. Typography,
+spacing, hover behavior, and the future menu bar experience will continue to be
+refined one decision at a time.
+
+### Product Priorities
+
+1. Reliable local persistence and exact window restoration across relaunches,
+   displays, and Spaces
+2. Global show/hide control, hide-on-lock behavior, and a dependable manual
+   meeting mode
+3. Menu bar quick capture and keyboard-first checklist interaction
+4. A lightweight daily flow for completion, optional rollover, and explicit
+   Markdown export
+
+Full collaboration, accounts, cloud sync, AI features, and deep third-party
+integrations are outside the current focus.
+
+## Current Prototype Features
 
 - Independent floating windows that can be moved and resized anywhere
-- Frosted, colored paper with a compact glass toolbar
+- Matte folded-card surfaces with subtle paper grain and hover editing controls
 - Checklists with animated pen strike-through effects
 - Paper colors, pen colors, pen styles, and category stickers
 - Local persistence for note content, position, size, and appearance
