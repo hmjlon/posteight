@@ -1,40 +1,52 @@
 # Posteight
 
-Posteight is a macOS sticky-note checklist app prototype for keeping today's work visible on screen.
+Posteight is a local macOS sticky-note checklist app that keeps today's work visible across the desktop.
 
-## First Prototype
+## Features
 
-- Multiple square sticky notes on one floating workspace
-- Pink note as the default visual style
-- Checklist rows with round completion buttons
-- Pen strike animation when a task is completed
-- Pencil case panel for paper color, pen color, pen style, and stickers
+- Independent floating windows that can be moved and resized anywhere
+- Frosted, colored paper with a compact glass toolbar
+- Checklists with animated pen strike-through effects
+- Paper colors, pen colors, pen styles, and category stickers
+- Local persistence for note content, position, size, and appearance
+- Trash with restore and permanent-delete actions
 - Per-note "Notion log" toggle
-- Daily log preview as Markdown for the next Notion integration step
+- Daily work log preview and clipboard export as Markdown
 
-## Run
+## Develop with Xcode
 
-Open the app project in Xcode and hit Run:
+Open the app project:
 
 ```bash
 xed Posteight.xcodeproj
 ```
 
-For a quick compile check without building the app bundle:
+In Xcode, select the `Posteight` scheme and `My Mac`, then press `Command-R` to build and run.
+
+For a fast command-line compile check:
 
 ```bash
 swift build
 ```
 
-## Landing Page
-
-The landing page lives in its own repository: [posteight-landing](https://github.com/hmjlon/posteight-landing).
-
-## Tests
+Run the unit tests:
 
 ```bash
 swift test
 ```
+
+For a distributable app, use **Product > Archive** in Xcode.
+
+## Project Structure
+
+- `Sources/Posteight/`: SwiftUI views, models, and local persistence
+- `Tests/PosteightTests/`: store and persistence tests
+- `Posteight.xcodeproj`: Xcode app target and build settings
+- `Packaging/Info.plist`: macOS bundle metadata
+
+## Landing Page
+
+The landing page lives in its own repository: [posteight-landing](https://github.com/hmjlon/posteight-landing).
 
 ## License
 
@@ -42,4 +54,4 @@ Proprietary. See [LICENSE](LICENSE). This is not open source.
 
 ## Current Scope
 
-This version focuses on the local macOS experience and interaction design. The Notion API connection is intentionally left as a later feature after the daily log format feels right.
+This prototype targets macOS 14 or later and stores notes locally in `~/Library/Application Support/Posteight/`. Notion synchronization is not implemented yet; the current integration surface is Markdown preview and export.
