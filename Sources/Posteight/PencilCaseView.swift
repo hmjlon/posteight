@@ -6,11 +6,11 @@ struct PencilCaseView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 7) {
+            HStack(spacing: 6) {
                 Image(systemName: "archivebox")
                 Text("필통")
                     .font(.system(size: 12, weight: .bold, design: .rounded))
-                Spacer()
+                Spacer(minLength: 4)
                 Toggle(
                     "Notion 기록",
                     isOn: Binding(
@@ -19,7 +19,9 @@ struct PencilCaseView: View {
                     )
                 )
                 .toggleStyle(.switch)
-                .font(.system(size: 11, weight: .medium, design: .rounded))
+                .controlSize(.mini)
+                .fixedSize()
+                .font(.system(size: 10, weight: .medium, design: .rounded))
             }
 
             toolRow(title: "종이") {
@@ -29,18 +31,6 @@ struct PencilCaseView: View {
                 ) { hex in
                     store.updatePaperColor(note.id, hex: hex)
                 }
-
-                ColorPicker(
-                    "",
-                    selection: Binding(
-                        get: { Color(hex: note.paperHex) },
-                        set: { store.updatePaperColor(note.id, hex: $0.hexString) }
-                    ),
-                    supportsOpacity: false
-                )
-                .labelsHidden()
-                .frame(width: 28)
-                .help("직접 색 선택")
             }
 
             toolRow(title: "펜") {
@@ -50,18 +40,26 @@ struct PencilCaseView: View {
                 ) { hex in
                     store.updatePenColor(note.id, hex: hex)
                 }
+            }
 
-                ColorPicker(
-                    "",
-                    selection: Binding(
+            // The colour wells are wide enough to squeeze the swatches off a narrow card, so
+            // they share a row of their own.
+            toolRow(title: "직접") {
+                customColorWell(systemImage: "doc", help: "종이 색 직접 선택") {
+                    Binding(
+                        get: { Color(hex: note.paperHex) },
+                        set: { store.updatePaperColor(note.id, hex: $0.hexString) }
+                    )
+                }
+
+                customColorWell(systemImage: "pencil.tip", help: "펜 색 직접 선택") {
+                    Binding(
                         get: { Color(hex: note.penHex) },
                         set: { store.updatePenColor(note.id, hex: $0.hexString) }
-                    ),
-                    supportsOpacity: false
-                )
-                .labelsHidden()
-                .frame(width: 28)
-                .help("직접 색 선택")
+                    )
+                }
+
+                Spacer(minLength: 0)
             }
 
             Picker(
@@ -84,14 +82,15 @@ struct PencilCaseView: View {
                     .font(.system(size: 11, weight: .bold, design: .rounded))
                     .foregroundStyle(.black.opacity(0.48))
 
-                LazyVGrid(columns: Array(repeating: GridItem(.fixed(28), spacing: 6), count: 8), spacing: 6) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 26, maximum: 34), spacing: 5)], spacing: 5) {
                     ForEach(DesignTokens.stickers) { sticker in
                         Button {
                             store.updateSticker(note.id, symbol: sticker.symbol)
                         } label: {
                             Image(systemName: sticker.symbol)
-                                .font(.system(size: 13, weight: .semibold))
-                                .frame(width: 28, height: 24)
+                                .font(.system(size: 12, weight: .semibold))
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 22)
                                 .background(
                                     sticker.symbol == note.stickerSymbol
                                         ? Color(hex: note.penHex).opacity(0.16)
@@ -115,7 +114,8 @@ struct PencilCaseView: View {
                 }
             }
         }
-        .padding(11)
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(.white.opacity(0.34), in: Rectangle())
         .overlay {
             Rectangle()
@@ -123,12 +123,30 @@ struct PencilCaseView: View {
         }
     }
 
+    private func customColorWell(
+        systemImage: String,
+        help: String,
+        selection: () -> Binding<Color>
+    ) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: systemImage)
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(.black.opacity(0.42))
+
+            ColorPicker("", selection: selection(), supportsOpacity: false)
+                .labelsHidden()
+                .controlSize(.mini)
+                .fixedSize()
+        }
+        .help(help)
+    }
+
     private func toolRow<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             Text(title)
-                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .font(.system(size: 10, weight: .bold, design: .rounded))
                 .foregroundStyle(.black.opacity(0.48))
-                .frame(width: 30, alignment: .leading)
+                .frame(width: 24, alignment: .leading)
 
             content()
         }
@@ -140,15 +158,17 @@ private struct ColorSwatchRow: View {
     let selectedHex: String
     let onSelect: (String) -> Void
 
+    // Swatches reflow with the card: they wrap on a narrow note and spread out on a wide one.
     var body: some View {
-        HStack(spacing: 5) {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 16, maximum: 28), spacing: 4)], spacing: 4) {
             ForEach(options) { option in
                 Button {
                     onSelect(option.hex)
                 } label: {
                     Rectangle()
                         .fill(Color(hex: option.hex))
-                        .frame(width: 18, height: 18)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 16)
                         .overlay {
                             Rectangle()
                                 .stroke(

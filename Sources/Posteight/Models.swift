@@ -3,6 +3,9 @@ import SwiftUI
 
 struct StickyNote: Identifiable, Codable, Equatable {
     var id: UUID
+    /// The note's own name, shown in the card header. Older notes decode without one and fall
+    /// back to a numbered default.
+    var label: String?
     var title: String
     var stickerSymbol: String
     var paperHex: String
@@ -15,6 +18,7 @@ struct StickyNote: Identifiable, Codable, Equatable {
 
     init(
         id: UUID = UUID(),
+        label: String? = nil,
         title: String,
         stickerSymbol: String,
         paperHex: String,
@@ -26,6 +30,7 @@ struct StickyNote: Identifiable, Codable, Equatable {
         items: [TodoItem] = []
     ) {
         self.id = id
+        self.label = label
         self.title = title
         self.stickerSymbol = stickerSymbol
         self.paperHex = paperHex
@@ -158,13 +163,15 @@ enum DesignTokens {
     ]
 
     static let stickers: [StickerOption] = [
-        StickerOption(title: "회사", symbol: "building.2"),
-        StickerOption(title: "개발", symbol: "laptopcomputer"),
+        StickerOption(title: "업무", symbol: "briefcase"),
+        StickerOption(title: "학업", symbol: "book"),
         StickerOption(title: "회의", symbol: "person.2"),
-        StickerOption(title: "디자인", symbol: "paintpalette"),
+        StickerOption(title: "개발", symbol: "laptopcomputer"),
+        StickerOption(title: "마감", symbol: "calendar"),
         StickerOption(title: "긴급", symbol: "exclamationmark.triangle"),
         StickerOption(title: "아이디어", symbol: "lightbulb"),
         StickerOption(title: "개인", symbol: "house"),
-        StickerOption(title: "공부", symbol: "graduationcap")
+        StickerOption(title: "건강", symbol: "heart"),
+        StickerOption(title: "장보기", symbol: "cart")
     ]
 }

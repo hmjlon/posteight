@@ -32,13 +32,23 @@ unlocked display.
   app's signature moment.
 - **Quiet when idle:** remain available without adding visual noise or Dock clutter.
 
-### Planned Menu Bar Experience
+### Menu Bar Experience
 
-Posteight should behave primarily as a compact macOS menu bar utility. Its menu
-bar popover will be the control center for quick capture, remaining-task status,
-showing or hiding all notes, and entering a manual meeting mode. Floating notes
-remain the main working surface; the popover should not become a second full
-editor. A menu-bar-only mode with an optional Dock icon is the intended direction.
+Posteight runs as a compact macOS menu bar utility. There is no workspace window:
+the status item is the only permanent surface, and its icon carries the
+remaining-task count. The popover is the control center for quick capture,
+showing every note, the daily log, the trash, and quitting. Floating notes remain
+the main working surface; the popover should not become a second full editor.
+
+The status item shows progress as a fraction — remaining over total by default,
+or done over total. Clicking it opens the popover, which is also where settings
+live: the settings entry opens a modal dialog over whatever is on screen.
+
+Settings stay deliberately small: what the status item counts, whether notes
+float above other apps, and whether Posteight keeps a Dock icon. The Dock icon is
+on by default, so a running Posteight can be reached from the Dock and
+Command-Tab, and clicking it brings every note back. Turning it off leaves a
+menu-bar-only app. Hiding all notes and a manual meeting mode are still to come.
 
 ### Design Direction: Folded Card
 
@@ -52,12 +62,16 @@ single folded top-right corner as Posteight's signature silhouette.
   decorative pattern.
 - Use a restrained palette of ivory, blush, sage, mist, butter, and lilac paper.
 - Keep the checklist visually dominant and reveal editing controls on hover.
-- Keep the future menu bar and popover compact, native, and mostly monochrome.
+- Name each card in its header — `Posteight 1`, `2`, `3` by default, renamed freely — so a
+  note can stand for a category such as 업무 or 학업. Stickers repeat that idea as symbols.
+- Keep the menu bar and popover compact, native, and mostly monochrome.
 - Use motion sparingly; the pen strike-through remains the signature completion
   moment.
 
-The folded-card shell is implemented in the current prototype. Typography,
-spacing, hover behavior, and the future menu bar experience will continue to be
+The folded-card shell is implemented in the current prototype, and the app icon
+reuses the same silhouette: a butter-ivory card with the folded top-right corner
+and one struck-through line. Typography,
+spacing, hover behavior, and the menu bar experience will continue to be
 refined one decision at a time.
 
 ### Product Priorities

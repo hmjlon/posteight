@@ -4,7 +4,7 @@ struct TodoItemRow: View {
     @EnvironmentObject private var store: PosteightStore
     let note: StickyNote
     let item: TodoItem
-    let focusedItemID: FocusState<UUID?>.Binding
+    @Binding var focusedItemID: UUID?
 
     @State private var strikeProgress: CGFloat = 0
     @State private var showPen = false
@@ -42,13 +42,15 @@ struct TodoItemRow: View {
                     fontSize: 15,
                     fontWeight: .medium,
                     textOpacity: item.isDone ? 0.38 : 0.76,
+                    isFocused: focusedItemID == item.id,
                     onEditingChanged: { isEditingText = $0 },
                     onSubmit: {
-                        focusedItemID.wrappedValue = store.addItem(to: note.id)
-                    }
+                        focusedItemID = store.addItem(to: note.id)
+                    },
+                    onMoveUp: { moveFocus(by: -1) },
+                    onMoveDown: { moveFocus(by: 1) }
                 )
                 .frame(height: 26)
-                .focused(focusedItemID, equals: item.id)
 
                 StrikeLine(
                     color: Color(hex: note.penHex),
@@ -105,6 +107,13 @@ struct TodoItemRow: View {
 
     private func toggleDone() {
         store.toggleItem(noteID: note.id, itemID: item.id)
+    }
+
+    private func moveFocus(by offset: Int) {
+        guard let index = note.items.firstIndex(where: { $0.id == item.id }) else { return }
+        let target = index + offset
+        guard note.items.indices.contains(target) else { return }
+        focusedItemID = note.items[target].id
     }
 }
 

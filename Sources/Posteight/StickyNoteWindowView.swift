@@ -3,13 +3,13 @@ import SwiftUI
 
 struct StickyNoteWindowView: View {
     @EnvironmentObject private var store: PosteightStore
+    @ObservedObject private var settings = AppSettings.shared
     @Environment(\.dismissWindow) private var dismissWindow
 
     let noteID: UUID
 
     @State private var window: NSWindow?
     @State private var resizeStartFrame: NSRect?
-    @State private var liveSize: NoteSize?
     @State private var isMovingToTrash = false
     @State private var isPencilCaseOpen = false
     @State private var isCardHovered = false
@@ -29,9 +29,7 @@ struct StickyNoteWindowView: View {
     }
 
     private func noteWindow(_ note: StickyNote) -> some View {
-        let displayedSize = liveSize ?? note.size
-
-        return ZStack {
+        ZStack {
             FoldedCardSurface(
                 paperColor: Color(hex: note.paperHex),
                 inkColor: Color(hex: note.penHex)
@@ -50,14 +48,14 @@ struct StickyNoteWindowView: View {
                     },
                     isPencilCaseOpen: $isPencilCaseOpen
                 )
-                .frame(width: displayedSize.width, height: displayedSize.height)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .clipShape(FoldedCardShape())
         }
-        .frame(
-            width: displayedSize.width,
-            height: displayedSize.height + Self.titlebarHeight
-        )
+        // The card fills the window instead of declaring its own size: a fixed size makes
+        // SwiftUI resize the window under the drag, which is what made resizing stutter and
+        // left an empty strip below the paper.
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .ignoresSafeArea(.container, edges: .top)
         .scaleEffect(isMovingToTrash ? 0.08 : 1)
         .rotationEffect(isMovingToTrash ? .degrees(12) : .zero)
@@ -71,6 +69,9 @@ struct StickyNoteWindowView: View {
                     window = configuredWindow
                 }
             }
+        }
+        .onChange(of: settings.keepsNotesOnTop) { _, _ in
+            window?.level = settings.noteWindowLevel
         }
     }
 
@@ -86,10 +87,19 @@ struct StickyNoteWindowView: View {
             .frame(width: 20, height: 20)
             .help("카드를 끌어 이동")
 
-            Text(remainingLabel(for: note))
-                .font(.system(size: 9, weight: .bold, design: .rounded))
-                .tracking(0.8)
-                .foregroundStyle(.primary.opacity(0.38))
+            PlainEditableTextField(
+                text: Binding(
+                    get: { store.noteLabel(noteID) },
+                    set: { store.updateNoteLabel(noteID, label: $0) }
+                ),
+                placeholder: "이름",
+                fontSize: 10,
+                fontWeight: .bold,
+                textOpacity: 0.42
+            )
+            .frame(maxWidth: 132, alignment: .leading)
+            .frame(height: 18)
+            .help("이 포스트잇의 이름 — 업무, 학업처럼 분류로 쓰세요")
 
             Spacer(minLength: 0)
 
@@ -121,19 +131,7 @@ struct StickyNoteWindowView: View {
         .frame(height: Self.titlebarHeight)
     }
 
-    private static let titlebarHeight: CGFloat = 32
-
-    private func remainingLabel(for note: StickyNote) -> String {
-        let remainingCount = note.items.filter {
-            !$0.isDone && !$0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }.count
-
-        if remainingCount > 0 {
-            return "\(remainingCount) LEFT"
-        }
-
-        return note.items.contains(where: \.isDone) ? "DONE" : "NEW"
-    }
+    static let titlebarHeight: CGFloat = 32
 
     private func resizeWindow(note: StickyNote, translation: CGSize) {
         guard let window else { return }
@@ -143,8 +141,9 @@ struct StickyNoteWindowView: View {
             resizeStartFrame = startFrame
         }
 
+        // With a full size content view the card fills the frame, so the stored size is the
+        // window size.
         let size = clampedSize(note: note, translation: translation)
-        liveSize = size
         window.setContentSize(NSSize(width: size.width, height: size.height))
 
         var adjustedFrame = window.frame
@@ -159,7 +158,6 @@ struct StickyNoteWindowView: View {
         store.resizeNote(noteID, to: size)
         saveWindowPosition()
         resizeStartFrame = nil
-        liveSize = nil
     }
 
     private func clampedSize(note: StickyNote, translation: CGSize) -> NoteSize {
@@ -227,7 +225,7 @@ private struct NoteWindowConfigurator: NSViewRepresentable {
             coordinator.didConfigure = true
 
             window.title = note.title
-            window.level = .floating
+            window.level = AppSettings.shared.noteWindowLevel
             window.isMovable = true
             window.isMovableByWindowBackground = true
             window.titleVisibility = .hidden

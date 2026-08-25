@@ -57,10 +57,30 @@ final class PosteightStore: ObservableObject {
         }
     }
 
+    /// Menu bar status numbers. Blank items are still being typed, so they count for nothing.
+    var totalCount: Int {
+        notes.reduce(0) { total, note in
+            total + note.items.filter { !$0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.count
+        }
+    }
+
+    var doneCount: Int {
+        notes.reduce(0) { total, note in
+            total + note.items.filter {
+                $0.isDone && !$0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }.count
+        }
+    }
+
+    var remainingCount: Int {
+        totalCount - doneCount
+    }
+
     @discardableResult
     func addNote() -> UUID {
         let offset = Double(notes.count % 4) * 34
         let note = StickyNote(
+            label: Self.nextNoteLabel(after: notes),
             title: Self.todayTitle(),
             stickerSymbol: "tag",
             paperHex: DesignTokens.paperColors[0].hex,
@@ -118,6 +138,35 @@ final class PosteightStore: ObservableObject {
 
     func noteTitle(_ noteID: UUID) -> String? {
         notes.first { $0.id == noteID }?.title
+    }
+
+    /// Notes are numbered in creation order; a user rename replaces the number for good.
+    static func nextNoteLabel(after notes: [StickyNote]) -> String {
+        let used = Set(notes.compactMap(\.label))
+        var index = notes.count + 1
+
+        while used.contains("Posteight \(index)") {
+            index += 1
+        }
+
+        return "Posteight \(index)"
+    }
+
+    func noteLabel(_ noteID: UUID) -> String {
+        guard let index = notes.firstIndex(where: { $0.id == noteID }) else { return "Posteight" }
+        let note = notes[index]
+
+        if let label = note.label, !label.isEmpty {
+            return label
+        }
+
+        return "Posteight \(index + 1)"
+    }
+
+    func updateNoteLabel(_ noteID: UUID, label: String) {
+        updateNote(noteID) { note in
+            note.label = label
+        }
     }
 
     func updateNoteTitle(_ noteID: UUID, title: String) {

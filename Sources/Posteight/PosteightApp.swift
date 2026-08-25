@@ -1,26 +1,25 @@
+import AppKit
 import SwiftUI
+
+enum WindowID {
+    static let dailyLog = "posteight.daily-log"
+    static let trash = "posteight.trash"
+}
 
 @main
 struct PosteightApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var store = PosteightStore()
 
     var body: some Scene {
-        WindowGroup {
-            WorkspaceView()
+        MenuBarExtra {
+            MenuBarPanelView()
                 .environmentObject(store)
-                .fixedSize()
-                .background(WorkspaceWindowConfigurator())
+        } label: {
+            MenuBarLabel()
+                .environmentObject(store)
         }
-        .windowStyle(.hiddenTitleBar)
-        .windowResizability(.contentSize)
-        .commands {
-            CommandGroup(replacing: .newItem) {
-                Button("New Sticky Note") {
-                    store.addNote()
-                }
-                .keyboardShortcut("n", modifiers: [.command])
-            }
-        }
+        .menuBarExtraStyle(.window)
 
         WindowGroup("Posteight", for: UUID.self) { $noteID in
             if let noteID {
@@ -33,30 +32,84 @@ struct PosteightApp: App {
             width: DesignTokens.defaultNoteSize.width,
             height: DesignTokens.defaultNoteSize.height
         )
+        .commands {
+            CommandGroup(replacing: .newItem) {
+                Button("New Sticky Note") {
+                    store.addNote()
+                }
+                .keyboardShortcut("n", modifiers: [.command])
+            }
+
+            CommandGroup(replacing: .appSettings) {
+                Button("설정…") {
+                    SettingsModal.present(store: store)
+                }
+                .keyboardShortcut(",", modifiers: [.command])
+            }
+        }
+
+        Window("오늘 기록", id: WindowID.dailyLog) {
+            DailyLogPreviewView()
+                .environmentObject(store)
+        }
+        .windowResizability(.contentSize)
+        .defaultPosition(.center)
+
+        Window("휴지통", id: WindowID.trash) {
+            TrashView()
+                .environmentObject(store)
+        }
+        .windowResizability(.contentSize)
+        .defaultPosition(.center)
     }
 }
 
-private struct WorkspaceWindowConfigurator: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-
-        DispatchQueue.main.async {
-            guard let window = view.window else { return }
-            NSApp.setActivationPolicy(.regular)
-            NSApp.activate(ignoringOtherApps: true)
-            window.title = "Posteight"
-            window.level = .floating
-            window.isMovableByWindowBackground = true
-            window.titleVisibility = .hidden
-            window.titlebarAppearsTransparent = true
-            window.backgroundColor = .clear
-            window.isOpaque = false
-            window.hasShadow = true
-            window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        }
-
-        return view
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        AppSettings.shared.applyActivationPolicy()
     }
 
-    func updateNSView(_ nsView: NSView, context: Context) {}
+    /// The app has no main window to reopen, so a Dock icon click brings the notes back instead.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        AppSettings.shared.requestShowAllNotes()
+        return true
+    }
+}
+
+/// Lives in the status item for the whole session, so it is also where note windows are
+/// restored at launch and opened for notes added from anywhere in the app.
+private struct MenuBarLabel: View {
+    @EnvironmentObject private var store: PosteightStore
+    @ObservedObject private var settings = AppSettings.shared
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "checklist")
+
+            if store.totalCount > 0 {
+                Text(countLabel)
+            }
+        }
+        .task {
+            for note in store.notes {
+                openWindow(value: note.id)
+            }
+        }
+        .onChange(of: store.notes.map(\.id)) { previousIDs, currentIDs in
+            for noteID in currentIDs where !previousIDs.contains(noteID) {
+                openWindow(value: noteID)
+            }
+        }
+        .onChange(of: settings.showAllNotesRequests) { _, _ in
+            for note in store.notes {
+                openWindow(value: note.id)
+            }
+        }
+    }
+
+    private var countLabel: String {
+        let count = settings.menuBarCountStyle == .done ? store.doneCount : store.remainingCount
+        return "\(count)/\(store.totalCount)"
+    }
 }

@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct StickyNoteView: View {
@@ -6,10 +7,17 @@ struct StickyNoteView: View {
     let onResizeChanged: (CGSize) -> Void
     let onResizeEnded: (CGSize) -> Void
     @Binding var isPencilCaseOpen: Bool
-    @FocusState private var focusedItemID: UUID?
+    @State private var focusedItemID: UUID?
+    @State private var resizeAnchor: CGPoint?
 
     var body: some View {
         noteBody
+        .overlay(alignment: .trailing) {
+            horizontalResizeHandle
+        }
+        .overlay(alignment: .bottom) {
+            verticalResizeHandle
+        }
         .overlay(alignment: .bottomTrailing) {
             resizeHandle
         }
@@ -29,22 +37,37 @@ struct StickyNoteView: View {
             )
             .frame(height: 22)
 
-            if isPencilCaseOpen {
-                PencilCaseView(note: note)
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .top).combined(with: .opacity),
-                        removal: .move(edge: .top).combined(with: .opacity)
-                    ))
-            }
+            // Without a scroll area a long list overflows the card in both directions and
+            // collides with the header, so the list gets the leftover height and nothing else.
+            ScrollViewReader { proxy in
+                ScrollView(.vertical) {
+                    if isPencilCaseOpen {
+                        PencilCaseView(note: note)
+                            .transition(.asymmetric(
+                                insertion: .move(edge: .top).combined(with: .opacity),
+                                removal: .move(edge: .top).combined(with: .opacity)
+                            ))
+                    }
 
-            VStack(spacing: 5) {
-                ForEach(note.items) { item in
-                    TodoItemRow(note: note, item: item, focusedItemID: $focusedItemID)
+                    VStack(spacing: 5) {
+                        ForEach(note.items) { item in
+                            TodoItemRow(note: note, item: item, focusedItemID: $focusedItemID)
+                                .id(item.id)
+                        }
+                    }
+                    .padding(.top, isPencilCaseOpen ? 8 : 5)
+                    .padding(.bottom, 2)
+                }
+                .scrollIndicators(.hidden)
+                .frame(maxHeight: .infinity)
+                .onChange(of: focusedItemID) { _, itemID in
+                    guard let itemID else { return }
+
+                    withAnimation(.easeOut(duration: 0.18)) {
+                        proxy.scrollTo(itemID, anchor: .bottom)
+                    }
                 }
             }
-            .padding(.top, isPencilCaseOpen ? 8 : 5)
-
-            Spacer(minLength: 0)
 
             Button {
                 focusedItemID = store.addItem(to: note.id)
@@ -65,6 +88,61 @@ struct StickyNoteView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
+    /// Right edge, bottom edge, and corner, so a note can be resized in either axis or both.
+    private var horizontalResizeHandle: some View {
+        Color.clear
+            .frame(width: 9)
+            .padding(.top, 6)
+            .padding(.bottom, 26)
+            .contentShape(Rectangle())
+            .onHover { isHovering in
+                setCursor(isHovering ? .resizeLeftRight : .arrow)
+            }
+            .gesture(resizeGesture { CGSize(width: $0.width, height: 0) })
+            .help("가로 크기 조절")
+    }
+
+    private var verticalResizeHandle: some View {
+        Color.clear
+            .frame(height: 9)
+            .padding(.leading, 6)
+            .padding(.trailing, 26)
+            .contentShape(Rectangle())
+            .onHover { isHovering in
+                setCursor(isHovering ? .resizeUpDown : .arrow)
+            }
+            .gesture(resizeGesture { CGSize(width: 0, height: $0.height) })
+            .help("세로 크기 조절")
+    }
+
+    private func resizeGesture(_ axis: @escaping (CGSize) -> CGSize) -> some Gesture {
+        DragGesture(minimumDistance: 1)
+            .onChanged { _ in
+                onResizeChanged(axis(dragDelta()))
+            }
+            .onEnded { _ in
+                onResizeEnded(axis(dragDelta()))
+                resizeAnchor = nil
+            }
+    }
+
+    /// The window resizes under the pointer, so the gesture's own translation feeds back on
+    /// itself and the note stutters. Screen coordinates stay put while the window changes.
+    private func dragDelta() -> CGSize {
+        let location = NSEvent.mouseLocation
+
+        guard let anchor = resizeAnchor else {
+            resizeAnchor = location
+            return .zero
+        }
+
+        return CGSize(width: location.x - anchor.x, height: anchor.y - location.y)
+    }
+
+    private func setCursor(_ cursor: NSCursor) {
+        cursor.set()
+    }
+
     private var resizeHandle: some View {
         ZStack(alignment: .bottomTrailing) {
             Path { path in
@@ -79,15 +157,10 @@ struct StickyNoteView: View {
         }
         .frame(width: 28, height: 28)
         .contentShape(Rectangle())
-        .gesture(
-            DragGesture(minimumDistance: 1)
-                .onChanged { value in
-                    onResizeChanged(value.translation)
-                }
-                .onEnded { value in
-                    onResizeEnded(value.translation)
-                }
-        )
-        .help("크기 조절")
+        .onHover { isHovering in
+            setCursor(isHovering ? .crosshair : .arrow)
+        }
+        .gesture(resizeGesture { $0 })
+        .help("대각선 크기 조절")
     }
 }
