@@ -12,7 +12,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		9E0000000000000000000004 /* Posteight */ = {
+		9E0000000000000000000004 /* Sources/Posteight */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = Sources/Posteight;
 			sourceTree = "<group>";
@@ -33,7 +33,7 @@
 		9E0000000000000000000002 = {
 			isa = PBXGroup;
 			children = (
-				9E0000000000000000000004 /* Posteight */,
+				9E0000000000000000000004 /* Sources/Posteight */,
 				9E0000000000000000000010 /* Info.plist */,
 				9E0000000000000000000003 /* Products */,
 			);
@@ -63,7 +63,7 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				9E0000000000000000000004 /* Posteight */,
+				9E0000000000000000000004 /* Sources/Posteight */,
 			);
 			name = Posteight;
 			productName = Posteight;
@@ -175,10 +175,11 @@
 		9E000000000000000000000E /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				COMBINE_HIDPI_IMAGES = YES;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -197,10 +198,11 @@
 		9E000000000000000000000F /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				COMBINE_HIDPI_IMAGES = YES;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;

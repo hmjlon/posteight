@@ -11,7 +11,8 @@ let package = Package(
         .executable(name: "Posteight", targets: ["Posteight"])
     ],
     targets: [
-        .executableTarget(name: "Posteight"),
+        // The asset catalog holds the app icon, which only a bundled build can show.
+        .executableTarget(name: "Posteight", exclude: ["Assets.xcassets"]),
         .testTarget(name: "PosteightTests", dependencies: ["Posteight"])
     ]
 )
