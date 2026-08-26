@@ -6,6 +6,55 @@ enum WindowID {
     static let trash = "posteight.trash"
 }
 
+/// `WindowGroup` creates a new window on every `openWindow` call, even when the value is the
+/// same. Keep note presentation idempotent because SwiftUI can evaluate more than one menu bar
+/// label while rebuilding the status item.
+@MainActor
+final class NoteWindowCoordinator {
+    static let shared = NoteWindowCoordinator()
+
+    private final class WeakWindow {
+        weak var value: NSWindow?
+
+        init(_ value: NSWindow) {
+            self.value = value
+        }
+    }
+
+    private var windows: [UUID: WeakWindow] = [:]
+    private var pendingNoteIDs: Set<UUID> = []
+
+    private init() {}
+
+    func present(_ noteID: UUID, openWindow: (UUID) -> Void) {
+        if let window = windows[noteID]?.value {
+            window.makeKeyAndOrderFront(nil)
+            return
+        }
+
+        windows[noteID] = nil
+        guard pendingNoteIDs.insert(noteID).inserted else { return }
+        openWindow(noteID)
+    }
+
+    func register(_ window: NSWindow, for noteID: UUID) {
+        pendingNoteIDs.remove(noteID)
+
+        if let existingWindow = windows[noteID]?.value, existingWindow !== window {
+            window.close()
+            existingWindow.makeKeyAndOrderFront(nil)
+            return
+        }
+
+        windows[noteID] = WeakWindow(window)
+    }
+
+    func remove(_ noteID: UUID) {
+        pendingNoteIDs.remove(noteID)
+        windows[noteID] = nil
+    }
+}
+
 @main
 struct PosteightApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
@@ -65,7 +114,9 @@ struct PosteightApp: App {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    func applicationDidFinishLaunching(_ notification: Notification) {
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        // Set the policy before SwiftUI installs MenuBarExtra. Changing it afterwards can
+        // rebuild the scene and leave two status items alive for the same process.
         AppSettings.shared.applyActivationPolicy()
     }
 
@@ -93,18 +144,24 @@ private struct MenuBarLabel: View {
         }
         .task {
             for note in store.notes {
-                openWindow(value: note.id)
+                presentNote(note.id)
             }
         }
         .onChange(of: store.notes.map(\.id)) { previousIDs, currentIDs in
             for noteID in currentIDs where !previousIDs.contains(noteID) {
-                openWindow(value: noteID)
+                presentNote(noteID)
             }
         }
         .onChange(of: settings.showAllNotesRequests) { _, _ in
             for note in store.notes {
-                openWindow(value: note.id)
+                presentNote(note.id)
             }
+        }
+    }
+
+    private func presentNote(_ noteID: UUID) {
+        NoteWindowCoordinator.shared.present(noteID) { noteID in
+            openWindow(value: noteID)
         }
     }
 

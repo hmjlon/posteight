@@ -22,6 +22,7 @@ struct StickyNoteWindowView: View {
                 Color.clear
                     .frame(width: 1, height: 1)
                     .onAppear {
+                        NoteWindowCoordinator.shared.remove(noteID)
                         dismissWindow(value: noteID)
                     }
             }
@@ -65,6 +66,7 @@ struct StickyNoteWindowView: View {
         .environment(\.colorScheme, .light)
         .background {
             NoteWindowConfigurator(note: note) { configuredWindow in
+                NoteWindowCoordinator.shared.register(configuredWindow, for: noteID)
                 if window !== configuredWindow {
                     window = configuredWindow
                 }
@@ -194,6 +196,7 @@ struct StickyNoteWindowView: View {
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.38) {
             store.moveNoteToTrash(noteID)
+            NoteWindowCoordinator.shared.remove(noteID)
             dismissWindow(value: noteID)
         }
     }
