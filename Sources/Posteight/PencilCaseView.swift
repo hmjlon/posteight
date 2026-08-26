@@ -3,6 +3,8 @@ import SwiftUI
 struct PencilCaseView: View {
     @EnvironmentObject private var store: PosteightStore
     let note: StickyNote
+    /// Deleting lives here, away from the header, because an `✕` next to a card reads as close.
+    let onDelete: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -107,6 +109,16 @@ struct PencilCaseView: View {
                     }
                 }
             }
+
+            Divider()
+
+            Button(role: .destructive, action: onDelete) {
+                Label("카드 삭제", systemImage: "trash")
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.red.opacity(0.74))
+            .help("이 카드를 휴지통으로 보냅니다")
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)

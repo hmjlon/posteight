@@ -158,3 +158,28 @@ struct DailyLogTests {
         #expect(markdown.contains("Notion 기록에 포함된 포스트잇이 없습니다."))
     }
 }
+
+@Suite("Card names")
+struct NoteLabelTests {
+    @Test("A note with no name gets one nobody else is using")
+    func fillsMissingLabel() {
+        var unnamed = note(title: "오늘 업무")
+        unnamed.label = nil
+        var named = note(title: "26.08.27(목)")
+        named.label = "Posteight 2"
+
+        let labels = PosteightStore.compacted([unnamed, named]).compactMap(\.label)
+
+        #expect(labels.count == 2)
+        #expect(Set(labels).count == 2)
+        #expect(labels.contains("Posteight 2"))
+    }
+
+    @Test("The lowest free number is used")
+    func reusesFreedNumber() {
+        var second = note()
+        second.label = "Posteight 2"
+
+        #expect(PosteightStore.nextNoteLabel(after: [second]) == "Posteight 1")
+    }
+}

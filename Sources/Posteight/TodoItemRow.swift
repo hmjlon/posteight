@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct TodoItemRow: View {
@@ -6,7 +7,6 @@ struct TodoItemRow: View {
     let item: TodoItem
     @Binding var focusedItemID: UUID?
 
-    @State private var strikeProgress: CGFloat = 0
     @State private var showPen = false
     @State private var isEditingText = false
     @State private var isRowHovered = false
@@ -28,6 +28,9 @@ struct TodoItemRow: View {
                     }
                 }
                 .frame(width: 20, height: 20)
+                // A stroked circle only hit-tests along the stroke, so without a shape the
+                // click has to land on the 1.7pt ring to count.
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .disabled(!hasContent)
@@ -41,8 +44,8 @@ struct TodoItemRow: View {
                         set: { store.updateItemTitle(noteID: note.id, itemID: item.id, title: $0) }
                     ),
                     placeholder: "할 일 입력",
-                    fontSize: 15,
-                    fontWeight: .medium,
+                    fontSize: Self.titleFontSize,
+                    fontWeight: Self.titleFontWeight,
                     textOpacity: item.isDone ? 0.38 : 0.76,
                     isFocused: focusedItemID == item.id,
                     onEditingChanged: { isEditingText = $0 },
@@ -57,10 +60,12 @@ struct TodoItemRow: View {
                 StrikeLine(
                     color: Color(hex: note.penHex),
                     style: note.penStyle,
-                    progress: strikeProgress,
+                    textWidth: titleWidth,
+                    progress: isStruck ? 1 : 0,
                     showPen: showPen
                 )
                 .allowsHitTesting(false)
+                .animation(.easeInOut(duration: 0.68), value: isStruck)
             }
             .frame(height: 28)
 
@@ -79,28 +84,33 @@ struct TodoItemRow: View {
         .contentShape(Rectangle())
         .onHover { isRowHovered = $0 }
         .animation(.easeOut(duration: 0.12), value: isRowHovered)
-        .onAppear {
-            strikeProgress = item.isDone && hasContent ? 1 : 0
-        }
-        .onChange(of: item.isDone) { _, isDone in
-            if isDone {
-                showPen = true
-                strikeProgress = 0
+        // Only the travelling pen is a one-off flourish; the line itself follows the item.
+        .onChange(of: isStruck) { _, isStruck in
+            guard isStruck else {
+                showPen = false
+                return
+            }
 
-                withAnimation(.easeInOut(duration: 0.68)) {
-                    strikeProgress = 1
-                }
-
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.76) {
-                    showPen = false
-                }
-            } else {
-                withAnimation(.easeOut(duration: 0.18)) {
-                    strikeProgress = 0
-                    showPen = false
-                }
+            showPen = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.76) {
+                showPen = false
             }
         }
+    }
+
+    private static let titleFontSize: CGFloat = 15
+    private static let titleFontWeight: NSFont.Weight = .medium
+
+    /// The strike stops where the text does, so it is measured in the field's own font.
+    private var titleWidth: CGFloat {
+        let title = store.itemTitle(noteID: note.id, itemID: item.id) ?? item.title
+        let font = NSFont.systemFont(ofSize: Self.titleFontSize, weight: Self.titleFontWeight)
+        return (title as NSString).size(withAttributes: [.font: font]).width
+    }
+
+    /// The strike is drawn straight from the item so it can never disagree with the checkmark.
+    private var isStruck: Bool {
+        item.isDone && hasContent
     }
 
     private var hasContent: Bool {
@@ -122,26 +132,31 @@ struct TodoItemRow: View {
 private struct StrikeLine: View {
     let color: Color
     let style: PenStyle
+    let textWidth: CGFloat
     let progress: CGFloat
     let showPen: Bool
 
+    /// Where a borderless `NSTextField` starts drawing its text.
+    private static let textInset: CGFloat = 2
+
     var body: some View {
         GeometryReader { geometry in
-            let width = max(0, geometry.size.width * progress)
+            let available = max(0, geometry.size.width - Self.textInset)
+            let width = min(textWidth, available) * progress
             let centerY = geometry.size.height * 0.5
 
             ZStack(alignment: .topLeading) {
                 Rectangle()
                     .fill(color.opacity(style.opacity))
                     .frame(width: width, height: style.strokeHeight)
-                    .position(x: width * 0.5, y: centerY)
+                    .position(x: Self.textInset + width * 0.5, y: centerY)
 
                 if showPen {
                     Image(systemName: style.systemImage)
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(color)
                         .rotationEffect(.degrees(-14))
-                        .position(x: max(7, width), y: centerY - 8)
+                        .position(x: Self.textInset + max(7, width), y: centerY - 8)
                 }
             }
             .frame(width: geometry.size.width, height: geometry.size.height)

@@ -6,6 +6,7 @@ struct StickyNoteView: View {
     let note: StickyNote
     let onResizeChanged: (CGSize) -> Void
     let onResizeEnded: (CGSize) -> Void
+    let onDelete: () -> Void
     @Binding var isPencilCaseOpen: Bool
     @State private var focusedItemID: UUID?
     @State private var resizeAnchor: CGPoint?
@@ -42,7 +43,7 @@ struct StickyNoteView: View {
             ScrollViewReader { proxy in
                 ScrollView(.vertical) {
                     if isPencilCaseOpen {
-                        PencilCaseView(note: note)
+                        PencilCaseView(note: note, onDelete: onDelete)
                             .transition(.asymmetric(
                                 insertion: .move(edge: .top).combined(with: .opacity),
                                 removal: .move(edge: .top).combined(with: .opacity)

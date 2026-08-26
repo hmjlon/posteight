@@ -106,6 +106,12 @@ final class PosteightStore: ObservableObject {
         var restoredNote = trashedNotes.remove(at: index).note
         restoredNote.position.x += 22
         restoredNote.position.y += 22
+
+        // A note trashed before names were stored would fall back to its row number, which a
+        // card still on screen may already be showing.
+        if (restoredNote.label ?? "").isEmpty {
+            restoredNote.label = Self.nextNoteLabel(after: notes)
+        }
         notes.append(restoredNote)
     }
 
@@ -141,9 +147,11 @@ final class PosteightStore: ObservableObject {
     }
 
     /// Notes are numbered in creation order; a user rename replaces the number for good.
-    static func nextNoteLabel(after notes: [StickyNote]) -> String {
+    /// The lowest free number wins, so a name freed by a delete comes back into use instead of
+    /// colliding with a card that already carries it.
+    nonisolated static func nextNoteLabel(after notes: [StickyNote]) -> String {
         let used = Set(notes.compactMap(\.label))
-        var index = notes.count + 1
+        var index = 1
 
         while used.contains("Posteight \(index)") {
             index += 1
@@ -372,7 +380,7 @@ final class PosteightStore: ObservableObject {
     }
 
     nonisolated static func compacted(_ decodedNotes: [StickyNote]) -> [StickyNote] {
-        decodedNotes.map { note in
+        var notes: [StickyNote] = decodedNotes.map { note in
             var compactNote = note
             compactNote.size = clamped(note.size)
             // Older builds let blank rows be checked off; those completions are phantoms.
@@ -389,6 +397,14 @@ final class PosteightStore: ObservableObject {
             }
             return compactNote
         }
+
+        // Notes saved before cards had names show their row number instead, and that number can
+        // belong to another card. Give them one of their own, once.
+        for index in notes.indices where (notes[index].label ?? "").isEmpty {
+            notes[index].label = nextNoteLabel(after: notes)
+        }
+
+        return notes
     }
 
     nonisolated static func clamped(_ size: NoteSize) -> NoteSize {

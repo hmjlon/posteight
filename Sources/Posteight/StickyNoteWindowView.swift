@@ -47,6 +47,7 @@ struct StickyNoteWindowView: View {
                     onResizeEnded: { translation in
                         finishResizingWindow(note: note, translation: translation)
                     },
+                    onDelete: moveToTrash,
                     isPencilCaseOpen: $isPencilCaseOpen
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -115,12 +116,12 @@ struct StickyNoteWindowView: View {
                 .help("카드 꾸미기")
 
                 Button {
-                    moveToTrash()
+                    closeCard()
                 } label: {
                     Image(systemName: "xmark")
                         .frame(width: 19, height: 20)
                 }
-                .help("삭제")
+                .help("닫기 — 노트는 그대로 있어요")
             }
             .buttonStyle(.plain)
             .foregroundStyle(.primary.opacity(0.54))
@@ -187,11 +188,24 @@ struct StickyNoteWindowView: View {
         )
     }
 
+    /// Closing only hides the window; the note comes back with 모든 포스트잇 보기.
+    private func closeCard() {
+        NoteWindowCoordinator.shared.remove(noteID)
+        dismissWindow(value: noteID)
+    }
+
     private func moveToTrash() {
         guard !isMovingToTrash else { return }
 
         withAnimation(.easeInOut(duration: 0.32)) {
             isMovingToTrash = true
+        }
+
+        // The paper is SwiftUI, the glass behind it is the window; fading the window takes both
+        // away together instead of leaving the backdrop on screen after the card is gone.
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.32
+            window?.animator().alphaValue = 0
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.38) {
@@ -228,6 +242,8 @@ private struct NoteWindowConfigurator: NSViewRepresentable {
             coordinator.didConfigure = true
 
             window.title = note.title
+            // A window can be recycled for another note after a delete faded this one out.
+            window.alphaValue = 1
             window.level = AppSettings.shared.noteWindowLevel
             window.isMovable = true
             window.isMovableByWindowBackground = true
@@ -259,10 +275,38 @@ private struct NoteWindowConfigurator: NSViewRepresentable {
                     y: referenceFrame.maxY - note.position.y - window.frame.height * 0.5
                 )
             )
+            window.moveOnScreenIfNeeded()
         }
     }
 
     final class Coordinator {
         var didConfigure = false
+    }
+}
+
+extension NSWindow {
+    /// A note placed while a second display was attached keeps that position after the display
+    /// is gone, which opens the window where nobody can see or reach it.
+    func moveOnScreenIfNeeded() {
+        let screens = NSScreen.screens
+        guard !screens.contains(where: { $0.visibleFrame.contains(frame) }) else { return }
+
+        // Clamp into whichever screen already shows most of the card, so a card living on a
+        // second display does not jump to the main one.
+        let shownArea: (NSScreen) -> CGFloat = { screen in
+            let shown = screen.visibleFrame.intersection(self.frame)
+            return shown.width * shown.height
+        }
+
+        guard
+            let visible = (screens.max { shownArea($0) < shownArea($1) } ?? NSScreen.main)?.visibleFrame
+        else { return }
+
+        setFrameOrigin(
+            NSPoint(
+                x: min(max(frame.minX, visible.minX), max(visible.minX, visible.maxX - frame.width)),
+                y: min(max(frame.minY, visible.minY), max(visible.minY, visible.maxY - frame.height))
+            )
+        )
     }
 }

@@ -32,6 +32,8 @@ final class NoteWindowCoordinator {
             if window.isMiniaturized {
                 window.deminiaturize(nil)
             }
+            // Showing every note has to reach the ones stranded off screen, too.
+            window.moveOnScreenIfNeeded()
             window.makeKeyAndOrderFront(nil)
             return
         }
