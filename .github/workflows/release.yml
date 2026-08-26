@@ -29,9 +29,13 @@ jobs:
       # 여기서 넘긴 값이 그대로 번들에 박힌다.
       - name: Resolve version
         id: version
+        # 입력값은 env 로만 받는다. ${{ }} 를 셸에 그대로 펼치면 형식 검증이
+        # 돌기도 전에 임의 명령이 실행된다.
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION="${{ inputs.version }}"
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            VERSION="$INPUT_VERSION"
           else
             VERSION="${GITHUB_REF_NAME#v}"
           fi
@@ -41,6 +45,10 @@ jobs:
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "dmg=Posteight-$VERSION.dmg" >> "$GITHUB_OUTPUT"
+
+      # 태그를 밀었다는 것만으로 깨진 커밋이 게시되지는 않게 한다. 53초짜리다.
+      - name: Test
+        run: swift test
 
       - name: Build Release
         run: |
@@ -89,7 +97,18 @@ jobs:
           echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
           shasum -a 256 "${{ steps.version.outputs.dmg }}" | tee "${{ steps.version.outputs.dmg }}.sha256"
 
+      # 시험 실행은 dmg 를 아티팩트로만 남긴다. 90 일 뒤 자동 삭제된다.
+      - name: Upload dmg (시험 실행)
+        if: github.event_name != 'push'
+        uses: actions/upload-artifact@v7
+        with:
+          name: Posteight-${{ steps.version.outputs.version }}-dmg
+          path: dist/*.dmg*
+
+      # 태그 푸시에서만 게시한다. workflow_dispatch 로 돌리면 gh 가 태그를 새로
+      # 만들어 버리고, 그 대상은 빌드한 커밋이 아니라 기본 브랜치 HEAD 다.
       - name: Publish GitHub Release
+        if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
           V: ${{ steps.version.outputs.version }}
