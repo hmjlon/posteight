@@ -375,6 +375,12 @@ final class PosteightStore: ObservableObject {
         decodedNotes.map { note in
             var compactNote = note
             compactNote.size = clamped(note.size)
+            // Older builds let blank rows be checked off; those completions are phantoms.
+            for index in compactNote.items.indices
+            where compactNote.items[index].title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                compactNote.items[index].isDone = false
+                compactNote.items[index].completedAt = nil
+            }
             if compactNote.title == "새 포스트잇" {
                 compactNote.title = todayTitle()
             } else if let legacyDate = legacyTitleDate(compactNote.title) {

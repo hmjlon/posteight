@@ -58,6 +58,20 @@ struct LegacyTitleTests {
         let migrated = PosteightStore.compacted([note(title: "새 포스트잇")])
         #expect(migrated[0].title == PosteightStore.todayTitle())
     }
+
+    @Test("Blank items saved as done are cleared on load")
+    func clearsBlankCompletions() {
+        let loaded = PosteightStore.compacted([
+            note(items: [
+                TodoItem(title: "  ", isDone: true, completedAt: Date()),
+                TodoItem(title: "끝난 일", isDone: true, completedAt: Date())
+            ])
+        ])
+
+        #expect(!loaded[0].items[0].isDone)
+        #expect(loaded[0].items[0].completedAt == nil)
+        #expect(loaded[0].items[1].isDone)
+    }
 }
 
 @Suite("Note size clamping")

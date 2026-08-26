@@ -28,6 +28,10 @@ final class NoteWindowCoordinator {
 
     func present(_ noteID: UUID, openWindow: (UUID) -> Void) {
         if let window = windows[noteID]?.value {
+            // `makeKeyAndOrderFront` leaves a miniaturized window in the Dock.
+            if window.isMiniaturized {
+                window.deminiaturize(nil)
+            }
             window.makeKeyAndOrderFront(nil)
             return
         }
@@ -42,6 +46,9 @@ final class NoteWindowCoordinator {
 
         if let existingWindow = windows[noteID]?.value, existingWindow !== window {
             window.close()
+            if existingWindow.isMiniaturized {
+                existingWindow.deminiaturize(nil)
+            }
             existingWindow.makeKeyAndOrderFront(nil)
             return
         }

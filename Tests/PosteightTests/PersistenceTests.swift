@@ -65,11 +65,12 @@ struct PersistenceTests {
 
         let store = PosteightStore(directory: directory)
         let noteID = store.addNote()
-        let itemID = try #require(store.notes.first?.items.first?.id)
+        let note = try #require(store.notes.first { $0.id == noteID })
+        let itemID = try #require(note.items.first?.id)
 
         store.toggleItem(noteID: noteID, itemID: itemID)
 
-        let item = try #require(store.notes.first?.items.first)
+        let item = try #require(store.notes.first { $0.id == noteID }?.items.first)
         #expect(!item.isDone)
         #expect(item.completedAt == nil)
     }
@@ -81,13 +82,14 @@ struct PersistenceTests {
 
         let store = PosteightStore(directory: directory)
         let noteID = store.addNote()
-        let itemID = try #require(store.notes.first?.items.first?.id)
+        let note = try #require(store.notes.first { $0.id == noteID })
+        let itemID = try #require(note.items.first?.id)
         store.updateItemTitle(noteID: noteID, itemID: itemID, title: "완료할 일")
         store.toggleItem(noteID: noteID, itemID: itemID)
 
         store.updateItemTitle(noteID: noteID, itemID: itemID, title: "   ")
 
-        let item = try #require(store.notes.first?.items.first)
+        let item = try #require(store.notes.first { $0.id == noteID }?.items.first)
         #expect(!item.isDone)
         #expect(item.completedAt == nil)
     }
