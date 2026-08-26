@@ -159,6 +159,7 @@ tag, builds the Release configuration, packages a `.dmg`, and publishes it to
 GitHub Releases with its checksum:
 
 ```bash
+git switch release
 git tag v0.2.0
 git push origin v0.2.0
 ```
@@ -166,8 +167,10 @@ git push origin v0.2.0
 The tag is the only source of truth for the version. `Packaging/Info.plist` reads
 `$(MARKETING_VERSION)`, so never hardcode a version there.
 
-Every push to `main` and every pull request runs [`ci.yml`](.github/workflows/ci.yml):
-`swift test` for the unit tests, and `xcodebuild` for the real `.app` bundle.
+Day-to-day work happens on `dev`; `release` only receives merges from `dev`, and
+tags are cut there. Every pull request into `release`, and every push to
+`release`, runs [`ci.yml`](.github/workflows/ci.yml): `swift test` for the unit
+tests, and `xcodebuild` for the real `.app` bundle.
 
 `Product > Archive` in Xcode still works for a local one-off build.
 
