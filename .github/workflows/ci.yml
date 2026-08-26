@@ -2,8 +2,11 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [release]
+  # dev 로 올리는 커밋마다 macOS 러너를 태우지 않는다. release 로 들어가는
+  # PR 에서만 돌리면, 비용은 머지 한 번당 한 번이고 검증 시점은 머지 전이다.
   pull_request:
+    branches: [release]
   workflow_dispatch:
 
 # 같은 브랜치에 연속 푸시가 나면 이전 실행은 취소한다. macOS 러너는 비싸다.

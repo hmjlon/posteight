@@ -51,7 +51,8 @@ Run the tests:
 swift test
 ```
 
-For a distributable bundle, use Product > Archive in Xcode.
+A distributable dmg comes from pushing a `v*` tag on `release`; `.github/workflows/release.yml`
+builds and publishes it. Product > Archive in Xcode still works for a local one-off.
 
 `swift run` still works, but it launches an unbundled binary: `Bundle.main.bundleIdentifier`
 is `nil`, so macOS logs `linkd`/Process Instance Registry XPC failures and window positions
@@ -79,7 +80,8 @@ app, and a second build path drifts out of sync with it.
 
 ## Git Workflow
 
-- Commit to `main` directly. This project does not use feature branches.
+- Commit to `dev` directly. This project does not use per-feature branches.
+- `release` only receives merges from `dev`. Version tags are cut on `release`.
 - Keep commits focused on one feature or change.
 - Run `swift test` before every commit.
 - Do not commit `.build/` or `dist/`; both are generated locally and ignored by Git.
