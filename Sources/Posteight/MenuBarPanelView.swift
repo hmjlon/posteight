@@ -16,7 +16,7 @@ struct MenuBarPanelView: View {
                 .padding(.vertical, 4)
 
             PanelRow(title: "새 포스트잇", systemImage: "plus", shortcut: "⌘N") {
-                store.addNote()
+                showNotes(ids: [store.addNote()])
             }
 
             PanelRow(title: "모든 포스트잇 보기", systemImage: "square.stack.3d.up") {
