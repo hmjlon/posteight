@@ -168,9 +168,10 @@ The tag is the only source of truth for the version. `Packaging/Info.plist` read
 `$(MARKETING_VERSION)`, so never hardcode a version there.
 
 Day-to-day work happens on `dev`; `release` only receives merges from `dev`, and
-tags are cut there. Every pull request into `release`, and every push to
-`release`, runs [`ci.yml`](.github/workflows/ci.yml): `swift test` for the unit
-tests, and `xcodebuild` for the real `.app` bundle.
+tags are cut there. [`ci.yml`](.github/workflows/ci.yml) runs `swift test` for the
+unit tests and `xcodebuild` for the real `.app` bundle, on every push to `dev` or
+`release` and on every pull request into `release`. Documentation-only commits are
+skipped.
 
 `Product > Archive` in Xcode still works for a local one-off build.
 
