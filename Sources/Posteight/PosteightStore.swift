@@ -217,6 +217,11 @@ final class PosteightStore: ObservableObject {
     func updateItemTitle(noteID: UUID, itemID: UUID, title: String) {
         updateItem(noteID: noteID, itemID: itemID) { item in
             item.title = title
+
+            if title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                item.isDone = false
+                item.completedAt = nil
+            }
         }
     }
 
@@ -230,6 +235,12 @@ final class PosteightStore: ObservableObject {
 
     func toggleItem(noteID: UUID, itemID: UUID) {
         updateItem(noteID: noteID, itemID: itemID) { item in
+            guard !item.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                item.isDone = false
+                item.completedAt = nil
+                return
+            }
+
             item.isDone.toggle()
             item.completedAt = item.isDone ? Date() : nil
         }
