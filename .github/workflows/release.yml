@@ -1,0 +1,151 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '버전 (예: 0.2.0). 태그 없이 시험 삼아 돌릴 때만 쓴다.'
+        required: true
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish dmg
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      # 버전의 유일한 출처는 git 태그다. Info.plist 는 $(MARKETING_VERSION) 을 쓰므로
+      # 여기서 넘긴 값이 그대로 번들에 박힌다.
+      - name: Resolve version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          if ! printf '%s' "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::버전 형식이 아니다: $VERSION (기대: 1.2.3)"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "dmg=Posteight-$VERSION.dmg" >> "$GITHUB_OUTPUT"
+
+      - name: Build Release
+        run: |
+          set -o pipefail
+          format() { if command -v xcbeautify >/dev/null; then xcbeautify --renderer github-actions; else cat; fi; }
+          xcodebuild build \
+            -project Posteight.xcodeproj \
+            -scheme Posteight \
+            -configuration Release \
+            -destination 'platform=macOS,arch=arm64' \
+            -derivedDataPath build/DerivedData \
+            MARKETING_VERSION=${{ steps.version.outputs.version }} \
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            | format
+
+      # 번들에 실제로 박힌 버전을 확인한다. 여기가 틀리면 Sparkle 도 cask 도 전부 어긋난다.
+      - name: Verify stamped version
+        run: |
+          PLIST=build/DerivedData/Build/Products/Release/Posteight.app/Contents/Info.plist
+          BUILT=$(plutil -extract CFBundleShortVersionString raw "$PLIST")
+          echo "번들 버전: $BUILT"
+          [ "$BUILT" = "${{ steps.version.outputs.version }}" ] || {
+            echo "::error::번들 버전($BUILT)이 태그(${{ steps.version.outputs.version }})와 다르다."
+            exit 1
+          }
+
+      # hdiutil 은 macOS 기본 제공이라 외부 의존성이 없다. 드래그-투-설치용
+      # /Applications 심볼릭 링크만 넣어 준다.
+      - name: Create dmg
+        run: |
+          mkdir -p dist/stage
+          cp -R build/DerivedData/Build/Products/Release/Posteight.app dist/stage/
+          ln -s /Applications dist/stage/Applications
+          hdiutil create \
+            -volname "Posteight ${{ steps.version.outputs.version }}" \
+            -srcfolder dist/stage \
+            -ov -format UDZO \
+            "dist/${{ steps.version.outputs.dmg }}"
+
+      # cask 의 sha256 은 이 값을 그대로 쓴다.
+      - name: Checksum
+        id: sum
+        run: |
+          cd dist
+          SHA=$(shasum -a 256 "${{ steps.version.outputs.dmg }}" | cut -d' ' -f1)
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+          shasum -a 256 "${{ steps.version.outputs.dmg }}" | tee "${{ steps.version.outputs.dmg }}.sha256"
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          V: ${{ steps.version.outputs.version }}
+          DMG: ${{ steps.version.outputs.dmg }}
+          SHA: ${{ steps.sum.outputs.sha256 }}
+        run: |
+          # 서명하지 않은 빌드라 첫 실행에 Gatekeeper 가 막는다. 릴리스 노트에
+          # 여는 방법을 항상 적어 둔다.
+          cat > notes.md <<EOF
+          ## 설치
+
+          \`\`\`bash
+          brew install --cask hmjlon/posteight/posteight
+          \`\`\`
+
+          또는 아래 \`$DMG\` 를 내려받아 Posteight 를 Applications 로 끌어다 놓는다.
+
+          ### 처음 열 때
+
+          Posteight 는 아직 Apple 공증을 받지 않았다. macOS 가 한 번 차단한다.
+
+          1. Posteight 를 연다 (차단 경고가 뜬다)
+          2. 시스템 설정 > 개인정보 보호 및 보안 을 연다
+          3. 아래로 내려 **그래도 열기** 를 누른다
+
+          한 번만 하면 그다음부터는 바로 열린다. 터미널을 쓴다면 아래 한 줄로도 된다.
+
+          \`\`\`bash
+          xattr -dr com.apple.quarantine /Applications/Posteight.app
+          \`\`\`
+
+          ### 요구 사항
+
+          - macOS 14 (Sonoma) 이상
+          - Apple Silicon (arm64) 전용
+
+          ### 체크섬
+
+          \`\`\`
+          $SHA  $DMG
+          \`\`\`
+          EOF
+
+          gh release create "v$V" \
+            "dist/$DMG" \
+            "dist/$DMG.sha256" \
+            --title "Posteight $V" \
+            --notes-file notes.md
+
+      # cask 를 손으로 고칠 때 쓸 값을 요약에 남긴다.
+      - name: Cask summary
+        run: |
+          {
+            echo "### Cask 갱신용"
+            echo '```ruby'
+            echo '  version "${{ steps.version.outputs.version }}"'
+            echo '  sha256 "${{ steps.sum.outputs.sha256 }}"'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
