@@ -57,4 +57,38 @@ struct PersistenceTests {
         let reloaded = PosteightStore(directory: directory)
         #expect(reloaded.notes.contains { $0.id == noteID && $0.title == "디바운스" })
     }
+
+    @Test("A blank placeholder item cannot be completed")
+    func blankItemDoesNotComplete() throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let store = PosteightStore(directory: directory)
+        let noteID = store.addNote()
+        let itemID = try #require(store.notes.first?.items.first?.id)
+
+        store.toggleItem(noteID: noteID, itemID: itemID)
+
+        let item = try #require(store.notes.first?.items.first)
+        #expect(!item.isDone)
+        #expect(item.completedAt == nil)
+    }
+
+    @Test("Clearing a completed item also clears its completion")
+    func clearingItemResetsCompletion() throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let store = PosteightStore(directory: directory)
+        let noteID = store.addNote()
+        let itemID = try #require(store.notes.first?.items.first?.id)
+        store.updateItemTitle(noteID: noteID, itemID: itemID, title: "완료할 일")
+        store.toggleItem(noteID: noteID, itemID: itemID)
+
+        store.updateItemTitle(noteID: noteID, itemID: itemID, title: "   ")
+
+        let item = try #require(store.notes.first?.items.first)
+        #expect(!item.isDone)
+        #expect(item.completedAt == nil)
+    }
 }

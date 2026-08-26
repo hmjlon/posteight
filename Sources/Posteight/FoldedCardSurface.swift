@@ -44,27 +44,16 @@ struct FoldedCardSurface: View {
     var body: some View {
         ZStack(alignment: .topTrailing) {
             FoldedCardShape()
-                .fill(Color(red: 0.97, green: 0.96, blue: 0.92))
-
-            FoldedCardShape()
-                .fill(paperColor.opacity(0.62))
+                .fill(paperColor)
 
             PaperGrain()
                 .clipShape(FoldedCardShape())
 
             FoldedCornerShape()
-                .fill(Color(red: 0.98, green: 0.97, blue: 0.94))
-                .shadow(color: .black.opacity(0.08), radius: 2, x: -1, y: 2)
-
-            FoldedCornerShape()
-                .fill(paperColor.opacity(0.28))
+                .fill(paperColor)
 
             FoldedCornerShape()
                 .stroke(inkColor.opacity(0.12), lineWidth: 0.8)
-        }
-        .overlay {
-            FoldedCardShape()
-                .stroke(inkColor.opacity(0.13), lineWidth: 0.9)
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)

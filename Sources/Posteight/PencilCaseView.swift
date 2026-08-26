@@ -91,12 +91,6 @@ struct PencilCaseView: View {
                                 .font(.system(size: 12, weight: .semibold))
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 22)
-                                .background(
-                                    sticker.symbol == note.stickerSymbol
-                                        ? Color(hex: note.penHex).opacity(0.16)
-                                        : Color.white.opacity(0.34),
-                                    in: Rectangle()
-                                )
                                 .overlay {
                                     Rectangle()
                                         .stroke(
@@ -116,7 +110,6 @@ struct PencilCaseView: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.white.opacity(0.34), in: Rectangle())
         .overlay {
             Rectangle()
                 .stroke(.black.opacity(0.08), lineWidth: 1)

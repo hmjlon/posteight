@@ -21,7 +21,7 @@ struct TodoItemRow: View {
                         .stroke(Color(hex: note.penHex).opacity(0.72), lineWidth: 1.7)
                         .frame(width: 16, height: 16)
 
-                    if item.isDone {
+                    if item.isDone && hasContent {
                         Image(systemName: "checkmark")
                             .font(.system(size: 9, weight: .bold))
                             .foregroundStyle(Color(hex: note.penHex))
@@ -30,7 +30,9 @@ struct TodoItemRow: View {
                 .frame(width: 20, height: 20)
             }
             .buttonStyle(.plain)
-            .help(item.isDone ? "완료 취소" : "완료")
+            .disabled(!hasContent)
+            .opacity(hasContent ? 1 : 0.28)
+            .help(hasContent ? (item.isDone ? "완료 취소" : "완료") : "할 일을 입력하면 완료할 수 있어요")
 
             ZStack(alignment: .leading) {
                 PlainEditableTextField(
@@ -77,12 +79,8 @@ struct TodoItemRow: View {
         .contentShape(Rectangle())
         .onHover { isRowHovered = $0 }
         .animation(.easeOut(duration: 0.12), value: isRowHovered)
-        .onTapGesture {
-            guard !isEditingText else { return }
-            toggleDone()
-        }
         .onAppear {
-            strikeProgress = item.isDone ? 1 : 0
+            strikeProgress = item.isDone && hasContent ? 1 : 0
         }
         .onChange(of: item.isDone) { _, isDone in
             if isDone {
@@ -103,6 +101,10 @@ struct TodoItemRow: View {
                 }
             }
         }
+    }
+
+    private var hasContent: Bool {
+        !item.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func toggleDone() {
