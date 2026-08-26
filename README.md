@@ -98,6 +98,37 @@ integrations are outside the current focus.
 - Per-note "Notion log" toggle
 - Daily work log preview and clipboard export as Markdown
 
+## Install
+
+Posteight requires **macOS 14 (Sonoma) or later** on **Apple silicon**. Intel Macs
+are not supported; `ARCHS` is pinned to `arm64`.
+
+With Homebrew:
+
+```bash
+brew install --cask hmjlon/posteight/posteight
+```
+
+Or download the latest `.dmg` from [Releases](https://github.com/hmjlon/posteight/releases)
+and drag Posteight to Applications.
+
+### First launch
+
+Posteight is not notarized by Apple yet, so macOS blocks it the first time it runs.
+
+1. Open Posteight. macOS shows a warning and refuses to launch it.
+2. Open **System Settings > Privacy & Security**.
+3. Scroll down and click **Open Anyway**.
+
+This is a one-time step per install. From a terminal, the same thing:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Posteight.app
+```
+
+Notarization needs a paid Apple Developer Program membership. Until that is in
+place, this step is unavoidable for anyone but the person who built the app.
+
 ## Develop with Xcode
 
 Open the app project:
@@ -120,7 +151,25 @@ Run the unit tests:
 swift test
 ```
 
-For a distributable app, use **Product > Archive** in Xcode.
+## Releasing
+
+Releases are built by CI, not by hand. Pushing a `v*` tag runs
+[`release.yml`](.github/workflows/release.yml), which stamps the version from the
+tag, builds the Release configuration, packages a `.dmg`, and publishes it to
+GitHub Releases with its checksum:
+
+```bash
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+The tag is the only source of truth for the version. `Packaging/Info.plist` reads
+`$(MARKETING_VERSION)`, so never hardcode a version there.
+
+Every push to `main` and every pull request runs [`ci.yml`](.github/workflows/ci.yml):
+`swift test` for the unit tests, and `xcodebuild` for the real `.app` bundle.
+
+`Product > Archive` in Xcode still works for a local one-off build.
 
 ## Project Structure
 
@@ -128,6 +177,7 @@ For a distributable app, use **Product > Archive** in Xcode.
 - `Tests/PosteightTests/`: store and persistence tests
 - `Posteight.xcodeproj`: Xcode app target and build settings
 - `Packaging/Info.plist`: macOS bundle metadata
+- `.github/workflows/`: CI and release automation
 
 ## Landing Page
 
