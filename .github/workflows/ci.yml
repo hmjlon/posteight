@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# 같은 브랜치에 연속 푸시가 나면 이전 실행은 취소한다. macOS 러너는 비싸다.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Unit tests (SwiftPM)
+    # 개발 환경(Xcode 26)과 러너를 맞춘다. 툴체인이 갈리면 CI 실패가 진짜 실패인지
+    # 버전 차이인지 구분할 수 없게 된다.
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Build
+        run: swift build --build-tests
+
+      - name: Test
+        run: swift test
+
+  app:
+    name: App bundle (xcodebuild)
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Show toolchain
+        run: xcodebuild -version
+
+      # 번들이 소유한 설정(Info.plist, 앱 아이콘, ad-hoc 서명)까지 실제로 빌드되는지
+      # 확인한다. CODE_SIGN_IDENTITY 가 "-" 라 키체인도 인증서도 필요 없다.
+      # deployment target 이 14.0 이므로, 최신 SDK 가 macOS 14 에 없는 API 사용을
+      # 컴파일 타임에 잡아준다.
+      - name: Build .app
+        run: |
+          set -o pipefail
+          # xcbeautify 는 러너 이미지에 들어 있지만, 없으면 원본 로그로 넘어간다.
+          format() { if command -v xcbeautify >/dev/null; then xcbeautify --renderer github-actions; else cat; fi; }
+          xcodebuild build \
+            -project Posteight.xcodeproj \
+            -scheme Posteight \
+            -configuration Debug \
+            -destination 'platform=macOS,arch=arm64' \
+            -derivedDataPath build/DerivedData \
+            -resultBundlePath BuildResults.xcresult \
+            | format
+
+      # Xcode 빌드 실패 로그는 수천 줄이라, 원인만 따로 뽑아 준다.
+      - name: Failure diagnostics
+        if: failure()
+        run: |
+          xcrun xcresulttool get build-results --path BuildResults.xcresult \
+            || echo "No xcresult available."
