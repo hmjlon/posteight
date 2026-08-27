@@ -241,6 +241,21 @@ final class PosteightStore: ObservableObject {
             .title
     }
 
+    /// A detail that is only whitespace is dropped, so "has notes" never lights up for a blank one.
+    func updateItemDetail(noteID: UUID, itemID: UUID, detail: String) {
+        updateItem(noteID: noteID, itemID: itemID) { item in
+            item.detail = detail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : detail
+        }
+    }
+
+    func itemDetail(noteID: UUID, itemID: UUID) -> String? {
+        notes
+            .first { $0.id == noteID }?
+            .items
+            .first { $0.id == itemID }?
+            .detail
+    }
+
     func toggleItem(noteID: UUID, itemID: UUID) {
         updateItem(noteID: noteID, itemID: itemID) { item in
             guard !item.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {

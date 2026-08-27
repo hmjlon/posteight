@@ -52,13 +52,23 @@ struct TrashedStickyNote: Identifiable, Codable, Equatable {
 struct TodoItem: Identifiable, Codable, Equatable {
     var id: UUID
     var title: String
+    /// Free-form notes for the item, kept out of the card so the title stays one glanceable line.
+    var detail: String?
     var isDone: Bool
     var createdAt: Date
     var completedAt: Date?
 
-    init(id: UUID = UUID(), title: String, isDone: Bool = false, createdAt: Date = Date(), completedAt: Date? = nil) {
+    init(
+        id: UUID = UUID(),
+        title: String,
+        detail: String? = nil,
+        isDone: Bool = false,
+        createdAt: Date = Date(),
+        completedAt: Date? = nil
+    ) {
         self.id = id
         self.title = title
+        self.detail = detail
         self.isDone = isDone
         self.createdAt = createdAt
         self.completedAt = completedAt

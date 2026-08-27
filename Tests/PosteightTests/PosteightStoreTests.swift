@@ -148,6 +148,17 @@ struct DailyLogTests {
         #expect(markdown.contains("### 완료한 일\n- 없음"))
     }
 
+    @Test("A detail stays in the app and never reaches the log")
+    func keepsDetailOutOfLog() {
+        let markdown = PosteightStore.dailyLogMarkdown(
+            notes: [note(items: [TodoItem(title: "배포", detail: "스테이징 먼저")])],
+            date: date
+        )
+
+        #expect(markdown.contains("- 배포"))
+        #expect(!markdown.contains("스테이징 먼저"))
+    }
+
     @Test("No flagged notes produces a readable message, not an empty document")
     func handlesNoFlaggedNotes() {
         let markdown = PosteightStore.dailyLogMarkdown(

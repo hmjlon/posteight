@@ -77,7 +77,7 @@ private struct FoldedCornerShape: Shape {
     }
 }
 
-private struct PaperGrain: View {
+struct PaperGrain: View {
     var body: some View {
         Canvas { context, size in
             let area = max(1, size.width * size.height)
