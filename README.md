@@ -40,9 +40,13 @@ remaining-task count. The popover is the control center for quick capture,
 showing every note, the daily log, the trash, and quitting. Floating notes remain
 the main working surface; the popover should not become a second full editor.
 
-The status item shows progress as a fraction — remaining over total by default,
-or done over total. Clicking it opens the popover, which is also where settings
-live: the settings entry opens a modal dialog over whatever is on screen.
+The status item is one folded card with the count written on it — remaining by
+default, or done. The card fills from the bottom as today's items get done, and
+its ink keeps moving while anything is left, so a glance says both how much is
+left and that there is still something running. The two days with no number
+worth reading get a face instead: nothing on the list, and nothing left on it.
+Clicking it opens the popover, which is also where settings live: the settings
+entry opens a modal dialog over whatever is on screen.
 
 Settings stay deliberately small: what the status item counts, whether notes
 float above other apps, and whether Posteight keeps a Dock icon. The Dock icon is

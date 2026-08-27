@@ -144,13 +144,10 @@ private struct MenuBarLabel: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        HStack(spacing: 3) {
-            Image(systemName: "checklist")
-
-            if store.totalCount > 0 {
-                Text(countLabel)
-            }
-        }
+        // The count is written on the card itself rather than set beside it, so the status item
+        // reads as one object instead of an icon with a label stuck to it.
+        MenuBarProgressCard(done: store.doneCount, total: store.totalCount, count: displayCount)
+            .accessibilityLabel(store.totalCount > 0 ? "Posteight, \(countLabel)" : "Posteight")
         .task {
             for note in store.notes {
                 presentNote(note.id)
@@ -174,8 +171,12 @@ private struct MenuBarLabel: View {
         }
     }
 
+    private var displayCount: Int {
+        settings.menuBarCountStyle == .done ? store.doneCount : store.remainingCount
+    }
+
+    /// VoiceOver still gets both halves, which the card no longer has room to show.
     private var countLabel: String {
-        let count = settings.menuBarCountStyle == .done ? store.doneCount : store.remainingCount
-        return "\(count)/\(store.totalCount)"
+        "\(displayCount)/\(store.totalCount)"
     }
 }

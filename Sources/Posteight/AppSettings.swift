@@ -10,8 +10,8 @@ enum MenuBarCountStyle: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .remaining: "남은 일 / 전체"
-        case .done: "완료 / 전체"
+        case .remaining: "남은 일"
+        case .done: "완료"
         }
     }
 }

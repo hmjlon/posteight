@@ -36,9 +36,12 @@ struct SettingsView: View {
                 .pickerStyle(.radioGroup)
 
                 LabeledContent("미리보기") {
-                    Text(preview)
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.secondary)
+                    MenuBarProgressCard(
+                        done: store.doneCount,
+                        total: store.totalCount,
+                        count: previewCount
+                    )
+                    .foregroundStyle(.secondary)
                 }
             }
 
@@ -69,9 +72,8 @@ struct SettingsView: View {
         .formStyle(.grouped)
     }
 
-    private var preview: String {
-        let count = settings.menuBarCountStyle == .done ? store.doneCount : store.remainingCount
-        return "\(count)/\(store.totalCount)"
+    private var previewCount: Int {
+        settings.menuBarCountStyle == .done ? store.doneCount : store.remainingCount
     }
 
     private var versionLabel: String {
