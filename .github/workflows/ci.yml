@@ -7,7 +7,7 @@ on:
     branches: [release, dev]
     paths-ignore: ['**.md', 'LICENSE']
   pull_request:
-    branches: [release]
+    branches: [release, dev]
   workflow_dispatch:
 
 # 같은 브랜치에 연속 푸시가 나면 이전 실행은 취소한다. macOS 러너는 비싸다.
