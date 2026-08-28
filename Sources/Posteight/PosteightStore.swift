@@ -16,6 +16,12 @@ final class PosteightStore: ObservableObject {
         }
     }
 
+    @Published private(set) var trashedTabs: [TrashedMemoTab] = [] {
+        didSet {
+            scheduleSave()
+        }
+    }
+
     private let storageKey = "posteight.notes.v1"
     private let trashStorageKey = "posteight.trash.v1"
     private let legacyStorageKey = "posteat.notes.v1"
@@ -36,6 +42,7 @@ final class PosteightStore: ObservableObject {
     private let directory: URL
     private let notesURL: URL
     private let trashURL: URL
+    private let trashedTabsURL: URL
 
     private var saveTask: Task<Void, Never>?
 
@@ -44,6 +51,7 @@ final class PosteightStore: ObservableObject {
         self.directory = directory
         self.notesURL = directory.appendingPathComponent("notes.json")
         self.trashURL = directory.appendingPathComponent("trash.json")
+        self.trashedTabsURL = directory.appendingPathComponent("trashed-tabs.json")
 
         load()
 
@@ -119,6 +127,7 @@ final class PosteightStore: ObservableObject {
 
     func emptyTrash() {
         trashedNotes.removeAll()
+        trashedTabs.removeAll()
     }
 
     func moveNote(_ noteID: UUID, by translation: CGSize) {
@@ -163,6 +172,71 @@ final class PosteightStore: ObservableObject {
             guard note.tabs.contains(where: { $0.id == tabID }) else { return }
             note.selectedTabID = tabID
         }
+    }
+
+    /// Closing a tab is the same weight as closing a note — reversible, not a delete — so it goes
+    /// through the same trash rather than disappearing outright. Never takes a note's last tab: a
+    /// note without one doesn't exist in this model, and the window already has its own close
+    /// control for that case. Returns whether it actually moved, so the view can fall back to
+    /// that control when it didn't.
+    @discardableResult
+    func moveTabToTrash(noteID: UUID, tabID: UUID) -> Bool {
+        guard let noteIndex = notes.firstIndex(where: { $0.id == noteID }),
+              notes[noteIndex].tabs.count > 1,
+              let tabIndex = notes[noteIndex].tabs.firstIndex(where: { $0.id == tabID }) else {
+            return false
+        }
+
+        let note = notes[noteIndex]
+        let tab = notes[noteIndex].tabs.remove(at: tabIndex)
+
+        // The tab that slides into the closed one's spot becomes selected, the way a browser
+        // lands on a neighbor rather than jumping back to the first tab.
+        if notes[noteIndex].selectedTabID == tabID {
+            let landingIndex = min(tabIndex, notes[noteIndex].tabs.count - 1)
+            notes[noteIndex].selectedTabID = notes[noteIndex].tabs[landingIndex].id
+        }
+
+        trashedTabs.insert(
+            TrashedMemoTab(
+                sourceNoteID: noteID,
+                tab: tab,
+                paperHex: note.paperHex,
+                penHex: note.penHex,
+                stickerSymbol: note.stickerSymbol,
+                deletedAt: Date()
+            ),
+            at: 0
+        )
+        return true
+    }
+
+    /// Restores into the note it was closed from when that note still exists, or stands up a
+    /// fresh note around it when that note is itself gone — a restore should never just vanish.
+    func restoreTab(_ trashedTabID: UUID) {
+        guard let index = trashedTabs.firstIndex(where: { $0.id == trashedTabID }) else { return }
+        let trashed = trashedTabs.remove(at: index)
+
+        if let noteIndex = notes.firstIndex(where: { $0.id == trashed.sourceNoteID }) {
+            notes[noteIndex].tabs.append(trashed.tab)
+            notes[noteIndex].selectedTabID = trashed.tab.id
+        } else {
+            let offset = Double(notes.count % 4) * 34
+            notes.append(
+                StickyNote(
+                    stickerSymbol: trashed.stickerSymbol,
+                    paperHex: trashed.paperHex,
+                    penHex: trashed.penHex,
+                    includeInNotionLog: false,
+                    position: NotePoint(x: 270 + offset, y: 240 + offset),
+                    tabs: [trashed.tab]
+                )
+            )
+        }
+    }
+
+    func permanentlyDeleteTab(_ trashedTabID: UUID) {
+        trashedTabs.removeAll { $0.id == trashedTabID }
     }
 
     func tabName(noteID: UUID, tabID: UUID) -> String? {
@@ -345,6 +419,7 @@ final class PosteightStore: ObservableObject {
     private func load() {
         loadNotes()
         loadTrashedNotes()
+        loadTrashedTabs()
     }
 
     /// Application Support first, then the two `UserDefaults` domains notes used to live in
@@ -384,6 +459,20 @@ final class PosteightStore: ObservableObject {
         }
     }
 
+    /// No legacy home to fall back to — closing a tab on its own is new, so this file either
+    /// holds what a previous launch wrote or doesn't exist yet.
+    private func loadTrashedTabs() {
+        guard
+            let data = try? Data(contentsOf: trashedTabsURL),
+            let decoded = try? JSONDecoder().decode([TrashedMemoTab].self, from: data)
+        else {
+            trashedTabs = []
+            return
+        }
+
+        trashedTabs = decoded
+    }
+
     private static let saveDelay = Duration.milliseconds(500)
 
     /// Every keystroke mutates `notes`, so coalesce the writes instead of re-encoding the
@@ -403,6 +492,7 @@ final class PosteightStore: ObservableObject {
         saveTask = nil
         write(notes, to: notesURL)
         write(trashedNotes, to: trashURL)
+        write(trashedTabs, to: trashedTabsURL)
     }
 
     private func write(_ value: some Encodable, to url: URL) {

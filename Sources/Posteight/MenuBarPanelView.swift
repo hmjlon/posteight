@@ -29,8 +29,8 @@ struct MenuBarPanelView: View {
 
             PanelRow(
                 title: "휴지통",
-                systemImage: store.trashedNotes.isEmpty ? "trash" : "trash.fill",
-                badge: store.trashedNotes.isEmpty ? nil : "\(store.trashedNotes.count)"
+                systemImage: trashIsEmpty ? "trash" : "trash.fill",
+                badge: trashIsEmpty ? nil : "\(store.trashedNotes.count + store.trashedTabs.count)"
             ) {
                 open(windowID: WindowID.trash)
             }
@@ -63,6 +63,10 @@ struct MenuBarPanelView: View {
         }
         .padding(.horizontal, 6)
         .padding(.top, 2)
+    }
+
+    private var trashIsEmpty: Bool {
+        store.trashedNotes.isEmpty && store.trashedTabs.isEmpty
     }
 
     private var statusLabel: String {

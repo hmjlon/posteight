@@ -138,6 +138,19 @@ struct TrashedStickyNote: Identifiable, Codable, Equatable {
     var deletedAt: Date
 }
 
+/// A tab closed on its own, kept apart from its note — the note itself may still be open, or
+/// gone by the time this is restored. The paper style travels with it so a restore that has to
+/// stand up a new note still looks like it belongs to the one it came from.
+struct TrashedMemoTab: Identifiable, Codable, Equatable {
+    var id: UUID { tab.id }
+    var sourceNoteID: UUID
+    var tab: MemoTab
+    var paperHex: String
+    var penHex: String
+    var stickerSymbol: String
+    var deletedAt: Date
+}
+
 struct TodoItem: Identifiable, Codable, Equatable {
     var id: UUID
     var title: String

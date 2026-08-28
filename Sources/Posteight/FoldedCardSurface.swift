@@ -6,6 +6,10 @@ enum MemoSurfaceMetrics {
     static let activeTabHeight: CGFloat = 32
     static let inactiveTabHeight: CGFloat = 27
     static let maximumTabWidth: CGFloat = 180
+    /// Below this, the sticker and its drag handle no longer fit (`showsSticker` needs 54pt) —
+    /// so equal division stops shrinking tabs here instead of squeezing them into unreadable
+    /// slivers, and the tab strip clips whatever no longer fits rather than distorting it.
+    static let minimumTabWidth: CGFloat = 56
     static let addTabButtonWidth: CGFloat = 30
     static let trailingControlsWidth: CGFloat = 56
     static let tabCornerRadius: CGFloat = 8
@@ -61,6 +65,28 @@ struct MemoCardSurface: View {
     }
 }
 
+/// A soft sheen at the top and a faint shadow pooling at the bottom, so the matte paper still
+/// reads as lifted off the desktop. No blur, no transparency — the card stays fully opaque; this
+/// is lighting, not the glassmorphism the tabbed redesign moved away from. Drawn as the topmost
+/// layer over the whole card, tab bar included, so the lift reads across the one continuous
+/// surface rather than stopping at the tab strip's own background.
+struct MemoCardSheen: View {
+    var body: some View {
+        LinearGradient(
+            stops: [
+                .init(color: .white.opacity(0.16), location: 0),
+                .init(color: .white.opacity(0), location: 0.22),
+                .init(color: .black.opacity(0), location: 0.86),
+                .init(color: .black.opacity(0.05), location: 1)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
 struct PaperGrain: View {
     var body: some View {
         Canvas { context, size in
@@ -93,62 +119,70 @@ struct PaperGrain: View {
     }
 }
 
-/// The memo window no longer uses a folded corner, but the compact menu-bar glyph keeps the
-/// original Posteight silhouette as a brand mark.
-private struct FoldedCardShape: Shape {
+/// The memo window no longer uses a folded corner; the status item instead traces the "eight" in
+/// Posteight's own name lying on its side — the ∞ shape, so the glyph reads as infinite as much
+/// as it reads as eight.
+private struct InfinityLoopShape: Shape {
+    /// The raw curve's lobes only reach ~0.35 of the requested half-height at their tallest; this
+    /// scales the y term back out so the loop actually fills the box it is asked to fit.
+    private static let lobeCorrection: CGFloat = 2.83
+
     func path(in rect: CGRect) -> Path {
-        let fold = min(4, rect.width * 0.28, rect.height * 0.28)
-        let radius = min(3, rect.width * 0.18, rect.height * 0.18)
+        let cx = rect.midX
+        let cy = rect.midY
+        let halfWidth = rect.width / 2
+        let halfHeight = rect.height / 2
 
         var path = Path()
-        path.move(to: CGPoint(x: rect.minX + radius, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX - fold, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + fold))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - radius))
-        path.addQuadCurve(
-            to: CGPoint(x: rect.maxX - radius, y: rect.maxY),
-            control: CGPoint(x: rect.maxX, y: rect.maxY)
-        )
-        path.addLine(to: CGPoint(x: rect.minX + radius, y: rect.maxY))
-        path.addQuadCurve(
-            to: CGPoint(x: rect.minX, y: rect.maxY - radius),
-            control: CGPoint(x: rect.minX, y: rect.maxY)
-        )
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + radius))
-        path.addQuadCurve(
-            to: CGPoint(x: rect.minX + radius, y: rect.minY),
-            control: CGPoint(x: rect.minX, y: rect.minY)
-        )
+        let steps = 48
+        for step in 0...steps {
+            let t = Double(step) / Double(steps) * 2 * .pi
+            let s = sin(t)
+            let c = cos(t)
+            let denom = 1 + s * s
+            let point = CGPoint(
+                x: cx + halfWidth * c / denom,
+                y: cy + halfHeight * Self.lobeCorrection * c * s / denom
+            )
+            if step == 0 {
+                path.move(to: point)
+            } else {
+                path.addLine(to: point)
+            }
+        }
         path.closeSubpath()
         return path
     }
 }
 
-/// The status item glyph: the same folded card, filling from the bottom as today's items get
-/// done, with a face that reacts to how the day is going. macOS flattens a menu bar label to a
-/// template image, so this stays monochrome and carries its meaning in the fill height, the
-/// expression and the sparkle alone.
+/// The status item glyph: a figure-eight loop that traces solid as today's items get done, with
+/// a short bright segment that keeps travelling the whole loop while anything is left — the same
+/// "still running" cue RunCat gives with its cat, run here around the number in the app's own
+/// name. A face reacts to how the day is going on the two days there is no count worth reading.
+/// macOS flattens a menu bar label to a template image, so this stays monochrome and carries its
+/// meaning in the traced fraction, the moving segment and the face alone.
 ///
 /// `MenuBarExtra` only renders `Text` and `Image` in its label — a `Shape` or `Canvas` put there
 /// draws nothing at all, and the status item silently comes up with the text beside it and no
-/// picture. So the card is drawn once into an `NSImage` and handed over as an `Image`.
+/// picture. So the loop is drawn once into an `NSImage` and handed over as an `Image`.
 // ponytail: renders a frame on demand, no cache. It is a 14x16 raster at 8fps; measure first.
 // ponytail: the loop only writes state when something actually changed, which is what keeps a
-// still card free. A `TimelineView(.animation)` here instead spins the status item's
+// still glyph free. A `TimelineView(.animation)` here instead spins the status item's
 // update -> re-render -> update loop at 100% CPU and the app never finishes launching: that
 // redraws the label itself forever, where this swaps a picture a few times a second.
 struct MenuBarProgressCard: View {
     let done: Int
     let total: Int
-    /// The one number written on the card — whichever of remaining or done the user picked.
+    /// The one number written on the loop — whichever of remaining or done the user picked.
     let count: Int
 
-    /// The level actually drawn, which walks to `fill` instead of jumping to it.
+    /// The fraction actually drawn, which walks to `fill` instead of jumping to it.
     @State private var shown: Double
-    /// Which of the four wave positions is showing.
+    /// Which lap position the moving segment is at.
     @State private var frame = 0
 
     private static let fps = 8.0
+    private static let runnerSteps = 16
 
     init(done: Int, total: Int, count: Int) {
         self.done = done
@@ -164,18 +198,18 @@ struct MenuBarProgressCard: View {
             .task { await run() }
     }
 
-    /// One loop drives both the ink sloshing and the level easing toward a new count. `.task`
-    /// cancels it with the view, and a card with nothing left to do writes no state at all, so
-    /// SwiftUI stops re-evaluating and the glyph costs nothing until the day changes again.
+    /// One loop drives both the runner's motion and the traced fraction easing toward a new
+    /// count. `.task` cancels it with the view, and a glyph with nothing left to do writes no
+    /// state at all, so SwiftUI stops re-evaluating and it costs nothing until the day changes.
     private func run() async {
         while !Task.isCancelled {
             try? await Task.sleep(for: .seconds(1 / Self.fps))
             guard !Task.isCancelled else { return }
 
-            // The wave only moves while there is something left to do; a cleared or empty day
+            // The runner only moves while there is something left to do; a cleared or empty day
             // sits still, which reads as "nothing running" and stops burning battery for it.
             if mood == .working {
-                frame = (frame + 1) % 4
+                frame = (frame + 1) % Self.runnerSteps
             }
 
             let target = fill
@@ -209,33 +243,35 @@ struct MenuBarProgressCard: View {
             return NSImage(size: CardGlyph.size(count: count, mood: mood))
         }
 
-        // Only the alpha survives into the menu bar, which is what makes the punched-out face
-        // and the two ink tones readable against either a light or a dark bar.
+        // Only the alpha survives into the menu bar, which is what makes the face and the traced
+        // loop readable against either a light or a dark bar.
         image.isTemplate = true
         return image
     }
 }
 
-/// The drawing itself. One `Canvas`, with the count — or the face — taken out of the card
-/// rather than drawn on top: the glyph is reduced to alpha, so both have to be *absent*.
-///
-/// A note is a thing you write a number on, so on an ordinary day the card carries the count and
-/// nothing else. The face is kept for the two days that have no number worth reading: nothing
-/// on the list, and nothing left on it.
+/// The drawing itself: a faint full loop as the track, a solid trace over the completed
+/// fraction, and — while there is still work left — a short segment that keeps moving around the
+/// whole loop as a "this is still running" cue. The face is kept for the two days that have no
+/// number worth reading: nothing on the list, and nothing left on it.
 private struct CardGlyph: View {
     let fill: Double
-    /// 0...3, a quarter turn of the wave apiece.
+    /// 0..<`runnerSteps`, the moving segment's current position on the loop.
     let frame: Int
     let mood: CardFace.Mood
     let count: Int
 
-    private static let stroke = StrokeStyle(lineWidth: 1.3, lineCap: .round, lineJoin: .round)
+    private static let trackStroke = StrokeStyle(lineWidth: 1.3, lineCap: .round, lineJoin: .round)
+    private static let progressStroke = StrokeStyle(lineWidth: 1.7, lineCap: .round, lineJoin: .round)
     private static let height: CGFloat = 16
+    private static let runnerSteps = 16
+    private static let runnerSpan = 0.06
 
-    /// Wide enough for the digits it has to hold, so a busy day does not crop its own count.
+    /// Wide enough to read as ∞ rather than a squeezed circle, and wide enough for the digits it
+    /// has to hold on top of that, so a busy day does not crop its own count.
     static func size(count: Int, mood: Mood) -> CGSize {
-        guard mood == .working else { return CGSize(width: 16, height: height) }
-        return CGSize(width: 11 + CGFloat(String(count).count) * 5.5, height: height)
+        guard mood == .working else { return CGSize(width: 22, height: height) }
+        return CGSize(width: 16 + CGFloat(String(count).count) * 5.5, height: height)
     }
 
     typealias Mood = CardFace.Mood
@@ -246,58 +282,65 @@ private struct CardGlyph: View {
         HStack(spacing: 1) {
             Canvas { context, size in
                 let rect = CGRect(origin: .zero, size: size)
-                let card = FoldedCardShape().path(in: rect)
-                let wave = InkWave(
-                    level: max(fill, 0.1),
-                    phase: Double(frame) * .pi / 2,
-                    // A touch deeper than the card body's, or the swell is invisible at 14pt.
-                    amplitude: 1.1
-                ).path(in: rect)
+                let loop = InfinityLoopShape().path(in: rect)
 
-                // Resolved up front: the drawing below runs twice, and `context` is `inout` so
-                // it cannot be reached from inside the closure that does it.
                 let numeral = context.resolve(
                     Text(String(count))
                         .font(.system(size: 9, weight: .black, design: .rounded))
                 )
-                let face = CardFace.path(mood: mood, in: size).strokedPath(Self.stroke)
 
-                // The count on an ordinary day, the face on a day with no number worth reading.
-                let mark: (GraphicsContext) -> Void = { canvas in
-                    guard mood == .working else {
-                        canvas.fill(face, with: .color(.black))
-                        return
-                    }
+                context.stroke(loop, with: .color(.black.opacity(0.22)), style: Self.trackStroke)
 
-                    canvas.draw(
-                        numeral,
-                        at: CGPoint(x: size.width * 0.5, y: size.height * 0.52),
-                        anchor: .center
+                if fill > 0.002 {
+                    context.stroke(
+                        loop.trimmedPath(from: 0, to: fill),
+                        with: .color(.black),
+                        style: Self.progressStroke
                     )
                 }
 
-                context.fill(card, with: .color(.black.opacity(0.22)))
+                if mood == .working {
+                    let start = Double(frame % Self.runnerSteps) / Double(Self.runnerSteps)
+                    let end = start + Self.runnerSpan
+                    if end <= 1 {
+                        context.stroke(
+                            loop.trimmedPath(from: start, to: end),
+                            with: .color(.black),
+                            style: Self.progressStroke
+                        )
+                    } else {
+                        context.stroke(
+                            loop.trimmedPath(from: start, to: 1),
+                            with: .color(.black),
+                            style: Self.progressStroke
+                        )
+                        context.stroke(
+                            loop.trimmedPath(from: 0, to: end - 1),
+                            with: .color(.black),
+                            style: Self.progressStroke
+                        )
+                    }
 
-                // Written in ink first, because a hole punched in the pale part of the card is
-                // no darker than the card and would vanish in the menu bar.
-                mark(context)
+                    // The loop's track, progress trace and runner all pass right behind the
+                    // count, and stacked together they turn the digits into a smudge. Erasing a
+                    // halo to fully transparent first — not just drawing over it — is what keeps
+                    // them legible against both a light and dark menu bar.
+                    let center = CGPoint(x: size.width * 0.5, y: size.height * 0.52)
+                    let numeralSize = numeral.measure(in: size)
+                    let halo = CGRect(
+                        x: center.x - numeralSize.width / 2 - 2,
+                        y: center.y - numeralSize.height / 2 - 1,
+                        width: numeralSize.width + 4,
+                        height: numeralSize.height + 2
+                    )
+                    var eraser = context
+                    eraser.blendMode = .clear
+                    eraser.fill(Path(roundedRect: halo, cornerRadius: halo.height / 2), with: .color(.black))
 
-                context.drawLayer { ink in
-                    ink.clip(to: card)
-                    // A sliver of ink keeps the card readable on a day nothing is done yet.
-                    ink.fill(wave, with: .color(.black))
+                    context.draw(numeral, at: center, anchor: .center)
+                } else {
+                    context.stroke(CardFace.path(mood: mood, in: size), with: .color(.black), style: Self.trackStroke)
                 }
-
-                // Below the waterline the ink has swallowed it, so there the same mark is taken
-                // back out — the count reads dark above the line and hollow below it.
-                // Erasing straight into what is already drawn is safe here: this is one
-                // rasterised canvas, not the SwiftUI layer compositing the status item skips.
-                var knockout = context
-                knockout.clip(to: wave)
-                knockout.blendMode = .destinationOut
-                mark(knockout)
-
-                context.stroke(card, with: .color(.black), style: Self.stroke)
             }
             .frame(width: size.width, height: size.height)
 
@@ -312,8 +355,8 @@ private struct CardGlyph: View {
     }
 }
 
-/// Two eyes and, once the day is cleared, a mouth — as a bare path, because the card punches it
-/// out rather than drawing it.
+/// Two eyes and, once the day is cleared, a mouth — as a bare path, stroked directly onto the
+/// loop rather than filled.
 enum CardFace {
     enum Mood {
         /// Nothing on the list yet, so the card is dozing.
@@ -353,34 +396,6 @@ enum CardFace {
             control: CGPoint(x: size.width * 0.5, y: mouthY + 2.4)
         )
 
-        return path
-    }
-}
-
-/// The filled part of the card, with a small wave along its surface.
-private struct InkWave: Shape {
-    var level: Double
-    var phase: Double
-    var amplitude: CGFloat = 0.8
-
-    var animatableData: Double {
-        get { level }
-        set { level = newValue }
-    }
-
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        let surface = rect.maxY - rect.height * level
-
-        path.move(to: CGPoint(x: rect.minX, y: surface))
-        for step in 0...Int(rect.width * 2) {
-            let x = rect.minX + CGFloat(step) / 2
-            let y = surface + amplitude * sin(phase + Double(step) / Double(rect.width * 2) * 2 * .pi)
-            path.addLine(to: CGPoint(x: x, y: y))
-        }
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
-        path.closeSubpath()
         return path
     }
 }

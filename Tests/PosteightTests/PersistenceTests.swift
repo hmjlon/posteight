@@ -107,6 +107,105 @@ struct PersistenceTests {
         #expect(store.tabName(noteID: secondID, tabID: secondOriginalTabID) == "메모 1")
     }
 
+    @Test("Closing a tab that isn't selected leaves the current one open")
+    func closingOtherTabKeepsSelection() throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = PosteightStore(directory: directory)
+        let noteID = store.addNote()
+        let firstTabID = try memo(store, id: noteID).selectedTabID
+        let secondTabID = try #require(store.addTab(to: noteID))
+        store.selectTab(noteID: noteID, tabID: firstTabID)
+
+        #expect(store.moveTabToTrash(noteID: noteID, tabID: secondTabID))
+
+        let note = try memo(store, id: noteID)
+        #expect(note.tabs.map(\.id) == [firstTabID])
+        #expect(note.selectedTabID == firstTabID)
+        #expect(store.trashedTabs.map(\.id) == [secondTabID])
+    }
+
+    @Test("Closing the selected tab lands on the neighbor that takes its place")
+    func closingSelectedTabLandsOnNeighbor() throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = PosteightStore(directory: directory)
+        let noteID = store.addNote()
+        let firstTabID = try memo(store, id: noteID).selectedTabID
+        let secondTabID = try #require(store.addTab(to: noteID))
+        let thirdTabID = try #require(store.addTab(to: noteID))
+        store.selectTab(noteID: noteID, tabID: secondTabID)
+
+        #expect(store.moveTabToTrash(noteID: noteID, tabID: secondTabID))
+
+        let note = try memo(store, id: noteID)
+        #expect(note.tabs.map(\.id) == [firstTabID, thirdTabID])
+        #expect(note.selectedTabID == thirdTabID)
+    }
+
+    @Test("A memo's last tab cannot be closed")
+    func lastTabSurvivesClosing() throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = PosteightStore(directory: directory)
+        let noteID = store.addNote()
+        let onlyTabID = try memo(store, id: noteID).selectedTabID
+
+        #expect(!store.moveTabToTrash(noteID: noteID, tabID: onlyTabID))
+        #expect(try memo(store, id: noteID).tabs.map(\.id) == [onlyTabID])
+        #expect(store.trashedTabs.isEmpty)
+    }
+
+    @Test("Restoring a closed tab puts it back in its note")
+    func restoringTabReturnsToItsNote() throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = PosteightStore(directory: directory)
+        let noteID = store.addNote()
+        let firstTabID = try memo(store, id: noteID).selectedTabID
+        let secondTabID = try #require(store.addTab(to: noteID))
+        store.moveTabToTrash(noteID: noteID, tabID: secondTabID)
+
+        store.restoreTab(secondTabID)
+
+        #expect(store.trashedTabs.isEmpty)
+        let note = try memo(store, id: noteID)
+        #expect(note.tabs.map(\.id) == [firstTabID, secondTabID])
+        #expect(note.selectedTabID == secondTabID)
+    }
+
+    @Test("Restoring a tab whose note is gone stands up a new one instead of losing it")
+    func restoringTabRecreatesNoteWhenOriginalIsGone() throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = PosteightStore(directory: directory)
+        let noteID = store.addNote()
+        let secondTabID = try #require(store.addTab(to: noteID))
+        store.moveTabToTrash(noteID: noteID, tabID: secondTabID)
+        store.moveNoteToTrash(noteID)
+
+        store.restoreTab(secondTabID)
+
+        #expect(store.trashedTabs.isEmpty)
+        let notes = store.notes.filter { $0.tabs.contains { $0.id == secondTabID } }
+        #expect(notes.count == 1)
+        #expect(notes.first?.tabs.map(\.id) == [secondTabID])
+    }
+
+    @Test("Emptying the trash clears closed tabs too")
+    func emptyingTrashClearsTabs() throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = PosteightStore(directory: directory)
+        let noteID = store.addNote()
+        let secondTabID = try #require(store.addTab(to: noteID))
+        store.moveTabToTrash(noteID: noteID, tabID: secondTabID)
+
+        store.emptyTrash()
+
+        #expect(store.trashedTabs.isEmpty)
+    }
+
     @Test("A blank placeholder item cannot be completed")
     func blankItemDoesNotComplete() throws {
         let directory = temporaryDirectory()

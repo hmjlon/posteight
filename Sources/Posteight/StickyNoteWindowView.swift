@@ -15,6 +15,7 @@ struct StickyNoteWindowView: View {
     @State private var isCardHovered = false
     @State private var editingTabID: UUID?
     @State private var tabNameDraft = ""
+    @State private var hoveredTabID: UUID?
 
     var body: some View {
         Group {
@@ -54,6 +55,9 @@ struct StickyNoteWindowView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .clipShape(MemoCardShape())
+
+            MemoCardSheen()
+                .clipShape(MemoCardShape())
         }
         // The card fills the window instead of declaring its own size: a fixed size makes
         // SwiftUI resize the window under the drag, which is what made resizing stutter and
@@ -121,7 +125,7 @@ struct StickyNoteWindowView: View {
     ) -> some View {
         let tabCount = max(note.tabs.count, 1)
         let dividedWidth = availableWidth / CGFloat(tabCount)
-        let tabWidth = min(MemoSurfaceMetrics.maximumTabWidth, dividedWidth)
+        let tabWidth = min(MemoSurfaceMetrics.maximumTabWidth, max(MemoSurfaceMetrics.minimumTabWidth, dividedWidth))
 
         return HStack(alignment: .bottom, spacing: 0) {
             ForEach(note.tabs) { tab in
@@ -147,60 +151,95 @@ struct StickyNoteWindowView: View {
     ) -> some View {
         let showsSticker = width >= 54
         let horizontalPadding: CGFloat = width >= 74 ? 10 : 5
+        let isHovered = hoveredTabID == tab.id
+        let showsClose = editingTabID != tab.id && (isSelected || isHovered)
+        let onHover: (Bool) -> Void = { hovering in
+            hoveredTabID = hovering ? tab.id : (hoveredTabID == tab.id ? nil : hoveredTabID)
+        }
 
         if isSelected {
-            ZStack {
-                memoTabSurface(note, isSelected: true)
+            // The close button is a sibling of the rename button, not nested inside its label —
+            // a button inside another button's label fights it for the tap instead of the two
+            // splitting the tab's area by where each one actually is.
+            ZStack(alignment: .trailing) {
+                ZStack {
+                    memoTabSurface(note, isSelected: true)
 
-                if editingTabID == tab.id {
-                    PlainEditableTextField(
-                        text: $tabNameDraft,
-                        placeholder: tab.name,
-                        fontSize: 10,
-                        fontWeight: .semibold,
-                        textOpacity: 0.68,
-                        isFocused: true,
-                        onEditingChanged: { isEditing in
-                            if !isEditing, editingTabID == tab.id {
+                    if editingTabID == tab.id {
+                        PlainEditableTextField(
+                            text: $tabNameDraft,
+                            placeholder: tab.name,
+                            fontSize: 10,
+                            fontWeight: .semibold,
+                            textOpacity: 0.68,
+                            isFocused: true,
+                            onEditingChanged: { isEditing in
+                                if !isEditing, editingTabID == tab.id {
+                                    commitTabName(note: note)
+                                }
+                            },
+                            onSubmit: {
                                 commitTabName(note: note)
                             }
-                        },
-                        onSubmit: {
-                            commitTabName(note: note)
-                        }
-                    )
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .frame(height: 18)
-                    .padding(.horizontal, horizontalPadding)
-                } else {
-                    Button {
-                        beginEditing(tab)
-                    } label: {
-                        tabLabel(note: note, tab: tab, showsSticker: showsSticker, isSelected: true)
+                        )
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .frame(height: 18)
+                        .padding(.horizontal, horizontalPadding)
+                    } else {
+                        Button {
+                            beginEditing(tab)
+                        } label: {
+                            tabLabel(
+                                note: note,
+                                tab: tab,
+                                showsSticker: showsSticker,
+                                isSelected: true,
+                                reservesCloseSpace: showsClose
+                            )
                             .padding(.horizontal, horizontalPadding)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
+                }
+
+                if showsClose {
+                    tabCloseButton(note: note, tab: tab)
+                        .padding(.trailing, horizontalPadding)
                 }
             }
             .frame(width: width, height: MemoSurfaceMetrics.activeTabHeight)
             .clipped()
             .help("현재 탭 — 다시 클릭하면 이름을 수정할 수 있어요")
             .accessibilityAddTraits(.isSelected)
+            .onHover(perform: onHover)
         } else {
-            Button {
-                commitTabName(note: note)
-                withAnimation(.easeOut(duration: 0.16)) {
-                    store.selectTab(noteID: note.id, tabID: tab.id)
-                }
-            } label: {
-                ZStack {
-                    memoTabSurface(note, isSelected: false)
+            ZStack(alignment: .trailing) {
+                Button {
+                    commitTabName(note: note)
+                    withAnimation(.easeOut(duration: 0.16)) {
+                        store.selectTab(noteID: note.id, tabID: tab.id)
+                    }
+                } label: {
+                    ZStack {
+                        memoTabSurface(note, isSelected: false)
 
-                    tabLabel(note: note, tab: tab, showsSticker: showsSticker, isSelected: false)
+                        tabLabel(
+                            note: note,
+                            tab: tab,
+                            showsSticker: showsSticker,
+                            isSelected: false,
+                            reservesCloseSpace: showsClose
+                        )
                         .padding(.horizontal, horizontalPadding)
+                    }
+                }
+                .buttonStyle(.plain)
+
+                if showsClose {
+                    tabCloseButton(note: note, tab: tab)
+                        .padding(.trailing, horizontalPadding)
                 }
             }
-            .buttonStyle(.plain)
             .frame(width: width, height: MemoSurfaceMetrics.inactiveTabHeight)
             .contentShape(MemoTabShape())
             .help("\(tab.name) 탭으로 이동")
@@ -212,14 +251,30 @@ struct StickyNoteWindowView: View {
                     .frame(width: 0.5, height: 14)
                     .padding(.bottom, 8)
             }
+            .onHover(perform: onHover)
         }
+    }
+
+    private func tabCloseButton(note: StickyNote, tab: MemoTab) -> some View {
+        Button {
+            closeTab(note: note, tab: tab)
+        } label: {
+            Image(systemName: "xmark")
+                .font(.system(size: 8, weight: .bold))
+                .frame(width: 15, height: 15)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Color(hex: note.penHex).opacity(0.6))
+        .help("이 탭 닫기 — 휴지통에서 복구할 수 있어요")
     }
 
     private func tabLabel(
         note: StickyNote,
         tab: MemoTab,
         showsSticker: Bool,
-        isSelected: Bool
+        isSelected: Bool,
+        reservesCloseSpace: Bool
     ) -> some View {
         HStack(spacing: showsSticker ? 6 : 0) {
             if showsSticker {
@@ -242,6 +297,8 @@ struct StickyNoteWindowView: View {
             Spacer(minLength: 0)
         }
         .foregroundStyle(Color(hex: note.penHex).opacity(isSelected ? 0.72 : 0.58))
+        // Room for the close button sitting on top, so the truncated name doesn't run under it.
+        .padding(.trailing, reservesCloseSpace ? 15 : 0)
         .clipped()
     }
 
@@ -348,6 +405,19 @@ struct StickyNoteWindowView: View {
         )
     }
 
+    /// The tab's own × closes just that tab — unless it is the only one left, in which case a
+    /// note with zero tabs doesn't exist in this model, so it falls back to the card's own close.
+    /// Same weight as that close, too: the tab lands in 휴지통, not gone, so there is no separate
+    /// "are you sure" to click through first.
+    private func closeTab(note: StickyNote, tab: MemoTab) {
+        guard note.tabs.count > 1 else {
+            closeCard()
+            return
+        }
+
+        store.moveTabToTrash(noteID: note.id, tabID: tab.id)
+    }
+
     /// Closing only hides this window; the memo comes back with 메모 보기.
     private func closeCard() {
         NoteWindowCoordinator.shared.remove(noteID)
@@ -374,6 +444,7 @@ struct StickyNoteWindowView: View {
         }
     }
 }
+
 
 private struct NoteWindowConfigurator: NSViewRepresentable {
     let note: StickyNote
