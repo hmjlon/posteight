@@ -4,6 +4,7 @@ import SwiftUI
 struct TodoItemRow: View {
     @EnvironmentObject private var store: PosteightStore
     let note: StickyNote
+    let tab: MemoTab
     let item: TodoItem
     @Binding var focusedItemID: UUID?
 
@@ -41,8 +42,17 @@ struct TodoItemRow: View {
             ZStack(alignment: .leading) {
                 PlainEditableTextField(
                     text: Binding(
-                        get: { store.itemTitle(noteID: note.id, itemID: item.id) ?? item.title },
-                        set: { store.updateItemTitle(noteID: note.id, itemID: item.id, title: $0) }
+                        get: {
+                            store.itemTitle(noteID: note.id, tabID: tab.id, itemID: item.id) ?? item.title
+                        },
+                        set: {
+                            store.updateItemTitle(
+                                noteID: note.id,
+                                tabID: tab.id,
+                                itemID: item.id,
+                                title: $0
+                            )
+                        }
                     ),
                     placeholder: "할 일 입력",
                     fontSize: Self.titleFontSize,
@@ -51,7 +61,7 @@ struct TodoItemRow: View {
                     isFocused: focusedItemID == item.id,
                     onEditingChanged: { isEditingText = $0 },
                     onSubmit: {
-                        focusedItemID = store.addItem(to: note.id)
+                        focusedItemID = store.addItem(to: note.id, tabID: tab.id)
                     },
                     onMoveUp: { moveFocus(by: -1) },
                     onMoveDown: { moveFocus(by: 1) }
@@ -85,12 +95,19 @@ struct TodoItemRow: View {
             .help(hasDetail ? "세부사항 보기" : "세부사항 추가")
             .popover(isPresented: $showDetail, arrowEdge: .trailing) {
                 DetailEditor(
-                    text: store.itemDetail(noteID: note.id, itemID: item.id) ?? "",
-                    title: store.itemTitle(noteID: note.id, itemID: item.id) ?? item.title,
+                    text: store.itemDetail(noteID: note.id, tabID: tab.id, itemID: item.id) ?? "",
+                    title: store.itemTitle(noteID: note.id, tabID: tab.id, itemID: item.id) ?? item.title,
                     symbol: note.stickerSymbol,
                     paperColor: Color(hex: note.paperHex),
                     inkColor: Color(hex: note.penHex),
-                    onEdit: { store.updateItemDetail(noteID: note.id, itemID: item.id, detail: $0) },
+                    onEdit: {
+                        store.updateItemDetail(
+                            noteID: note.id,
+                            tabID: tab.id,
+                            itemID: item.id,
+                            detail: $0
+                        )
+                    },
                     onClose: { showDetail = false }
                 )
                 // Paints the popover's own chrome, arrow included, so the slip reads as a piece
@@ -99,7 +116,7 @@ struct TodoItemRow: View {
             }
 
             Button {
-                store.deleteItem(noteID: note.id, itemID: item.id)
+                store.deleteItem(noteID: note.id, tabID: tab.id, itemID: item.id)
             } label: {
                 Image(systemName: "minus")
                     .font(.system(size: 9, weight: .bold))
@@ -132,7 +149,7 @@ struct TodoItemRow: View {
 
     /// The strike stops where the text does, so it is measured in the field's own font.
     private var titleWidth: CGFloat {
-        let title = store.itemTitle(noteID: note.id, itemID: item.id) ?? item.title
+        let title = store.itemTitle(noteID: note.id, tabID: tab.id, itemID: item.id) ?? item.title
         let font = NSFont.systemFont(ofSize: Self.titleFontSize, weight: Self.titleFontWeight)
         return (title as NSString).size(withAttributes: [.font: font]).width
     }
@@ -151,14 +168,14 @@ struct TodoItemRow: View {
     }
 
     private func toggleDone() {
-        store.toggleItem(noteID: note.id, itemID: item.id)
+        store.toggleItem(noteID: note.id, tabID: tab.id, itemID: item.id)
     }
 
     private func moveFocus(by offset: Int) {
-        guard let index = note.items.firstIndex(where: { $0.id == item.id }) else { return }
+        guard let index = tab.items.firstIndex(where: { $0.id == item.id }) else { return }
         let target = index + offset
-        guard note.items.indices.contains(target) else { return }
-        focusedItemID = note.items[target].id
+        guard tab.items.indices.contains(target) else { return }
+        focusedItemID = tab.items[target].id
     }
 }
 

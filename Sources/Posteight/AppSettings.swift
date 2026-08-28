@@ -52,7 +52,7 @@ final class AppSettings: ObservableObject {
         }
     }
 
-    /// Bumped when the Dock icon is clicked, so the menu bar label can bring every note back.
+    /// Bumped when the Dock icon is clicked, so the menu bar label can bring the card back.
     @Published private(set) var showAllNotesRequests = 0
 
     var noteWindowLevel: NSWindow.Level {

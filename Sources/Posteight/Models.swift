@@ -3,10 +3,6 @@ import SwiftUI
 
 struct StickyNote: Identifiable, Codable, Equatable {
     var id: UUID
-    /// The note's own name, shown in the card header. Older notes decode without one and fall
-    /// back to a numbered default.
-    var label: String?
-    var title: String
     var stickerSymbol: String
     var paperHex: String
     var penHex: String
@@ -14,12 +10,11 @@ struct StickyNote: Identifiable, Codable, Equatable {
     var includeInNotionLog: Bool
     var position: NotePoint
     var size: NoteSize
-    var items: [TodoItem]
+    var tabs: [MemoTab]
+    var selectedTabID: UUID
 
     init(
         id: UUID = UUID(),
-        label: String? = nil,
-        title: String,
         stickerSymbol: String,
         paperHex: String,
         penHex: String,
@@ -27,11 +22,14 @@ struct StickyNote: Identifiable, Codable, Equatable {
         includeInNotionLog: Bool,
         position: NotePoint,
         size: NoteSize = DesignTokens.defaultNoteSize,
-        items: [TodoItem] = []
+        tabs: [MemoTab],
+        selectedTabID: UUID? = nil
     ) {
+        let safeTabs = tabs.isEmpty
+            ? [MemoTab(name: "메모 1", title: "", items: [TodoItem(title: "")])]
+            : tabs
+
         self.id = id
-        self.label = label
-        self.title = title
         self.stickerSymbol = stickerSymbol
         self.paperHex = paperHex
         self.penHex = penHex
@@ -39,6 +37,97 @@ struct StickyNote: Identifiable, Codable, Equatable {
         self.includeInNotionLog = includeInNotionLog
         self.position = position
         self.size = size
+        self.tabs = safeTabs
+        if let selectedTabID, safeTabs.contains(where: { $0.id == selectedTabID }) {
+            self.selectedTabID = selectedTabID
+        } else {
+            self.selectedTabID = safeTabs[0].id
+        }
+    }
+
+    var selectedTab: MemoTab? {
+        tabs.first { $0.id == selectedTabID } ?? tabs.first
+    }
+
+    var allItems: [TodoItem] {
+        tabs.flatMap(\.items)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case stickerSymbol
+        case paperHex
+        case penHex
+        case penStyle
+        case includeInNotionLog
+        case position
+        case size
+        case tabs
+        case selectedTabID
+        // Read-only migration fields from the single-content note model.
+        case title
+        case items
+        case label
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        stickerSymbol = try container.decode(String.self, forKey: .stickerSymbol)
+        paperHex = try container.decode(String.self, forKey: .paperHex)
+        penHex = try container.decode(String.self, forKey: .penHex)
+        penStyle = try container.decodeIfPresent(PenStyle.self, forKey: .penStyle) ?? .ballpoint
+        includeInNotionLog = try container.decode(Bool.self, forKey: .includeInNotionLog)
+        position = try container.decode(NotePoint.self, forKey: .position)
+        size = try container.decodeIfPresent(NoteSize.self, forKey: .size) ?? DesignTokens.defaultNoteSize
+
+        if let decodedTabs = try container.decodeIfPresent([MemoTab].self, forKey: .tabs),
+           !decodedTabs.isEmpty {
+            tabs = decodedTabs
+        } else {
+            let legacyTitle = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
+            let legacyItems = try container.decodeIfPresent([TodoItem].self, forKey: .items) ?? []
+            tabs = [MemoTab(name: "메모 1", title: legacyTitle, items: legacyItems)]
+        }
+
+        let decodedSelection = try container.decodeIfPresent(UUID.self, forKey: .selectedTabID)
+        if let decodedSelection, tabs.contains(where: { $0.id == decodedSelection }) {
+            selectedTabID = decodedSelection
+        } else {
+            selectedTabID = tabs[0].id
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(stickerSymbol, forKey: .stickerSymbol)
+        try container.encode(paperHex, forKey: .paperHex)
+        try container.encode(penHex, forKey: .penHex)
+        try container.encode(penStyle, forKey: .penStyle)
+        try container.encode(includeInNotionLog, forKey: .includeInNotionLog)
+        try container.encode(position, forKey: .position)
+        try container.encode(size, forKey: .size)
+        try container.encode(tabs, forKey: .tabs)
+        try container.encode(selectedTabID, forKey: .selectedTabID)
+    }
+}
+
+struct MemoTab: Identifiable, Codable, Equatable {
+    var id: UUID
+    var name: String
+    var title: String
+    var items: [TodoItem]
+
+    init(
+        id: UUID = UUID(),
+        name: String,
+        title: String,
+        items: [TodoItem] = []
+    ) {
+        self.id = id
+        self.name = name
+        self.title = title
         self.items = items
     }
 }

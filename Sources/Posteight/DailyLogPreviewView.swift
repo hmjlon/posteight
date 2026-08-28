@@ -27,7 +27,7 @@ struct DailyLogPreviewView: View {
                 .buttonStyle(.plain)
             }
 
-            Text("Notion 기록이 켜진 포스트잇만 정리됩니다.")
+            Text("Notion 기록이 켜진 메모만 정리됩니다.")
                 .font(.system(size: 12, weight: .medium, design: .rounded))
                 .foregroundStyle(.secondary)
 

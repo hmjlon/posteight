@@ -1,79 +1,63 @@
 import SwiftUI
 
-enum FoldedCardMetrics {
-    static let foldSize: CGFloat = 30
+enum MemoSurfaceMetrics {
     static let cornerRadius: CGFloat = 12
+    static let tabBarHeight: CGFloat = 38
+    static let activeTabHeight: CGFloat = 32
+    static let inactiveTabHeight: CGFloat = 27
+    static let maximumTabWidth: CGFloat = 180
+    static let addTabButtonWidth: CGFloat = 30
+    static let trailingControlsWidth: CGFloat = 56
+    static let tabCornerRadius: CGFloat = 8
 }
 
-struct FoldedCardShape: Shape {
-    var foldSize = FoldedCardMetrics.foldSize
-    var cornerRadius = FoldedCardMetrics.cornerRadius
-
+struct MemoCardShape: Shape {
     func path(in rect: CGRect) -> Path {
-        let fold = min(foldSize, rect.width * 0.28, rect.height * 0.28)
-        let radius = min(cornerRadius, rect.width * 0.18, rect.height * 0.18)
+        RoundedRectangle(cornerRadius: MemoSurfaceMetrics.cornerRadius, style: .continuous)
+            .path(in: rect)
+    }
+}
+
+/// Chrome-like tabs use calm rounded shoulders and a flat bottom that can join the memo body.
+struct MemoTabShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let radius = min(
+            MemoSurfaceMetrics.tabCornerRadius,
+            rect.height * 0.42,
+            rect.width * 0.25
+        )
 
         var path = Path()
-        path.move(to: CGPoint(x: rect.minX + radius, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX - fold, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + fold))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - radius))
-        path.addQuadCurve(
-            to: CGPoint(x: rect.maxX - radius, y: rect.maxY),
-            control: CGPoint(x: rect.maxX, y: rect.maxY)
-        )
-        path.addLine(to: CGPoint(x: rect.minX + radius, y: rect.maxY))
-        path.addQuadCurve(
-            to: CGPoint(x: rect.minX, y: rect.maxY - radius),
-            control: CGPoint(x: rect.minX, y: rect.maxY)
-        )
+        path.move(to: CGPoint(x: rect.minX, y: rect.maxY))
         path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + radius))
         path.addQuadCurve(
             to: CGPoint(x: rect.minX + radius, y: rect.minY),
             control: CGPoint(x: rect.minX, y: rect.minY)
         )
+        path.addLine(to: CGPoint(x: rect.maxX - radius, y: rect.minY))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX, y: rect.minY + radius),
+            control: CGPoint(x: rect.maxX, y: rect.minY)
+        )
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
         path.closeSubpath()
         return path
     }
 }
 
-struct FoldedCardSurface: View {
+struct MemoCardSurface: View {
     let paperColor: Color
-    let inkColor: Color
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
-            FoldedCardShape()
+        ZStack {
+            MemoCardShape()
                 .fill(paperColor)
 
             PaperGrain()
-                .clipShape(FoldedCardShape())
-
-            FoldedCornerShape()
-                .fill(paperColor)
-
-            FoldedCornerShape()
-                .stroke(inkColor.opacity(0.12), lineWidth: 0.8)
+                .clipShape(MemoCardShape())
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
-    }
-}
-
-private struct FoldedCornerShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        let fold = min(
-            FoldedCardMetrics.foldSize,
-            rect.width * 0.28,
-            rect.height * 0.28
-        )
-
-        var path = Path()
-        path.move(to: CGPoint(x: rect.maxX - fold, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX - fold, y: rect.minY + fold))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + fold))
-        path.closeSubpath()
-        return path
     }
 }
 
@@ -106,6 +90,37 @@ struct PaperGrain: View {
 
     private func unitValue(_ seed: Int) -> CGFloat {
         CGFloat((seed * 37 + 17) % 101) / 101
+    }
+}
+
+/// The memo window no longer uses a folded corner, but the compact menu-bar glyph keeps the
+/// original Posteight silhouette as a brand mark.
+private struct FoldedCardShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let fold = min(4, rect.width * 0.28, rect.height * 0.28)
+        let radius = min(3, rect.width * 0.18, rect.height * 0.18)
+
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX + radius, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX - fold, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + fold))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - radius))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX - radius, y: rect.maxY),
+            control: CGPoint(x: rect.maxX, y: rect.maxY)
+        )
+        path.addLine(to: CGPoint(x: rect.minX + radius, y: rect.maxY))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.minX, y: rect.maxY - radius),
+            control: CGPoint(x: rect.minX, y: rect.maxY)
+        )
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + radius))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.minX + radius, y: rect.minY),
+            control: CGPoint(x: rect.minX, y: rect.minY)
+        )
+        path.closeSubpath()
+        return path
     }
 }
 

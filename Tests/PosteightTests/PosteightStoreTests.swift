@@ -3,26 +3,26 @@ import Testing
 
 @testable import Posteight
 
-// The store itself talks to disk and UserDefaults, so these cover the pure logic it runs on
-// loaded data: title migration (which can silently rewrite a user's notes), size clamping,
-// and the daily log the Notion export will be built on.
-
 private func note(
     title: String = "메모",
+    tabName: String = "메모 1",
     includeInNotionLog: Bool = true,
     size: NoteSize = DesignTokens.defaultNoteSize,
     items: [TodoItem] = []
 ) -> StickyNote {
     StickyNote(
-        title: title,
         stickerSymbol: "tag",
         paperHex: "#FADDE5",
         penHex: "#B84A62",
         includeInNotionLog: includeInNotionLog,
         position: NotePoint(x: 0, y: 0),
         size: size,
-        items: items
+        tabs: [MemoTab(name: tabName, title: title, items: items)]
     )
+}
+
+private func firstTab(_ note: StickyNote) throws -> MemoTab {
+    try #require(note.tabs.first)
 }
 
 @Suite("Legacy title migration")
@@ -30,47 +30,84 @@ struct LegacyTitleTests {
     @Test("Four-digit-year titles are recognised and keep their own date")
     func migratesLegacyTitle() throws {
         let date = try #require(PosteightStore.legacyTitleDate("2025.03.14"))
-
-        var components = Calendar(identifier: .gregorian)
-        components.timeZone = TimeZone.current
-        let parts = components.dateComponents([.year, .month, .day], from: date)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone.current
+        let parts = calendar.dateComponents([.year, .month, .day], from: date)
         #expect(parts.year == 2025)
         #expect(parts.month == 3)
         #expect(parts.day == 14)
 
-        #expect(PosteightStore.compacted([note(title: "2025.03.14")])[0].title == "25.03.14(금)")
+        let migrated = PosteightStore.compacted([note(title: "2025.03.14")])
+        #expect(try firstTab(migrated[0]).title == "25.03.14(금)")
     }
 
     @Test("Titles already in the short style are left alone")
-    func keepsCurrentStyleTitle() {
+    func keepsCurrentStyleTitle() throws {
         #expect(PosteightStore.legacyTitleDate("25.03.14(금)") == nil)
-        #expect(PosteightStore.compacted([note(title: "25.03.14(금)")])[0].title == "25.03.14(금)")
+        let migrated = PosteightStore.compacted([note(title: "25.03.14(금)")])
+        #expect(try firstTab(migrated[0]).title == "25.03.14(금)")
     }
 
     @Test("A title the user typed is never treated as a date")
-    func keepsUserTitle() {
+    func keepsUserTitle() throws {
         #expect(PosteightStore.legacyTitleDate("오늘 업무") == nil)
-        #expect(PosteightStore.compacted([note(title: "오늘 업무")])[0].title == "오늘 업무")
+        let migrated = PosteightStore.compacted([note(title: "오늘 업무")])
+        #expect(try firstTab(migrated[0]).title == "오늘 업무")
     }
 
     @Test("The old placeholder title becomes today")
-    func replacesPlaceholderTitle() {
+    func replacesPlaceholderTitle() throws {
         let migrated = PosteightStore.compacted([note(title: "새 포스트잇")])
-        #expect(migrated[0].title == PosteightStore.todayTitle())
+        #expect(try firstTab(migrated[0]).title == PosteightStore.todayTitle())
     }
 
     @Test("Blank items saved as done are cleared on load")
-    func clearsBlankCompletions() {
+    func clearsBlankCompletions() throws {
         let loaded = PosteightStore.compacted([
             note(items: [
                 TodoItem(title: "  ", isDone: true, completedAt: Date()),
                 TodoItem(title: "끝난 일", isDone: true, completedAt: Date())
             ])
         ])
+        let tab = try firstTab(loaded[0])
+        #expect(!tab.items[0].isDone)
+        #expect(tab.items[0].completedAt == nil)
+        #expect(tab.items[1].isDone)
+    }
+}
 
-        #expect(!loaded[0].items[0].isDone)
-        #expect(loaded[0].items[0].completedAt == nil)
-        #expect(loaded[0].items[1].isDone)
+@Suite("Memo tab migration")
+struct MemoTabMigrationTests {
+    private struct LegacyStickyNote: Encodable {
+        let id = UUID()
+        let title = "이전 내용"
+        let stickerSymbol = "tag"
+        let paperHex = "#FADDE5"
+        let penHex = "#B84A62"
+        let penStyle = PenStyle.ballpoint
+        let includeInNotionLog = false
+        let position = NotePoint(x: 10, y: 20)
+        let size = DesignTokens.defaultNoteSize
+        let items = [TodoItem(title: "이전 할 일")]
+        let label = "Posteight 7"
+    }
+
+    @Test("A legacy single-content note becomes one default memo tab")
+    func migratesLegacyNoteIntoTab() throws {
+        let data = try JSONEncoder().encode(LegacyStickyNote())
+        let migrated = try JSONDecoder().decode(StickyNote.self, from: data)
+        let tab = try firstTab(migrated)
+        #expect(migrated.tabs.count == 1)
+        #expect(migrated.selectedTabID == tab.id)
+        #expect(tab.name == "메모 1")
+        #expect(tab.title == "이전 내용")
+        #expect(tab.items.map(\.title) == ["이전 할 일"])
+    }
+
+    @Test("Blank tab names receive a local default name")
+    func fillsBlankTabName() throws {
+        let migrated = PosteightStore.compacted([note(tabName: "   ")])
+        #expect(try firstTab(migrated[0]).name == "메모 1")
     }
 }
 
@@ -78,14 +115,12 @@ struct LegacyTitleTests {
 struct ClampTests {
     @Test("Sizes below the minimum are raised")
     func clampsSmall() {
-        let clamped = PosteightStore.clamped(NoteSize(width: 10, height: 10))
-        #expect(clamped == DesignTokens.minimumNoteSize)
+        #expect(PosteightStore.clamped(NoteSize(width: 10, height: 10)) == DesignTokens.minimumNoteSize)
     }
 
     @Test("Sizes above the maximum are lowered")
     func clampsLarge() {
-        let clamped = PosteightStore.clamped(NoteSize(width: 9_999, height: 9_999))
-        #expect(clamped == DesignTokens.maximumNoteSize)
+        #expect(PosteightStore.clamped(NoteSize(width: 9_999, height: 9_999)) == DesignTokens.maximumNoteSize)
     }
 
     @Test("Loading a note with an out-of-range size fixes it")
@@ -100,9 +135,9 @@ struct ClampTests {
 
 @Suite("Daily log markdown")
 struct DailyLogTests {
-    private let date = Date(timeIntervalSince1970: 1_741_910_400)  // 2025-03-14 UTC
+    private let date = Date(timeIntervalSince1970: 1_741_910_400)
 
-    @Test("Only notes flagged for the log are included")
+    @Test("Only memos flagged for the log are included")
     func filtersByFlag() {
         let markdown = PosteightStore.dailyLogMarkdown(
             notes: [
@@ -111,31 +146,24 @@ struct DailyLogTests {
             ],
             date: date
         )
-
         #expect(markdown.contains("## 포함"))
         #expect(!markdown.contains("## 제외"))
     }
 
-    @Test("Done and pending items are split")
-    func splitsByCompletion() {
+    @Test("Done and pending items are split under their tab")
+    func splitsByCompletion() throws {
         let markdown = PosteightStore.dailyLogMarkdown(
-            notes: [
-                note(items: [
-                    TodoItem(title: "끝난 일", isDone: true, completedAt: date),
-                    TodoItem(title: "남은 일")
-                ])
-            ],
+            notes: [note(items: [
+                TodoItem(title: "끝난 일", isDone: true, completedAt: date),
+                TodoItem(title: "남은 일")
+            ])],
             date: date
         )
-
-        let done = try? #require(markdown.range(of: "### 완료한 일"))
-        let pending = try? #require(markdown.range(of: "### 남은 일"))
-        #expect(done != nil && pending != nil)
-        #expect(markdown.contains("- 끝난 일"))
-        #expect(markdown.contains("- 남은 일"))
-        // "끝난 일" must sit in the done section, before the pending heading.
-        #expect(markdown.range(of: "- 끝난 일")!.lowerBound < pending!.lowerBound)
-        #expect(markdown.range(of: "- 남은 일")!.lowerBound > pending!.lowerBound)
+        let done = try #require(markdown.range(of: "### 메모 1 · 완료한 일"))
+        let pending = try #require(markdown.range(of: "### 메모 1 · 남은 일"))
+        #expect(markdown.range(of: "- 끝난 일")!.lowerBound > done.lowerBound)
+        #expect(markdown.range(of: "- 끝난 일")!.lowerBound < pending.lowerBound)
+        #expect(markdown.range(of: "- 남은 일")!.lowerBound > pending.lowerBound)
     }
 
     @Test("An empty section says so instead of leaving a bare heading")
@@ -144,8 +172,7 @@ struct DailyLogTests {
             notes: [note(items: [TodoItem(title: "남은 일")])],
             date: date
         )
-
-        #expect(markdown.contains("### 완료한 일\n- 없음"))
+        #expect(markdown.contains("### 메모 1 · 완료한 일\n- 없음"))
     }
 
     @Test("A detail stays in the app and never reaches the log")
@@ -159,38 +186,12 @@ struct DailyLogTests {
         #expect(!markdown.contains("스테이징 먼저"))
     }
 
-    @Test("No flagged notes produces a readable message, not an empty document")
+    @Test("No flagged memos produces a readable message")
     func handlesNoFlaggedNotes() {
         let markdown = PosteightStore.dailyLogMarkdown(
             notes: [note(includeInNotionLog: false)],
             date: date
         )
-
-        #expect(markdown.contains("Notion 기록에 포함된 포스트잇이 없습니다."))
-    }
-}
-
-@Suite("Card names")
-struct NoteLabelTests {
-    @Test("A note with no name gets one nobody else is using")
-    func fillsMissingLabel() {
-        var unnamed = note(title: "오늘 업무")
-        unnamed.label = nil
-        var named = note(title: "26.08.27(목)")
-        named.label = "Posteight 2"
-
-        let labels = PosteightStore.compacted([unnamed, named]).compactMap(\.label)
-
-        #expect(labels.count == 2)
-        #expect(Set(labels).count == 2)
-        #expect(labels.contains("Posteight 2"))
-    }
-
-    @Test("The lowest free number is used")
-    func reusesFreedNumber() {
-        var second = note()
-        second.label = "Posteight 2"
-
-        #expect(PosteightStore.nextNoteLabel(after: [second]) == "Posteight 1")
+        #expect(markdown.contains("Notion 기록에 포함된 메모가 없습니다."))
     }
 }

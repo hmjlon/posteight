@@ -6,9 +6,8 @@ enum WindowID {
     static let trash = "posteight.trash"
 }
 
-/// `WindowGroup` creates a new window on every `openWindow` call, even when the value is the
-/// same. Keep note presentation idempotent because SwiftUI can evaluate more than one menu bar
-/// label while rebuilding the status item.
+/// `WindowGroup` creates a new window on every `openWindow` call, even for the same value.
+/// Keep presentation idempotent while still allowing every memo ID its own window.
 @MainActor
 final class NoteWindowCoordinator {
     static let shared = NoteWindowCoordinator()
@@ -92,7 +91,7 @@ struct PosteightApp: App {
         )
         .commands {
             CommandGroup(replacing: .newItem) {
-                Button("New Sticky Note") {
+                Button("새 메모") {
                     store.addNote()
                 }
                 .keyboardShortcut("n", modifiers: [.command])
@@ -136,8 +135,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-/// Lives in the status item for the whole session, so it is also where note windows are
-/// restored at launch and opened for notes added from anywhere in the app.
+/// Lives in the status item for the whole session, restoring each independent memo window and
+/// opening newly created memos from anywhere in the app.
 private struct MenuBarLabel: View {
     @EnvironmentObject private var store: PosteightStore
     @ObservedObject private var settings = AppSettings.shared
@@ -154,7 +153,7 @@ private struct MenuBarLabel: View {
             }
         }
         .onChange(of: store.notes.map(\.id)) { previousIDs, currentIDs in
-            for noteID in currentIDs where !previousIDs.contains(noteID) {
+            if let noteID = currentIDs.first(where: { !previousIDs.contains($0) }) {
                 presentNote(noteID)
             }
         }

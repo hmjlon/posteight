@@ -90,11 +90,11 @@ private struct TrashNoteRow: View {
                 }
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(trashedNote.note.title)
+                Text(trashedNote.note.selectedTab?.title ?? "메모")
                     .font(.system(size: 14, weight: .bold, design: .rounded))
                     .lineLimit(1)
 
-                Text("\(trashedNote.note.items.count)개 할 일")
+                Text("탭 \(trashedNote.note.tabs.count)개 · 할 일 \(trashedNote.note.allItems.count)개")
                     .font(.system(size: 11, weight: .medium, design: .rounded))
                     .foregroundStyle(.secondary)
             }

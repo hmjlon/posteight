@@ -15,12 +15,12 @@ struct MenuBarPanelView: View {
             Divider()
                 .padding(.vertical, 4)
 
-            PanelRow(title: "새 포스트잇", systemImage: "plus", shortcut: "⌘N") {
-                showNotes(ids: [store.addNote()])
+            PanelRow(title: "새 메모", systemImage: "plus", shortcut: "⌘N") {
+                showNote(store.addNote())
             }
 
-            PanelRow(title: "모든 포스트잇 보기", systemImage: "square.stack.3d.up") {
-                showNotes(ids: store.notes.map(\.id))
+            PanelRow(title: "메모 보기", systemImage: "rectangle.on.rectangle") {
+                showNotes(store.notes.map(\.id))
             }
 
             PanelRow(title: "오늘 기록 미리보기", systemImage: "square.and.arrow.up") {
@@ -67,19 +67,23 @@ struct MenuBarPanelView: View {
 
     private var statusLabel: String {
         if store.notes.isEmpty {
-            return "포스트잇 없음"
+            return "메모 없음"
         }
 
         return store.remainingCount > 0 ? "\(store.remainingCount)개 남음" : "모두 완료"
     }
 
-    private func showNotes(ids: [UUID]) {
-        for noteID in ids {
-            NoteWindowCoordinator.shared.present(noteID) { noteID in
-                openWindow(value: noteID)
-            }
+    private func showNote(_ noteID: UUID) {
+        NoteWindowCoordinator.shared.present(noteID) { noteID in
+            openWindow(value: noteID)
         }
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func showNotes(_ noteIDs: [UUID]) {
+        for noteID in noteIDs {
+            showNote(noteID)
+        }
     }
 
     private func open(windowID: String) {

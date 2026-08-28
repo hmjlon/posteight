@@ -4,6 +4,7 @@ import SwiftUI
 struct StickyNoteView: View {
     @EnvironmentObject private var store: PosteightStore
     let note: StickyNote
+    let tab: MemoTab
     let onResizeChanged: (CGSize) -> Void
     let onResizeEnded: (CGSize) -> Void
     let onDelete: () -> Void
@@ -29,8 +30,8 @@ struct StickyNoteView: View {
         VStack(alignment: .leading, spacing: 9) {
             PlainEditableTextField(
                 text: Binding(
-                    get: { store.noteTitle(note.id) ?? note.title },
-                    set: { store.updateNoteTitle(note.id, title: $0) }
+                    get: { store.tabTitle(noteID: note.id, tabID: tab.id) ?? tab.title },
+                    set: { store.updateTabTitle(noteID: note.id, tabID: tab.id, title: $0) }
                 ),
                 fontSize: 13,
                 fontWeight: .medium,
@@ -51,8 +52,8 @@ struct StickyNoteView: View {
                     }
 
                     VStack(spacing: 5) {
-                        ForEach(note.items) { item in
-                            TodoItemRow(note: note, item: item, focusedItemID: $focusedItemID)
+                        ForEach(tab.items) { item in
+                            TodoItemRow(note: note, tab: tab, item: item, focusedItemID: $focusedItemID)
                                 .id(item.id)
                         }
                     }
@@ -71,7 +72,7 @@ struct StickyNoteView: View {
             }
 
             Button {
-                focusedItemID = store.addItem(to: note.id)
+                focusedItemID = store.addItem(to: note.id, tabID: tab.id)
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "plus")
