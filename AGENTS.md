@@ -85,3 +85,28 @@ app, and a second build path drifts out of sync with it.
 - Keep commits focused on one feature or change.
 - Run `swift test` before every commit.
 - Do not commit `.build/` or `dist/`; both are generated locally and ignored by Git.
+
+## Commit Messages
+
+An English Conventional Commit prefix, everything else in Korean.
+
+```
+type(scope): 무엇을 바꿨는지 한 줄
+
+왜 그랬는지, 무엇이 어긋나 있었는지, 어떻게 확인했는지.
+```
+
+- Subject: `type(scope):` plus a Korean summary. Types are `feat`, `fix`, `docs`,
+  `test`, `chore`, `refactor`, `ci`; the scope is optional and lowercase
+  (`fix(menubar):`). One line, no trailing period. Prefer noun endings
+  (`... 수정`, `... 추가`) over `~한다`, and join two changes with `+` or `—`
+  instead of blurring them into one vague phrase.
+- Body: Korean prose, separated from the subject by a blank line. Open with the
+  defect or motivation and its reach — what was wrong, on which path, what the
+  user saw. Then what changed, as `-` bullets when there is more than one thing.
+  Close with the evidence: the measurement, the test that fails without the
+  change, `swift test` results, related commit hashes and dates.
+- The body explains why, not a file-by-file diff summary. Record the traps and
+  the roads not taken (SwiftUI rendering limits, ordering constraints) so the
+  next change does not walk back into them.
+- Keep the `Co-Authored-By:` trailer when an agent wrote the change.
