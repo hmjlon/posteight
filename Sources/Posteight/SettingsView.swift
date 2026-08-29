@@ -36,7 +36,9 @@ struct SettingsView: View {
                         Text(language.title(in: settings.language)).tag(language)
                     }
                 }
-                .pickerStyle(.radioGroup)
+                // A radio group reflows to a stack the moment the options outgrow the row, so
+                // the window changed shape between languages. A pop-up is the same size in both.
+                .pickerStyle(.menu)
 
                 Text(L("Posteight 안에서만 바뀝니다. macOS 가 그리는 메뉴 막대 메뉴는 시스템 언어를 따릅니다."))
                     .font(.system(size: 11))

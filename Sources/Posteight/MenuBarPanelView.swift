@@ -103,10 +103,16 @@ private struct PanelRow: View {
     var badge: String?
     let action: () -> Void
 
+    @Environment(\.dismiss) private var dismiss
     @State private var isHovered = false
 
     var body: some View {
-        Button(action: action) {
+        // Every row here opens a window or quits, so the popover has finished its job either
+        // way. Closing it from this one place beats remembering to do it in six actions.
+        Button {
+            dismiss()
+            action()
+        } label: {
             HStack(spacing: 8) {
                 Image(systemName: systemImage)
                     .frame(width: 16)
