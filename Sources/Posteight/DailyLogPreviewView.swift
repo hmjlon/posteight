@@ -2,20 +2,21 @@ import SwiftUI
 
 struct DailyLogPreviewView: View {
     @EnvironmentObject private var store: PosteightStore
+    @ObservedObject private var settings = AppSettings.shared
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text("오늘 기록")
+                Text(L("오늘 기록"))
                     .font(.system(size: 20, weight: .bold, design: .rounded))
 
                 Spacer()
 
                 Button {
-                    store.copyDailyLogToClipboard()
+                    store.copyDailyLogToClipboard(language: settings.language)
                 } label: {
-                    Label("Markdown 복사", systemImage: "doc.on.doc")
+                    Label(L("Markdown 복사"), systemImage: "doc.on.doc")
                 }
 
                 Button {
@@ -27,12 +28,12 @@ struct DailyLogPreviewView: View {
                 .buttonStyle(.plain)
             }
 
-            Text("Notion 기록이 켜진 포스트잇만 정리됩니다.")
+            Text(L("Notion 기록이 켜진 메모만 정리됩니다."))
                 .font(.system(size: 12, weight: .medium, design: .rounded))
                 .foregroundStyle(.secondary)
 
             ScrollView {
-                Text(store.dailyLogMarkdown())
+                Text(store.dailyLogMarkdown(language: settings.language))
                     .font(.system(size: 13, weight: .regular, design: .monospaced))
                     .foregroundStyle(.primary.opacity(0.82))
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -47,5 +48,6 @@ struct DailyLogPreviewView: View {
         }
         .padding(18)
         .frame(width: 560, height: 520)
+        .navigationTitle(L("오늘 기록"))
     }
 }

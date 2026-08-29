@@ -4,8 +4,10 @@ import SwiftUI
 struct StickyNoteView: View {
     @EnvironmentObject private var store: PosteightStore
     let note: StickyNote
+    let tab: MemoTab
     let onResizeChanged: (CGSize) -> Void
     let onResizeEnded: (CGSize) -> Void
+    let onDelete: () -> Void
     @Binding var isPencilCaseOpen: Bool
     @State private var focusedItemID: UUID?
     @State private var resizeAnchor: CGPoint?
@@ -28,8 +30,8 @@ struct StickyNoteView: View {
         VStack(alignment: .leading, spacing: 9) {
             PlainEditableTextField(
                 text: Binding(
-                    get: { store.noteTitle(note.id) ?? note.title },
-                    set: { store.updateNoteTitle(note.id, title: $0) }
+                    get: { store.tabTitle(noteID: note.id, tabID: tab.id) ?? tab.title },
+                    set: { store.updateTabTitle(noteID: note.id, tabID: tab.id, title: $0) }
                 ),
                 fontSize: 13,
                 fontWeight: .medium,
@@ -42,7 +44,7 @@ struct StickyNoteView: View {
             ScrollViewReader { proxy in
                 ScrollView(.vertical) {
                     if isPencilCaseOpen {
-                        PencilCaseView(note: note)
+                        PencilCaseView(note: note, onDelete: onDelete)
                             .transition(.asymmetric(
                                 insertion: .move(edge: .top).combined(with: .opacity),
                                 removal: .move(edge: .top).combined(with: .opacity)
@@ -50,8 +52,8 @@ struct StickyNoteView: View {
                     }
 
                     VStack(spacing: 5) {
-                        ForEach(note.items) { item in
-                            TodoItemRow(note: note, item: item, focusedItemID: $focusedItemID)
+                        ForEach(tab.items) { item in
+                            TodoItemRow(note: note, tab: tab, item: item, focusedItemID: $focusedItemID)
                                 .id(item.id)
                         }
                     }
@@ -70,17 +72,17 @@ struct StickyNoteView: View {
             }
 
             Button {
-                focusedItemID = store.addItem(to: note.id)
+                focusedItemID = store.addItem(to: note.id, tabID: tab.id)
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "plus")
-                    Text("할 일 추가")
+                    Text(L("할 일 추가"))
                 }
                 .font(.system(size: 12, weight: .medium, design: .rounded))
                 .foregroundStyle(.black.opacity(0.58))
             }
             .buttonStyle(.plain)
-            .help("할 일 추가")
+            .help(L("할 일 추가"))
         }
         .padding(.horizontal, 13)
         .padding(.top, 9)
@@ -99,7 +101,7 @@ struct StickyNoteView: View {
                 setCursor(isHovering ? .resizeLeftRight : .arrow)
             }
             .gesture(resizeGesture { CGSize(width: $0.width, height: 0) })
-            .help("가로 크기 조절")
+            .help(L("가로 크기 조절"))
     }
 
     private var verticalResizeHandle: some View {
@@ -112,7 +114,7 @@ struct StickyNoteView: View {
                 setCursor(isHovering ? .resizeUpDown : .arrow)
             }
             .gesture(resizeGesture { CGSize(width: 0, height: $0.height) })
-            .help("세로 크기 조절")
+            .help(L("세로 크기 조절"))
     }
 
     private func resizeGesture(_ axis: @escaping (CGSize) -> CGSize) -> some Gesture {
@@ -161,6 +163,6 @@ struct StickyNoteView: View {
             setCursor(isHovering ? .crosshair : .arrow)
         }
         .gesture(resizeGesture { $0 })
-        .help("대각선 크기 조절")
+        .help(L("대각선 크기 조절"))
     }
 }

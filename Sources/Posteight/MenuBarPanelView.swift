@@ -15,23 +15,22 @@ struct MenuBarPanelView: View {
             Divider()
                 .padding(.vertical, 4)
 
-            PanelRow(title: "새 포스트잇", systemImage: "plus", shortcut: "⌘N") {
-                let noteID = store.addNote()
-                showNotes(ids: [noteID])
+            PanelRow(title: L("새 메모"), systemImage: "plus", shortcut: "⌘N") {
+                showNote(store.addNote(language: settings.language))
             }
 
-            PanelRow(title: "모든 포스트잇 보기", systemImage: "square.stack.3d.up") {
-                showNotes(ids: store.notes.map(\.id))
+            PanelRow(title: L("메모 보기"), systemImage: "rectangle.on.rectangle") {
+                showNotes(store.notes.map(\.id))
             }
 
-            PanelRow(title: "오늘 기록 미리보기", systemImage: "square.and.arrow.up") {
+            PanelRow(title: L("오늘 기록 미리보기"), systemImage: "square.and.arrow.up") {
                 open(windowID: WindowID.dailyLog)
             }
 
             PanelRow(
-                title: "휴지통",
-                systemImage: store.trashedNotes.isEmpty ? "trash" : "trash.fill",
-                badge: store.trashedNotes.isEmpty ? nil : "\(store.trashedNotes.count)"
+                title: L("휴지통"),
+                systemImage: trashIsEmpty ? "trash" : "trash.fill",
+                badge: trashIsEmpty ? nil : "\(store.trashedNotes.count + store.trashedTabs.count)"
             ) {
                 open(windowID: WindowID.trash)
             }
@@ -39,11 +38,11 @@ struct MenuBarPanelView: View {
             Divider()
                 .padding(.vertical, 4)
 
-            PanelRow(title: "설정…", systemImage: "gearshape", shortcut: "⌘,") {
+            PanelRow(title: L("설정…"), systemImage: "gearshape", shortcut: "⌘,") {
                 SettingsModal.present(store: store)
             }
 
-            PanelRow(title: "Posteight 종료", systemImage: "power", shortcut: "⌘Q") {
+            PanelRow(title: L("Posteight 종료"), systemImage: "power", shortcut: "⌘Q") {
                 NSApp.terminate(nil)
             }
         }
@@ -66,19 +65,29 @@ struct MenuBarPanelView: View {
         .padding(.top, 2)
     }
 
-    private var statusLabel: String {
-        if store.notes.isEmpty {
-            return "포스트잇 없음"
-        }
-
-        return store.remainingCount > 0 ? "\(store.remainingCount)개 남음" : "모두 완료"
+    private var trashIsEmpty: Bool {
+        store.trashedNotes.isEmpty && store.trashedTabs.isEmpty
     }
 
-    private func showNotes(ids: [UUID]) {
-        for noteID in ids {
+    private var statusLabel: String {
+        if store.notes.isEmpty {
+            return L("메모 없음")
+        }
+
+        return store.remainingCount > 0 ? Lf("%ld개 남음", store.remainingCount) : L("모두 완료")
+    }
+
+    private func showNote(_ noteID: UUID) {
+        NoteWindowCoordinator.shared.present(noteID) { noteID in
             openWindow(value: noteID)
         }
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func showNotes(_ noteIDs: [UUID]) {
+        for noteID in noteIDs {
+            showNote(noteID)
+        }
     }
 
     private func open(windowID: String) {
@@ -94,10 +103,16 @@ private struct PanelRow: View {
     var badge: String?
     let action: () -> Void
 
+    @Environment(\.dismiss) private var dismiss
     @State private var isHovered = false
 
     var body: some View {
-        Button(action: action) {
+        // Every row here opens a window or quits, so the popover has finished its job either
+        // way. Closing it from this one place beats remembering to do it in six actions.
+        Button {
+            dismiss()
+            action()
+        } label: {
             HStack(spacing: 8) {
                 Image(systemName: systemImage)
                     .frame(width: 16)

@@ -6,10 +6,67 @@ enum WindowID {
     static let trash = "posteight.trash"
 }
 
+/// `WindowGroup` creates a new window on every `openWindow` call, even for the same value.
+/// Keep presentation idempotent while still allowing every memo ID its own window.
+@MainActor
+final class NoteWindowCoordinator {
+    static let shared = NoteWindowCoordinator()
+
+    private final class WeakWindow {
+        weak var value: NSWindow?
+
+        init(_ value: NSWindow) {
+            self.value = value
+        }
+    }
+
+    private var windows: [UUID: WeakWindow] = [:]
+    private var pendingNoteIDs: Set<UUID> = []
+
+    private init() {}
+
+    func present(_ noteID: UUID, openWindow: (UUID) -> Void) {
+        if let window = windows[noteID]?.value {
+            // `makeKeyAndOrderFront` leaves a miniaturized window in the Dock.
+            if window.isMiniaturized {
+                window.deminiaturize(nil)
+            }
+            // Showing every note has to reach the ones stranded off screen, too.
+            window.moveOnScreenIfNeeded()
+            window.makeKeyAndOrderFront(nil)
+            return
+        }
+
+        windows[noteID] = nil
+        guard pendingNoteIDs.insert(noteID).inserted else { return }
+        openWindow(noteID)
+    }
+
+    func register(_ window: NSWindow, for noteID: UUID) {
+        pendingNoteIDs.remove(noteID)
+
+        if let existingWindow = windows[noteID]?.value, existingWindow !== window {
+            window.close()
+            if existingWindow.isMiniaturized {
+                existingWindow.deminiaturize(nil)
+            }
+            existingWindow.makeKeyAndOrderFront(nil)
+            return
+        }
+
+        windows[noteID] = WeakWindow(window)
+    }
+
+    func remove(_ noteID: UUID) {
+        pendingNoteIDs.remove(noteID)
+        windows[noteID] = nil
+    }
+}
+
 @main
 struct PosteightApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @StateObject private var store = PosteightStore()
+    @StateObject private var store = PosteightStore(language: AppSettings.shared.language)
 
     var body: some Scene {
         MenuBarExtra {
@@ -34,14 +91,14 @@ struct PosteightApp: App {
         )
         .commands {
             CommandGroup(replacing: .newItem) {
-                Button("New Sticky Note") {
-                    store.addNote()
+                Button(L("새 메모")) {
+                    store.addNote(language: AppSettings.shared.language)
                 }
                 .keyboardShortcut("n", modifiers: [.command])
             }
 
             CommandGroup(replacing: .appSettings) {
-                Button("설정…") {
+                Button(L("설정…")) {
                     SettingsModal.present(store: store)
                 }
                 .keyboardShortcut(",", modifiers: [.command])
@@ -65,7 +122,9 @@ struct PosteightApp: App {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    func applicationDidFinishLaunching(_ notification: Notification) {
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        // Set the policy before SwiftUI installs MenuBarExtra. Changing it afterwards can
+        // rebuild the scene and leave two status items alive for the same process.
         AppSettings.shared.applyActivationPolicy()
     }
 
@@ -76,40 +135,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-/// Lives in the status item for the whole session, so it is also where note windows are
-/// restored at launch and opened for notes added from anywhere in the app.
+/// Lives in the status item for the whole session, restoring each independent memo window and
+/// opening newly created memos from anywhere in the app.
 private struct MenuBarLabel: View {
     @EnvironmentObject private var store: PosteightStore
     @ObservedObject private var settings = AppSettings.shared
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        HStack(spacing: 3) {
-            Image(systemName: "checklist")
-
-            if store.totalCount > 0 {
-                Text(countLabel)
-            }
-        }
+        // The count is written on the card itself rather than set beside it, so the status item
+        // reads as one object instead of an icon with a label stuck to it.
+        MenuBarProgressCard(done: store.doneCount, total: store.totalCount, count: displayCount)
+            .accessibilityLabel(store.totalCount > 0 ? "Posteight, \(countLabel)" : "Posteight")
         .task {
             for note in store.notes {
-                openWindow(value: note.id)
+                presentNote(note.id)
             }
         }
         .onChange(of: store.notes.map(\.id)) { previousIDs, currentIDs in
-            for noteID in currentIDs where !previousIDs.contains(noteID) {
-                openWindow(value: noteID)
+            if let noteID = currentIDs.first(where: { !previousIDs.contains($0) }) {
+                presentNote(noteID)
             }
         }
         .onChange(of: settings.showAllNotesRequests) { _, _ in
             for note in store.notes {
-                openWindow(value: note.id)
+                presentNote(note.id)
             }
         }
     }
 
+    private func presentNote(_ noteID: UUID) {
+        NoteWindowCoordinator.shared.present(noteID) { noteID in
+            openWindow(value: noteID)
+        }
+    }
+
+    private var displayCount: Int {
+        settings.menuBarCountStyle == .done ? store.doneCount : store.remainingCount
+    }
+
+    /// VoiceOver still gets both halves, which the card no longer has room to show.
     private var countLabel: String {
-        let count = settings.menuBarCountStyle == .done ? store.doneCount : store.remainingCount
-        return "\(count)/\(store.totalCount)"
+        "\(displayCount)/\(store.totalCount)"
     }
 }

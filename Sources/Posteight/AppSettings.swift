@@ -8,10 +8,10 @@ enum MenuBarCountStyle: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    var title: String {
+    func title(in language: AppLanguage) -> String {
         switch self {
-        case .remaining: "남은 일 / 전체"
-        case .done: "완료 / 전체"
+        case .remaining: L("남은 일", language: language)
+        case .done: L("완료", language: language)
         }
     }
 }
@@ -26,6 +26,7 @@ final class AppSettings: ObservableObject {
         static let dockIcon = "posteight.showsDockIcon"
         static let countStyle = "posteight.menuBarCountStyle"
         static let notesOnTop = "posteight.keepsNotesOnTop"
+        static let language = "posteight.language"
     }
 
     @Published var showsDockIcon: Bool {
@@ -43,6 +44,15 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    /// Every string Posteight draws itself follows this. The menus macOS draws — File, Edit,
+    /// Window — come from the system language and are out of reach without a bundle relaunch.
+    @Published var language: AppLanguage {
+        didSet {
+            guard language != oldValue else { return }
+            UserDefaults.standard.set(language.rawValue, forKey: Key.language)
+        }
+    }
+
     /// Notes float above other apps by default. Turning this off lets them fall behind whatever
     /// the user is working in, which is the quieter choice during long focused work.
     @Published var keepsNotesOnTop: Bool {
@@ -52,7 +62,7 @@ final class AppSettings: ObservableObject {
         }
     }
 
-    /// Bumped when the Dock icon is clicked, so the menu bar label can bring every note back.
+    /// Bumped when the Dock icon is clicked, so the menu bar label can bring the card back.
     @Published private(set) var showAllNotesRequests = 0
 
     var noteWindowLevel: NSWindow.Level {
@@ -65,6 +75,8 @@ final class AppSettings: ObservableObject {
         keepsNotesOnTop = defaults.object(forKey: Key.notesOnTop) as? Bool ?? true
         menuBarCountStyle = (defaults.string(forKey: Key.countStyle)
             .flatMap(MenuBarCountStyle.init(rawValue:))) ?? .remaining
+        language = (defaults.string(forKey: Key.language)
+            .flatMap(AppLanguage.init(rawValue:))) ?? .system
     }
 
     /// `swift build` produces an unbundled binary, where `LSUIElement` from `Packaging/Info.plist`

@@ -95,15 +95,30 @@ struct PlainEditableTextField: NSViewRepresentable {
             parent.text = textField.stringValue
         }
 
+        /// Editing can end *because* SwiftUI is updating — presenting a popover hands key window
+        /// to it, which makes this field resign. Writing to the store there publishes a change
+        /// mid-update ("Publishing changes from within view updates is not allowed"), so the
+        /// write is put one hop later, the same way the window configurator defers its work.
+        /// `isEditing` stays set until then, or an `updateNSView` in between would overwrite the
+        /// field with the store's stale value and drop the edit.
         func controlTextDidEndEditing(_ notification: Notification) {
-            isEditing = false
-            parent.onEditingChanged?(false)
-            guard let textField = notification.object as? NSTextField else { return }
-            parent.text = textField.stringValue
+            guard let textField = notification.object as? NSTextField else {
+                isEditing = false
+                parent.onEditingChanged?(false)
+                return
+            }
 
-            let movement = notification.userInfo?["NSTextMovement"] as? Int
-            if movement == NSReturnTextMovement {
-                parent.onSubmit?()
+            let value = textField.stringValue
+            let submitted = (notification.userInfo?["NSTextMovement"] as? Int) == NSReturnTextMovement
+
+            DispatchQueue.main.async { [self] in
+                isEditing = false
+                parent.text = value
+                parent.onEditingChanged?(false)
+
+                if submitted {
+                    parent.onSubmit?()
+                }
             }
         }
     }

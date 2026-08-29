@@ -16,6 +16,12 @@ final class PosteightStore: ObservableObject {
         }
     }
 
+    @Published private(set) var trashedTabs: [TrashedMemoTab] = [] {
+        didSet {
+            scheduleSave()
+        }
+    }
+
     private let storageKey = "posteight.notes.v1"
     private let trashStorageKey = "posteight.trash.v1"
     private let legacyStorageKey = "posteat.notes.v1"
@@ -34,16 +40,23 @@ final class PosteightStore: ObservableObject {
         .appendingPathComponent("Posteight", isDirectory: true)
 
     private let directory: URL
+    private let loadLanguage: AppLanguage
     private let notesURL: URL
     private let trashURL: URL
+    private let trashedTabsURL: URL
 
     private var saveTask: Task<Void, Never>?
 
     /// `directory` is only overridden by tests, so they never touch the real notes on disk.
-    init(directory: URL = PosteightStore.storeDirectory) {
+    /// `language` is what the first load names things in — sample notes and any tab whose name
+    /// has to be filled in. It defaults to the source language so tests do not depend on the
+    /// language of the machine running them.
+    init(directory: URL = PosteightStore.storeDirectory, language: AppLanguage = .korean) {
         self.directory = directory
+        self.loadLanguage = language
         self.notesURL = directory.appendingPathComponent("notes.json")
         self.trashURL = directory.appendingPathComponent("trash.json")
+        self.trashedTabsURL = directory.appendingPathComponent("trashed-tabs.json")
 
         load()
 
@@ -60,13 +73,15 @@ final class PosteightStore: ObservableObject {
     /// Menu bar status numbers. Blank items are still being typed, so they count for nothing.
     var totalCount: Int {
         notes.reduce(0) { total, note in
-            total + note.items.filter { !$0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.count
+            total + note.allItems.filter {
+                !$0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }.count
         }
     }
 
     var doneCount: Int {
         notes.reduce(0) { total, note in
-            total + note.items.filter {
+            total + note.allItems.filter {
                 $0.isDone && !$0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             }.count
         }
@@ -77,18 +92,20 @@ final class PosteightStore: ObservableObject {
     }
 
     @discardableResult
-    func addNote() -> UUID {
+    func addNote(language: AppLanguage = .korean) -> UUID {
         let offset = Double(notes.count % 4) * 34
         let note = StickyNote(
-            label: Self.nextNoteLabel(after: notes),
-            title: Self.todayTitle(),
             stickerSymbol: "tag",
             paperHex: DesignTokens.paperColors[0].hex,
             penHex: DesignTokens.penColors[0].hex,
             includeInNotionLog: false,
             position: NotePoint(x: 270 + offset, y: 240 + offset),
-            items: [
-                TodoItem(title: "")
+            tabs: [
+                MemoTab(
+                    name: Lf("메모 %ld", language: language, 1),
+                    title: Self.todayTitle(language: language),
+                    items: [TodoItem(title: "")]
+                )
             ]
         )
         notes.append(note)
@@ -115,6 +132,7 @@ final class PosteightStore: ObservableObject {
 
     func emptyTrash() {
         trashedNotes.removeAll()
+        trashedTabs.removeAll()
     }
 
     func moveNote(_ noteID: UUID, by translation: CGSize) {
@@ -136,42 +154,121 @@ final class PosteightStore: ObservableObject {
         }
     }
 
-    func noteTitle(_ noteID: UUID) -> String? {
-        notes.first { $0.id == noteID }?.title
-    }
+    @discardableResult
+    func addTab(to noteID: UUID, language: AppLanguage = .korean) -> UUID? {
+        // The tab strip divides a fixed width and never scrolls, so past this count a tab would
+        // be clipped out of reach — selectable by nothing, closable by nothing.
+        guard let note = notes.first(where: { $0.id == noteID }),
+              note.tabs.count < MemoSurfaceMetrics.maximumTabCount else { return nil }
 
-    /// Notes are numbered in creation order; a user rename replaces the number for good.
-    static func nextNoteLabel(after notes: [StickyNote]) -> String {
-        let used = Set(notes.compactMap(\.label))
-        var index = notes.count + 1
-
-        while used.contains("Posteight \(index)") {
-            index += 1
-        }
-
-        return "Posteight \(index)"
-    }
-
-    func noteLabel(_ noteID: UUID) -> String {
-        guard let index = notes.firstIndex(where: { $0.id == noteID }) else { return "Posteight" }
-        let note = notes[index]
-
-        if let label = note.label, !label.isEmpty {
-            return label
-        }
-
-        return "Posteight \(index + 1)"
-    }
-
-    func updateNoteLabel(_ noteID: UUID, label: String) {
+        let tabID = UUID()
         updateNote(noteID) { note in
-            note.label = label
+            let nextNumber = note.tabs.count + 1
+            note.tabs.append(
+                MemoTab(
+                    id: tabID,
+                    name: Lf("메모 %ld", language: language, nextNumber),
+                    title: Self.todayTitle(language: language),
+                    items: [TodoItem(title: "")]
+                )
+            )
+            note.selectedTabID = tabID
+        }
+        return notes.contains { note in note.tabs.contains { $0.id == tabID } } ? tabID : nil
+    }
+
+    func selectTab(noteID: UUID, tabID: UUID) {
+        updateNote(noteID) { note in
+            guard note.tabs.contains(where: { $0.id == tabID }) else { return }
+            note.selectedTabID = tabID
         }
     }
 
-    func updateNoteTitle(_ noteID: UUID, title: String) {
-        updateNote(noteID) { note in
-            note.title = title
+    /// Closing a tab is the same weight as closing a note — reversible, not a delete — so it goes
+    /// through the same trash rather than disappearing outright. Never takes a note's last tab: a
+    /// note without one doesn't exist in this model, and the window already has its own close
+    /// control for that case. Returns whether it actually moved, so the view can fall back to
+    /// that control when it didn't.
+    @discardableResult
+    func moveTabToTrash(noteID: UUID, tabID: UUID) -> Bool {
+        guard let noteIndex = notes.firstIndex(where: { $0.id == noteID }),
+              notes[noteIndex].tabs.count > 1,
+              let tabIndex = notes[noteIndex].tabs.firstIndex(where: { $0.id == tabID }) else {
+            return false
+        }
+
+        let note = notes[noteIndex]
+        let tab = notes[noteIndex].tabs.remove(at: tabIndex)
+
+        // The tab that slides into the closed one's spot becomes selected, the way a browser
+        // lands on a neighbor rather than jumping back to the first tab.
+        if notes[noteIndex].selectedTabID == tabID {
+            let landingIndex = min(tabIndex, notes[noteIndex].tabs.count - 1)
+            notes[noteIndex].selectedTabID = notes[noteIndex].tabs[landingIndex].id
+        }
+
+        trashedTabs.insert(
+            TrashedMemoTab(
+                sourceNoteID: noteID,
+                tab: tab,
+                paperHex: note.paperHex,
+                penHex: note.penHex,
+                stickerSymbol: note.stickerSymbol,
+                includeInNotionLog: note.includeInNotionLog,
+                deletedAt: Date()
+            ),
+            at: 0
+        )
+        return true
+    }
+
+    /// Restores into the note it was closed from when that note still exists, or stands up a
+    /// fresh note around it when that note is itself gone — a restore should never just vanish.
+    func restoreTab(_ trashedTabID: UUID) {
+        guard let index = trashedTabs.firstIndex(where: { $0.id == trashedTabID }) else { return }
+        let trashed = trashedTabs.remove(at: index)
+
+        if let noteIndex = notes.firstIndex(where: { $0.id == trashed.sourceNoteID }) {
+            notes[noteIndex].tabs.append(trashed.tab)
+            notes[noteIndex].selectedTabID = trashed.tab.id
+        } else {
+            let offset = Double(notes.count % 4) * 34
+            notes.append(
+                StickyNote(
+                    stickerSymbol: trashed.stickerSymbol,
+                    paperHex: trashed.paperHex,
+                    penHex: trashed.penHex,
+                    includeInNotionLog: trashed.includeInNotionLog ?? false,
+                    position: NotePoint(x: 270 + offset, y: 240 + offset),
+                    tabs: [trashed.tab]
+                )
+            )
+        }
+    }
+
+    func permanentlyDeleteTab(_ trashedTabID: UUID) {
+        trashedTabs.removeAll { $0.id == trashedTabID }
+    }
+
+    func tabName(noteID: UUID, tabID: UUID) -> String? {
+        tab(noteID: noteID, tabID: tabID)?.name
+    }
+
+    func updateTabName(noteID: UUID, tabID: UUID, name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        updateTab(noteID: noteID, tabID: tabID) { tab in
+            tab.name = trimmed
+        }
+    }
+
+    func tabTitle(noteID: UUID, tabID: UUID) -> String? {
+        tab(noteID: noteID, tabID: tabID)?.title
+    }
+
+    func updateTabTitle(noteID: UUID, tabID: UUID, title: String) {
+        updateTab(noteID: noteID, tabID: tabID) { tab in
+            tab.title = title
         }
     }
 
@@ -206,77 +303,105 @@ final class PosteightStore: ObservableObject {
     }
 
     @discardableResult
-    func addItem(to noteID: UUID) -> UUID? {
+    func addItem(to noteID: UUID, tabID: UUID) -> UUID? {
         let itemID = UUID()
-        updateNote(noteID) { note in
-            note.items.append(TodoItem(id: itemID, title: ""))
+        let didAdd = updateTab(noteID: noteID, tabID: tabID) { tab in
+            tab.items.append(TodoItem(id: itemID, title: ""))
         }
-        return itemID
+        return didAdd ? itemID : nil
     }
 
-    func updateItemTitle(noteID: UUID, itemID: UUID, title: String) {
-        updateItem(noteID: noteID, itemID: itemID) { item in
+    func updateItemTitle(noteID: UUID, tabID: UUID, itemID: UUID, title: String) {
+        updateItem(noteID: noteID, tabID: tabID, itemID: itemID) { item in
             item.title = title
+
+            if title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                item.isDone = false
+                item.completedAt = nil
+            }
         }
     }
 
-    func itemTitle(noteID: UUID, itemID: UUID) -> String? {
-        notes
-            .first { $0.id == noteID }?
-            .items
-            .first { $0.id == itemID }?
-            .title
+    func itemTitle(noteID: UUID, tabID: UUID, itemID: UUID) -> String? {
+        tab(noteID: noteID, tabID: tabID)?
+            .items.first { $0.id == itemID }?.title
     }
 
-    func toggleItem(noteID: UUID, itemID: UUID) {
-        updateItem(noteID: noteID, itemID: itemID) { item in
+    /// A detail that is only whitespace is dropped, so "has notes" never lights up for a blank one.
+    func updateItemDetail(noteID: UUID, tabID: UUID, itemID: UUID, detail: String) {
+        updateItem(noteID: noteID, tabID: tabID, itemID: itemID) { item in
+            item.detail = detail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : detail
+        }
+    }
+
+    func itemDetail(noteID: UUID, tabID: UUID, itemID: UUID) -> String? {
+        tab(noteID: noteID, tabID: tabID)?
+            .items.first { $0.id == itemID }?.detail
+    }
+
+    func toggleItem(noteID: UUID, tabID: UUID, itemID: UUID) {
+        updateItem(noteID: noteID, tabID: tabID, itemID: itemID) { item in
+            guard !item.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                item.isDone = false
+                item.completedAt = nil
+                return
+            }
+
             item.isDone.toggle()
             item.completedAt = item.isDone ? Date() : nil
         }
     }
 
-    func deleteItem(noteID: UUID, itemID: UUID) {
-        updateNote(noteID) { note in
-            note.items.removeAll { $0.id == itemID }
+    func deleteItem(noteID: UUID, tabID: UUID, itemID: UUID) {
+        updateTab(noteID: noteID, tabID: tabID) { tab in
+            tab.items.removeAll { $0.id == itemID }
         }
     }
 
-    func dailyLogMarkdown(for date: Date = Date()) -> String {
-        Self.dailyLogMarkdown(notes: notes, date: date)
+    func dailyLogMarkdown(for date: Date = Date(), language: AppLanguage = .korean) -> String {
+        Self.dailyLogMarkdown(notes: notes, date: date, language: language)
     }
 
-    nonisolated static func dailyLogMarkdown(notes: [StickyNote], date: Date = Date()) -> String {
+    nonisolated static func dailyLogMarkdown(
+        notes: [StickyNote],
+        date: Date = Date(),
+        language: AppLanguage = .korean
+    ) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
 
         let logNotes = notes.filter(\.includeInNotionLog)
-        var lines: [String] = ["# \(formatter.string(from: date)) 업무 기록", ""]
+        var lines: [String] = ["# " + Lf("%@ 업무 기록", language: language, formatter.string(from: date)), ""]
 
         if logNotes.isEmpty {
-            lines.append("Notion 기록에 포함된 포스트잇이 없습니다.")
+            lines.append(L("Notion 기록에 포함된 메모가 없습니다.", language: language))
             return lines.joined(separator: "\n")
         }
 
-        for note in logNotes {
-            let doneItems = note.items.filter(\.isDone)
-            let pendingItems = note.items.filter { !$0.isDone }
+        let none = "- " + L("없음", language: language)
 
-            lines.append("## \(note.title)")
-            lines.append("")
-            lines.append("### 완료한 일")
-            lines.append(contentsOf: doneItems.isEmpty ? ["- 없음"] : doneItems.map { "- \($0.title)" })
-            lines.append("")
-            lines.append("### 남은 일")
-            lines.append(contentsOf: pendingItems.isEmpty ? ["- 없음"] : pendingItems.map { "- \($0.title)" })
-            lines.append("")
+        for note in logNotes {
+            for tab in note.tabs {
+                let doneItems = tab.items.filter(\.isDone)
+                let pendingItems = tab.items.filter { !$0.isDone }
+
+                lines.append("## \(tab.name) · \(tab.title)")
+                lines.append("")
+                lines.append("### " + L("완료한 일", language: language))
+                lines.append(contentsOf: doneItems.isEmpty ? [none] : doneItems.map { "- \($0.title)" })
+                lines.append("")
+                lines.append("### " + L("남은 일", language: language))
+                lines.append(contentsOf: pendingItems.isEmpty ? [none] : pendingItems.map { "- \($0.title)" })
+                lines.append("")
+            }
         }
 
         return lines.joined(separator: "\n")
     }
 
-    func copyDailyLogToClipboard() {
+    func copyDailyLogToClipboard(language: AppLanguage = .korean) {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(dailyLogMarkdown(), forType: .string)
+        NSPasteboard.general.setString(dailyLogMarkdown(language: language), forType: .string)
     }
 
     private func updateNote(_ noteID: UUID, mutate: (inout StickyNote) -> Void) {
@@ -284,16 +409,40 @@ final class PosteightStore: ObservableObject {
         mutate(&notes[index])
     }
 
-    private func updateItem(noteID: UUID, itemID: UUID, mutate: (inout TodoItem) -> Void) {
+    private func tab(noteID: UUID, tabID: UUID) -> MemoTab? {
+        notes.first { $0.id == noteID }?
+            .tabs.first { $0.id == tabID }
+    }
+
+    /// Returns whether the tab was found, so callers do not have to read the store back to
+    /// find out whether their own write landed.
+    @discardableResult
+    private func updateTab(noteID: UUID, tabID: UUID, mutate: (inout MemoTab) -> Void) -> Bool {
+        var didUpdate = false
         updateNote(noteID) { note in
-            guard let index = note.items.firstIndex(where: { $0.id == itemID }) else { return }
-            mutate(&note.items[index])
+            guard let index = note.tabs.firstIndex(where: { $0.id == tabID }) else { return }
+            didUpdate = true
+            mutate(&note.tabs[index])
+        }
+        return didUpdate
+    }
+
+    private func updateItem(
+        noteID: UUID,
+        tabID: UUID,
+        itemID: UUID,
+        mutate: (inout TodoItem) -> Void
+    ) {
+        updateTab(noteID: noteID, tabID: tabID) { tab in
+            guard let index = tab.items.firstIndex(where: { $0.id == itemID }) else { return }
+            mutate(&tab.items[index])
         }
     }
 
     private func load() {
         loadNotes()
         loadTrashedNotes()
+        loadTrashedTabs()
     }
 
     /// Application Support first, then the two `UserDefaults` domains notes used to live in
@@ -310,11 +459,11 @@ final class PosteightStore: ObservableObject {
             let data = storedData(notesURL, key: storageKey, legacy: legacyStorageKey),
             let decoded = try? JSONDecoder().decode([StickyNote].self, from: data)
         else {
-            notes = Self.sampleNotes
+            notes = Self.sampleNotes(language: loadLanguage)
             return
         }
 
-        notes = Self.compacted(decoded)
+        notes = Self.compacted(decoded, language: loadLanguage)
     }
 
     private func loadTrashedNotes() {
@@ -326,7 +475,25 @@ final class PosteightStore: ObservableObject {
             return
         }
 
-        trashedNotes = decoded
+        trashedNotes = decoded.map { trashedNote in
+            var migrated = trashedNote
+            migrated.note = Self.compacted([trashedNote.note], language: loadLanguage)[0]
+            return migrated
+        }
+    }
+
+    /// No legacy home to fall back to — closing a tab on its own is new, so this file either
+    /// holds what a previous launch wrote or doesn't exist yet.
+    private func loadTrashedTabs() {
+        guard
+            let data = try? Data(contentsOf: trashedTabsURL),
+            let decoded = try? JSONDecoder().decode([TrashedMemoTab].self, from: data)
+        else {
+            trashedTabs = []
+            return
+        }
+
+        trashedTabs = decoded
     }
 
     private static let saveDelay = Duration.milliseconds(500)
@@ -348,6 +515,7 @@ final class PosteightStore: ObservableObject {
         saveTask = nil
         write(notes, to: notesURL)
         write(trashedNotes, to: trashURL)
+        write(trashedTabs, to: trashedTabsURL)
     }
 
     private func write(_ value: some Encodable, to url: URL) {
@@ -360,18 +528,46 @@ final class PosteightStore: ObservableObject {
         }
     }
 
-    nonisolated static func compacted(_ decodedNotes: [StickyNote]) -> [StickyNote] {
-        decodedNotes.map { note in
+    nonisolated static func compacted(
+        _ decodedNotes: [StickyNote],
+        language: AppLanguage = .korean
+    ) -> [StickyNote] {
+        let notes: [StickyNote] = decodedNotes.map { note in
             var compactNote = note
             compactNote.size = clamped(note.size)
-            if compactNote.title == "새 포스트잇" {
-                compactNote.title = todayTitle()
-            } else if let legacyDate = legacyTitleDate(compactNote.title) {
-                // Reformat to the short style, keeping the day the note was actually made.
-                compactNote.title = todayTitle(date: legacyDate)
+
+            for tabIndex in compactNote.tabs.indices {
+                if compactNote.tabs[tabIndex].name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    compactNote.tabs[tabIndex].name = Lf("메모 %ld", language: language, tabIndex + 1)
+                }
+
+                // Older builds let blank rows be checked off; those completions are phantoms.
+                for itemIndex in compactNote.tabs[tabIndex].items.indices
+                where compactNote.tabs[tabIndex].items[itemIndex].title
+                    .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    compactNote.tabs[tabIndex].items[itemIndex].isDone = false
+                    compactNote.tabs[tabIndex].items[itemIndex].completedAt = nil
+                }
+
+                let title = compactNote.tabs[tabIndex].title
+                // Never localized: this compares against what older builds actually wrote to
+                // disk, so the literal has to stay exactly what those builds saved.
+                if title == "새 포스트잇" {
+                    compactNote.tabs[tabIndex].title = todayTitle(language: language)
+                } else if let legacyDate = legacyTitleDate(title) {
+                    // Reformat to the short style, keeping the day the memo was actually made.
+                    compactNote.tabs[tabIndex].title = todayTitle(date: legacyDate, language: language)
+                }
+            }
+
+            if let firstTab = compactNote.tabs.first,
+               !compactNote.tabs.contains(where: { $0.id == compactNote.selectedTabID }) {
+                compactNote.selectedTabID = firstTab.id
             }
             return compactNote
         }
+
+        return notes
     }
 
     nonisolated static func clamped(_ size: NoteSize) -> NoteSize {
@@ -381,39 +577,53 @@ final class PosteightStore: ObservableObject {
         )
     }
 
-    private static let sampleNotes: [StickyNote] = [
+    private static func sampleNotes(language: AppLanguage) -> [StickyNote] { [
         StickyNote(
-            title: "오늘 업무",
             stickerSymbol: "building.2",
             paperHex: "#EED9D8",
             penHex: "#B84A62",
             penStyle: .ballpoint,
             includeInNotionLog: true,
             position: NotePoint(x: 260, y: 260),
-            items: [
-                TodoItem(title: "포스트잇 앱 첫 화면 만들기"),
-                TodoItem(title: "필통에 색상과 스티커 담기"),
-                TodoItem(title: "펜 줄긋기 애니메이션 확인", isDone: true, completedAt: Date())
+            tabs: [
+                MemoTab(
+                    name: Lf("메모 %ld", language: language, 1),
+                    title: L("오늘 업무", language: language),
+                    items: [
+                        TodoItem(title: L("메모 앱 첫 화면 만들기", language: language)),
+                        TodoItem(title: L("필통에 색상과 스티커 담기", language: language)),
+                        TodoItem(
+                            title: L("펜 줄긋기 애니메이션 확인", language: language),
+                            isDone: true,
+                            completedAt: Date()
+                        )
+                    ]
+                )
             ]
         ),
         StickyNote(
-            title: "개인 메모",
             stickerSymbol: "house",
             paperHex: "#D9E4D5",
             penHex: "#2C7A5A",
             penStyle: .highlighter,
             includeInNotionLog: false,
             position: NotePoint(x: 590, y: 300),
-            items: [
-                TodoItem(title: "점심 메뉴 정하기"),
-                TodoItem(title: "퇴근 후 장보기")
+            tabs: [
+                MemoTab(
+                    name: Lf("메모 %ld", language: language, 1),
+                    title: L("개인 메모", language: language),
+                    items: [
+                        TodoItem(title: L("점심 메뉴 정하기", language: language)),
+                        TodoItem(title: L("퇴근 후 장보기", language: language))
+                    ]
+                )
             ]
         )
-    ]
+    ] }
 
-    nonisolated static func todayTitle(date: Date = Date()) -> String {
+    nonisolated static func todayTitle(date: Date = Date(), language: AppLanguage = .korean) -> String {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ko_KR")
+        formatter.locale = Locale(identifier: language.localeIdentifier)
         formatter.dateFormat = "yy.MM.dd(E)"
         return formatter.string(from: date)
     }
