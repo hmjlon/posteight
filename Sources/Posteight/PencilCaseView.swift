@@ -2,6 +2,7 @@ import SwiftUI
 
 struct PencilCaseView: View {
     @EnvironmentObject private var store: PosteightStore
+    @ObservedObject private var settings = AppSettings.shared
     let note: StickyNote
     /// Deleting lives here, away from the header, because an `✕` next to a memo reads as close.
     let onDelete: () -> Void
@@ -10,11 +11,11 @@ struct PencilCaseView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
                 Image(systemName: "archivebox")
-                Text("필통")
+                Text(L("필통"))
                     .font(.system(size: 12, weight: .bold, design: .rounded))
                 Spacer(minLength: 4)
                 Toggle(
-                    "Notion 기록",
+                    L("Notion 기록"),
                     isOn: Binding(
                         get: { note.includeInNotionLog },
                         set: { store.updateNotionLog(note.id, include: $0) }
@@ -26,7 +27,7 @@ struct PencilCaseView: View {
                 .font(.system(size: 10, weight: .medium, design: .rounded))
             }
 
-            toolRow(title: "종이") {
+            toolRow(title: L("종이")) {
                 ColorSwatchRow(
                     options: DesignTokens.paperColors,
                     selectedHex: note.paperHex
@@ -35,7 +36,7 @@ struct PencilCaseView: View {
                 }
             }
 
-            toolRow(title: "펜") {
+            toolRow(title: L("펜")) {
                 ColorSwatchRow(
                     options: DesignTokens.penColors,
                     selectedHex: note.penHex
@@ -46,15 +47,15 @@ struct PencilCaseView: View {
 
             // The colour wells are wide enough to squeeze the swatches off a narrow card, so
             // they share a row of their own.
-            toolRow(title: "직접") {
-                customColorWell(systemImage: "doc", help: "종이 색 직접 선택") {
+            toolRow(title: L("직접")) {
+                customColorWell(systemImage: "doc", help: L("종이 색 직접 선택")) {
                     Binding(
                         get: { Color(hex: note.paperHex) },
                         set: { store.updatePaperColor(note.id, hex: $0.hexString) }
                     )
                 }
 
-                customColorWell(systemImage: "pencil.tip", help: "펜 색 직접 선택") {
+                customColorWell(systemImage: "pencil.tip", help: L("펜 색 직접 선택")) {
                     Binding(
                         get: { Color(hex: note.penHex) },
                         set: { store.updatePenColor(note.id, hex: $0.hexString) }
@@ -65,14 +66,14 @@ struct PencilCaseView: View {
             }
 
             Picker(
-                "펜촉",
+                L("펜촉"),
                 selection: Binding(
                     get: { note.penStyle },
                     set: { store.updatePenStyle(note.id, style: $0) }
                 )
             ) {
                 ForEach(PenStyle.allCases) { style in
-                    Label(style.title, systemImage: style.systemImage)
+                    Label(style.title(in: settings.language), systemImage: style.systemImage)
                         .tag(style)
                 }
             }
@@ -80,7 +81,7 @@ struct PencilCaseView: View {
             .font(.system(size: 11, weight: .semibold, design: .rounded))
 
             VStack(alignment: .leading, spacing: 6) {
-                Text("스티커")
+                Text(L("스티커"))
                     .font(.system(size: 11, weight: .bold, design: .rounded))
                     .foregroundStyle(.black.opacity(0.48))
 
@@ -105,7 +106,7 @@ struct PencilCaseView: View {
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(Color(hex: note.penHex).opacity(0.86))
-                        .help(sticker.title)
+                        .help(sticker.title(in: settings.language))
                     }
                 }
             }
@@ -113,12 +114,12 @@ struct PencilCaseView: View {
             Divider()
 
             Button(role: .destructive, action: onDelete) {
-                Label("메모 삭제", systemImage: "trash")
+                Label(L("메모 삭제"), systemImage: "trash")
                     .font(.system(size: 11, weight: .bold, design: .rounded))
             }
             .buttonStyle(.plain)
             .foregroundStyle(.red.opacity(0.74))
-            .help("이 메모를 휴지통으로 보냅니다")
+            .help(L("이 메모를 휴지통으로 보냅니다"))
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)

@@ -104,7 +104,7 @@ struct StickyNoteWindowView: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(Color.black.opacity(0.48))
-                .help("이 메모에 새 탭 추가")
+                .help(L("이 메모에 새 탭 추가"))
                 .padding(.bottom, 3)
 
                 tabBarControls
@@ -209,7 +209,7 @@ struct StickyNoteWindowView: View {
             }
             .frame(width: width, height: MemoSurfaceMetrics.activeTabHeight)
             .clipped()
-            .help("현재 탭 — 다시 클릭하면 이름을 수정할 수 있어요")
+            .help(L("현재 탭 — 다시 클릭하면 이름을 수정할 수 있어요"))
             .accessibilityAddTraits(.isSelected)
             .onHover(perform: onHover)
         } else {
@@ -242,7 +242,7 @@ struct StickyNoteWindowView: View {
             }
             .frame(width: width, height: MemoSurfaceMetrics.inactiveTabHeight)
             .contentShape(MemoTabShape())
-            .help("\(tab.name) 탭으로 이동")
+            .help(Lf("%@ 탭으로 이동", tab.name))
             .padding(.bottom, 3)
             .clipped()
             .overlay(alignment: .trailing) {
@@ -266,7 +266,7 @@ struct StickyNoteWindowView: View {
         }
         .buttonStyle(.plain)
         .foregroundStyle(Color(hex: note.penHex).opacity(0.6))
-        .help("이 탭 닫기 — 휴지통에서 복구할 수 있어요")
+        .help(L("이 탭 닫기 — 휴지통에서 복구할 수 있어요"))
     }
 
     private func tabLabel(
@@ -334,7 +334,7 @@ struct StickyNoteWindowView: View {
                 Image(systemName: "slider.horizontal.3")
                     .frame(width: 24, height: 28)
             }
-            .help("메모 꾸미기")
+            .help(L("메모 꾸미기"))
 
             Button {
                 closeCard()
@@ -342,7 +342,7 @@ struct StickyNoteWindowView: View {
                 Image(systemName: "xmark")
                     .frame(width: 24, height: 28)
             }
-            .help("닫기 — 메모는 그대로 있어요")
+            .help(L("닫기 — 메모는 그대로 있어요"))
         }
         .buttonStyle(.plain)
         .foregroundStyle(Color.black.opacity(0.48))

@@ -26,7 +26,7 @@ struct StickyNote: Identifiable, Codable, Equatable {
         selectedTabID: UUID? = nil
     ) {
         let safeTabs = tabs.isEmpty
-            ? [MemoTab(name: "메모 1", title: "", items: [TodoItem(title: "")])]
+            ? [MemoTab(name: "메모 1", title: "", items: [TodoItem(title: "")])]  // 손상된 데이터 복구용 기본값
             : tabs
 
         self.id = id
@@ -194,14 +194,14 @@ enum PenStyle: String, Codable, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    var title: String {
+    func title(in language: AppLanguage) -> String {
         switch self {
         case .pencil:
-            "연필"
+            L("연필", language: language)
         case .ballpoint:
-            "볼펜"
+            L("볼펜", language: language)
         case .highlighter:
-            "형광펜"
+            L("형광펜", language: language)
         }
     }
 
@@ -247,8 +247,11 @@ struct ColorOption: Identifiable {
 
 struct StickerOption: Identifiable {
     let id = UUID()
-    let title: String
+    /// The Korean source string, which is also the lookup key.
+    let koreanTitle: String
     let symbol: String
+
+    func title(in language: AppLanguage) -> String { L(koreanTitle, language: language) }
 }
 
 enum DesignTokens {
@@ -275,15 +278,15 @@ enum DesignTokens {
     ]
 
     static let stickers: [StickerOption] = [
-        StickerOption(title: "업무", symbol: "briefcase"),
-        StickerOption(title: "학업", symbol: "book"),
-        StickerOption(title: "회의", symbol: "person.2"),
-        StickerOption(title: "개발", symbol: "laptopcomputer"),
-        StickerOption(title: "마감", symbol: "calendar"),
-        StickerOption(title: "긴급", symbol: "exclamationmark.triangle"),
-        StickerOption(title: "아이디어", symbol: "lightbulb"),
-        StickerOption(title: "개인", symbol: "house"),
-        StickerOption(title: "건강", symbol: "heart"),
-        StickerOption(title: "장보기", symbol: "cart")
+        StickerOption(koreanTitle: "업무", symbol: "briefcase"),
+        StickerOption(koreanTitle: "학업", symbol: "book"),
+        StickerOption(koreanTitle: "회의", symbol: "person.2"),
+        StickerOption(koreanTitle: "개발", symbol: "laptopcomputer"),
+        StickerOption(koreanTitle: "마감", symbol: "calendar"),
+        StickerOption(koreanTitle: "긴급", symbol: "exclamationmark.triangle"),
+        StickerOption(koreanTitle: "아이디어", symbol: "lightbulb"),
+        StickerOption(koreanTitle: "개인", symbol: "house"),
+        StickerOption(koreanTitle: "건강", symbol: "heart"),
+        StickerOption(koreanTitle: "장보기", symbol: "cart")
     ]
 }

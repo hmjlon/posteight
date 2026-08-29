@@ -15,20 +15,20 @@ struct MenuBarPanelView: View {
             Divider()
                 .padding(.vertical, 4)
 
-            PanelRow(title: "새 메모", systemImage: "plus", shortcut: "⌘N") {
+            PanelRow(title: L("새 메모"), systemImage: "plus", shortcut: "⌘N") {
                 showNote(store.addNote())
             }
 
-            PanelRow(title: "메모 보기", systemImage: "rectangle.on.rectangle") {
+            PanelRow(title: L("메모 보기"), systemImage: "rectangle.on.rectangle") {
                 showNotes(store.notes.map(\.id))
             }
 
-            PanelRow(title: "오늘 기록 미리보기", systemImage: "square.and.arrow.up") {
+            PanelRow(title: L("오늘 기록 미리보기"), systemImage: "square.and.arrow.up") {
                 open(windowID: WindowID.dailyLog)
             }
 
             PanelRow(
-                title: "휴지통",
+                title: L("휴지통"),
                 systemImage: trashIsEmpty ? "trash" : "trash.fill",
                 badge: trashIsEmpty ? nil : "\(store.trashedNotes.count + store.trashedTabs.count)"
             ) {
@@ -38,11 +38,11 @@ struct MenuBarPanelView: View {
             Divider()
                 .padding(.vertical, 4)
 
-            PanelRow(title: "설정…", systemImage: "gearshape", shortcut: "⌘,") {
+            PanelRow(title: L("설정…"), systemImage: "gearshape", shortcut: "⌘,") {
                 SettingsModal.present(store: store)
             }
 
-            PanelRow(title: "Posteight 종료", systemImage: "power", shortcut: "⌘Q") {
+            PanelRow(title: L("Posteight 종료"), systemImage: "power", shortcut: "⌘Q") {
                 NSApp.terminate(nil)
             }
         }
@@ -71,10 +71,10 @@ struct MenuBarPanelView: View {
 
     private var statusLabel: String {
         if store.notes.isEmpty {
-            return "메모 없음"
+            return L("메모 없음")
         }
 
-        return store.remainingCount > 0 ? "\(store.remainingCount)개 남음" : "모두 완료"
+        return store.remainingCount > 0 ? Lf("%d개 남음", store.remainingCount) : L("모두 완료")
     }
 
     private func showNote(_ noteID: UUID) {

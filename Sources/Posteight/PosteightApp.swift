@@ -91,14 +91,14 @@ struct PosteightApp: App {
         )
         .commands {
             CommandGroup(replacing: .newItem) {
-                Button("새 메모") {
+                Button(L("새 메모")) {
                     store.addNote()
                 }
                 .keyboardShortcut("n", modifiers: [.command])
             }
 
             CommandGroup(replacing: .appSettings) {
-                Button("설정…") {
+                Button(L("설정…")) {
                     SettingsModal.present(store: store)
                 }
                 .keyboardShortcut(",", modifiers: [.command])

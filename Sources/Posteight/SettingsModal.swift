@@ -22,7 +22,7 @@ enum SettingsModal {
         )
 
         let window = NSWindow(contentViewController: hosting)
-        window.title = "Posteight 설정"
+        window.title = L("Posteight 설정")
         window.styleMask = [.titled, .closable]
         window.isReleasedWhenClosed = false
         window.delegate = windowDelegate

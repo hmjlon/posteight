@@ -2,6 +2,7 @@ import SwiftUI
 
 struct TrashView: View {
     @EnvironmentObject private var store: PosteightStore
+    @ObservedObject private var settings = AppSettings.shared
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -26,6 +27,7 @@ struct TrashView: View {
         }
         .padding(18)
         .frame(width: 460, height: 420)
+        .navigationTitle(L("휴지통"))
     }
 
     private var header: some View {
@@ -33,7 +35,7 @@ struct TrashView: View {
             Image(systemName: "trash.fill")
                 .font(.system(size: 18, weight: .semibold))
 
-            Text("휴지통")
+            Text(L("휴지통"))
                 .font(.system(size: 20, weight: .bold, design: .rounded))
 
             Text("\(store.trashedNotes.count + store.trashedTabs.count)")
@@ -48,7 +50,7 @@ struct TrashView: View {
             Button {
                 store.emptyTrash()
             } label: {
-                Label("비우기", systemImage: "flame")
+                Label(L("비우기"), systemImage: "flame")
             }
             .disabled(store.trashedNotes.isEmpty && store.trashedTabs.isEmpty)
 
@@ -68,7 +70,7 @@ struct TrashView: View {
                 .font(.system(size: 38, weight: .regular))
                 .foregroundStyle(.secondary)
 
-            Text("휴지통이 비어 있어요")
+            Text(L("휴지통이 비어 있어요"))
                 .font(.system(size: 15, weight: .semibold, design: .rounded))
                 .foregroundStyle(.secondary)
         }
@@ -93,11 +95,11 @@ private struct TrashNoteRow: View {
                 }
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(trashedNote.note.selectedTab?.title ?? "메모")
+                Text(trashedNote.note.selectedTab?.title ?? L("메모"))
                     .font(.system(size: 14, weight: .bold, design: .rounded))
                     .lineLimit(1)
 
-                Text("탭 \(trashedNote.note.tabs.count)개 · 할 일 \(trashedNote.note.allItems.count)개")
+                Text(Lf("탭 %d개 · 할 일 %d개", trashedNote.note.tabs.count, trashedNote.note.allItems.count))
                     .font(.system(size: 11, weight: .medium, design: .rounded))
                     .foregroundStyle(.secondary)
             }
@@ -107,7 +109,7 @@ private struct TrashNoteRow: View {
             Button {
                 store.restoreNote(trashedNote.id)
             } label: {
-                Label("복구", systemImage: "arrow.uturn.backward")
+                Label(L("복구"), systemImage: "arrow.uturn.backward")
             }
 
             Button {
@@ -118,7 +120,7 @@ private struct TrashNoteRow: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
-            .help("완전 삭제")
+            .help(L("완전 삭제"))
         }
         .padding(10)
         .background(.quaternary.opacity(0.28), in: Rectangle())
@@ -150,7 +152,7 @@ private struct TrashTabRow: View {
                     .font(.system(size: 14, weight: .bold, design: .rounded))
                     .lineLimit(1)
 
-                Text("탭 · 할 일 \(trashedTab.tab.items.count)개")
+                Text(Lf("탭 · 할 일 %d개", trashedTab.tab.items.count))
                     .font(.system(size: 11, weight: .medium, design: .rounded))
                     .foregroundStyle(.secondary)
             }
@@ -160,7 +162,7 @@ private struct TrashTabRow: View {
             Button {
                 store.restoreTab(trashedTab.id)
             } label: {
-                Label("복구", systemImage: "arrow.uturn.backward")
+                Label(L("복구"), systemImage: "arrow.uturn.backward")
             }
 
             Button {
@@ -171,7 +173,7 @@ private struct TrashTabRow: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
-            .help("완전 삭제")
+            .help(L("완전 삭제"))
         }
         .padding(10)
         .background(.quaternary.opacity(0.28), in: Rectangle())

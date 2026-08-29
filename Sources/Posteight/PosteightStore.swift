@@ -97,8 +97,8 @@ final class PosteightStore: ObservableObject {
             position: NotePoint(x: 270 + offset, y: 240 + offset),
             tabs: [
                 MemoTab(
-                    name: "메모 1",
-                    title: Self.todayTitle(),
+                    name: Lf("메모 %d", 1),
+                    title: Self.todayTitle(language: AppSettings.shared.language),
                     items: [TodoItem(title: "")]
                 )
             ]
@@ -157,8 +157,8 @@ final class PosteightStore: ObservableObject {
             note.tabs.append(
                 MemoTab(
                     id: tabID,
-                    name: "메모 \(nextNumber)",
-                    title: Self.todayTitle(),
+                    name: Lf("메모 %d", nextNumber),
+                    title: Self.todayTitle(language: AppSettings.shared.language),
                     items: [TodoItem(title: "")]
                 )
             )
@@ -348,18 +348,22 @@ final class PosteightStore: ObservableObject {
     }
 
     func dailyLogMarkdown(for date: Date = Date()) -> String {
-        Self.dailyLogMarkdown(notes: notes, date: date)
+        Self.dailyLogMarkdown(notes: notes, date: date, language: AppSettings.shared.language)
     }
 
-    nonisolated static func dailyLogMarkdown(notes: [StickyNote], date: Date = Date()) -> String {
+    nonisolated static func dailyLogMarkdown(
+        notes: [StickyNote],
+        date: Date = Date(),
+        language: AppLanguage = .korean
+    ) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
 
         let logNotes = notes.filter(\.includeInNotionLog)
-        var lines: [String] = ["# \(formatter.string(from: date)) 업무 기록", ""]
+        var lines: [String] = ["# " + Lf("%@ 업무 기록", language: language, formatter.string(from: date)), ""]
 
         if logNotes.isEmpty {
-            lines.append("Notion 기록에 포함된 메모가 없습니다.")
+            lines.append(L("Notion 기록에 포함된 메모가 없습니다.", language: language))
             return lines.joined(separator: "\n")
         }
 
@@ -370,11 +374,12 @@ final class PosteightStore: ObservableObject {
 
                 lines.append("## \(tab.title)")
                 lines.append("")
-                lines.append("### \(tab.name) · 완료한 일")
-                lines.append(contentsOf: doneItems.isEmpty ? ["- 없음"] : doneItems.map { "- \($0.title)" })
+                let none = "- " + L("없음", language: language)
+                lines.append("### \(tab.name) · " + L("완료한 일", language: language))
+                lines.append(contentsOf: doneItems.isEmpty ? [none] : doneItems.map { "- \($0.title)" })
                 lines.append("")
-                lines.append("### \(tab.name) · 남은 일")
-                lines.append(contentsOf: pendingItems.isEmpty ? ["- 없음"] : pendingItems.map { "- \($0.title)" })
+                lines.append("### \(tab.name) · " + L("남은 일", language: language))
+                lines.append(contentsOf: pendingItems.isEmpty ? [none] : pendingItems.map { "- \($0.title)" })
                 lines.append("")
             }
         }
@@ -436,11 +441,11 @@ final class PosteightStore: ObservableObject {
             let data = storedData(notesURL, key: storageKey, legacy: legacyStorageKey),
             let decoded = try? JSONDecoder().decode([StickyNote].self, from: data)
         else {
-            notes = Self.sampleNotes
+            notes = Self.sampleNotes(language: AppSettings.shared.language)
             return
         }
 
-        notes = Self.compacted(decoded)
+        notes = Self.compacted(decoded, language: AppSettings.shared.language)
     }
 
     private func loadTrashedNotes() {
@@ -454,7 +459,7 @@ final class PosteightStore: ObservableObject {
 
         trashedNotes = decoded.map { trashedNote in
             var migrated = trashedNote
-            migrated.note = Self.compacted([trashedNote.note])[0]
+            migrated.note = Self.compacted([trashedNote.note], language: AppSettings.shared.language)[0]
             return migrated
         }
     }
@@ -505,14 +510,17 @@ final class PosteightStore: ObservableObject {
         }
     }
 
-    nonisolated static func compacted(_ decodedNotes: [StickyNote]) -> [StickyNote] {
+    nonisolated static func compacted(
+        _ decodedNotes: [StickyNote],
+        language: AppLanguage = .korean
+    ) -> [StickyNote] {
         let notes: [StickyNote] = decodedNotes.map { note in
             var compactNote = note
             compactNote.size = clamped(note.size)
 
             for tabIndex in compactNote.tabs.indices {
                 if compactNote.tabs[tabIndex].name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    compactNote.tabs[tabIndex].name = "메모 \(tabIndex + 1)"
+                    compactNote.tabs[tabIndex].name = Lf("메모 %d", language: language, tabIndex + 1)
                 }
 
                 // Older builds let blank rows be checked off; those completions are phantoms.
@@ -524,11 +532,13 @@ final class PosteightStore: ObservableObject {
                 }
 
                 let title = compactNote.tabs[tabIndex].title
+                // Never localized: this compares against what older builds actually wrote to
+                // disk, so the literal has to stay exactly what those builds saved.
                 if title == "새 포스트잇" {
-                    compactNote.tabs[tabIndex].title = todayTitle()
+                    compactNote.tabs[tabIndex].title = todayTitle(language: language)
                 } else if let legacyDate = legacyTitleDate(title) {
                     // Reformat to the short style, keeping the day the memo was actually made.
-                    compactNote.tabs[tabIndex].title = todayTitle(date: legacyDate)
+                    compactNote.tabs[tabIndex].title = todayTitle(date: legacyDate, language: language)
                 }
             }
 
@@ -548,7 +558,7 @@ final class PosteightStore: ObservableObject {
         )
     }
 
-    private static let sampleNotes: [StickyNote] = [
+    private static func sampleNotes(language: AppLanguage) -> [StickyNote] { [
         StickyNote(
             stickerSymbol: "building.2",
             paperHex: "#EED9D8",
@@ -558,12 +568,16 @@ final class PosteightStore: ObservableObject {
             position: NotePoint(x: 260, y: 260),
             tabs: [
                 MemoTab(
-                    name: "메모 1",
-                    title: "오늘 업무",
+                    name: Lf("메모 %d", language: language, 1),
+                    title: L("오늘 업무", language: language),
                     items: [
-                        TodoItem(title: "메모 앱 첫 화면 만들기"),
-                        TodoItem(title: "필통에 색상과 스티커 담기"),
-                        TodoItem(title: "펜 줄긋기 애니메이션 확인", isDone: true, completedAt: Date())
+                        TodoItem(title: L("메모 앱 첫 화면 만들기", language: language)),
+                        TodoItem(title: L("필통에 색상과 스티커 담기", language: language)),
+                        TodoItem(
+                            title: L("펜 줄긋기 애니메이션 확인", language: language),
+                            isDone: true,
+                            completedAt: Date()
+                        )
                     ]
                 )
             ]
@@ -577,20 +591,20 @@ final class PosteightStore: ObservableObject {
             position: NotePoint(x: 590, y: 300),
             tabs: [
                 MemoTab(
-                    name: "메모 1",
-                    title: "개인 메모",
+                    name: Lf("메모 %d", language: language, 1),
+                    title: L("개인 메모", language: language),
                     items: [
-                        TodoItem(title: "점심 메뉴 정하기"),
-                        TodoItem(title: "퇴근 후 장보기")
+                        TodoItem(title: L("점심 메뉴 정하기", language: language)),
+                        TodoItem(title: L("퇴근 후 장보기", language: language))
                     ]
                 )
             ]
         )
-    ]
+    ] }
 
-    nonisolated static func todayTitle(date: Date = Date()) -> String {
+    nonisolated static func todayTitle(date: Date = Date(), language: AppLanguage = .korean) -> String {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ko_KR")
+        formatter.locale = Locale(identifier: language.localeIdentifier)
         formatter.dateFormat = "yy.MM.dd(E)"
         return formatter.string(from: date)
     }

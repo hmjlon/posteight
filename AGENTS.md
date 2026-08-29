@@ -78,6 +78,31 @@ app, and a second build path drifts out of sync with it.
   `legacyTitleDate` only with a test proving current-style titles stay untouched.
 - Keep interactive changes focused and test text editing, checklist completion, note movement, resizing, trash, and persistence when those areas change.
 
+## Language
+
+Posteight draws its own UI in Korean or English, switched in Settings with no relaunch. Korean is
+the source language, and the Korean string itself is the lookup key.
+
+- Every user-visible string goes through `L("한국어")`, or `Lf("메모 %d", n)` when it has a
+  placeholder. String literals left bare ship untranslated.
+- Add the English entry to `englishStrings` in `Sources/Posteight/Strings.swift` **in the same
+  change**. A missing key falls back to the Korean text, so an untranslated string does not fail
+  the build, does not crash, and does not announce itself — it just shows up in Korean in an
+  English window.
+- `Tests/PosteightTests/LocalizationTests.swift` checks that every entry is non-empty, differs
+  from its key, and keeps the same `%d`/`%@` count in both languages. It cannot see a string you
+  never added to the table, so the entry is on you.
+- Pure and `nonisolated` code takes `language: AppLanguage` as a parameter and defaults to
+  `.korean`. Do not read `AppSettings.shared` from inside a SwiftUI view builder: the dependency
+  is invisible to SwiftUI, and the view keeps the language it was first drawn in. Pass
+  `settings.language` in instead — that is what `title(in:)` on `PenStyle`, `MenuBarCountStyle`,
+  `StickerOption`, and `AppLanguage` is for.
+- Never localize a string that is compared against saved data. `"새 포스트잇"` in
+  `PosteightStore.compacted` is what older builds actually wrote to disk; translating it breaks
+  the migration. Note text, tab names, and titles are the user's own words and stay as typed.
+- The menus macOS draws itself (File, Edit, Window) follow the system language and are out of
+  reach without bundle-level localization.
+
 ## Git Workflow
 
 - Commit to `dev` directly. This project does not use per-feature branches.

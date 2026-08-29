@@ -76,13 +76,13 @@ struct StickyNoteView: View {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "plus")
-                    Text("할 일 추가")
+                    Text(L("할 일 추가"))
                 }
                 .font(.system(size: 12, weight: .medium, design: .rounded))
                 .foregroundStyle(.black.opacity(0.58))
             }
             .buttonStyle(.plain)
-            .help("할 일 추가")
+            .help(L("할 일 추가"))
         }
         .padding(.horizontal, 13)
         .padding(.top, 9)
@@ -101,7 +101,7 @@ struct StickyNoteView: View {
                 setCursor(isHovering ? .resizeLeftRight : .arrow)
             }
             .gesture(resizeGesture { CGSize(width: $0.width, height: 0) })
-            .help("가로 크기 조절")
+            .help(L("가로 크기 조절"))
     }
 
     private var verticalResizeHandle: some View {
@@ -114,7 +114,7 @@ struct StickyNoteView: View {
                 setCursor(isHovering ? .resizeUpDown : .arrow)
             }
             .gesture(resizeGesture { CGSize(width: 0, height: $0.height) })
-            .help("세로 크기 조절")
+            .help(L("세로 크기 조절"))
     }
 
     private func resizeGesture(_ axis: @escaping (CGSize) -> CGSize) -> some Gesture {
@@ -163,6 +163,6 @@ struct StickyNoteView: View {
             setCursor(isHovering ? .crosshair : .arrow)
         }
         .gesture(resizeGesture { $0 })
-        .help("대각선 크기 조절")
+        .help(L("대각선 크기 조절"))
     }
 }

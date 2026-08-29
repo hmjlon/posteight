@@ -37,7 +37,7 @@ struct TodoItemRow: View {
             .buttonStyle(.plain)
             .disabled(!hasContent)
             .opacity(hasContent ? 1 : 0.28)
-            .help(hasContent ? (item.isDone ? "완료 취소" : "완료") : "할 일을 입력하면 완료할 수 있어요")
+            .help(hasContent ? (item.isDone ? L("완료 취소") : L("완료")) : L("할 일을 입력하면 완료할 수 있어요"))
 
             ZStack(alignment: .leading) {
                 PlainEditableTextField(
@@ -54,7 +54,7 @@ struct TodoItemRow: View {
                             )
                         }
                     ),
-                    placeholder: "할 일 입력",
+                    placeholder: L("할 일 입력"),
                     fontSize: Self.titleFontSize,
                     fontWeight: Self.titleFontWeight,
                     textOpacity: item.isDone ? 0.38 : 0.76,
@@ -92,7 +92,7 @@ struct TodoItemRow: View {
             // An item with notes keeps its marker visible; an empty one only offers on hover.
             .opacity(hasDetail ? 1 : (isRowHovered || isEditingText ? 1 : 0))
             .disabled(!hasContent)
-            .help(hasDetail ? "세부사항 보기" : "세부사항 추가")
+            .help(hasDetail ? L("세부사항 보기") : L("세부사항 추가"))
             .popover(isPresented: $showDetail, arrowEdge: .trailing) {
                 DetailEditor(
                     text: store.itemDetail(noteID: note.id, tabID: tab.id, itemID: item.id) ?? "",
@@ -125,7 +125,7 @@ struct TodoItemRow: View {
             .buttonStyle(.plain)
             .foregroundStyle(.black.opacity(0.24))
             .opacity(isRowHovered || isEditingText ? 1 : 0.12)
-            .help("삭제")
+            .help(L("삭제"))
         }
         .contentShape(Rectangle())
         .onHover { isRowHovered = $0 }
@@ -261,7 +261,7 @@ private struct DetailEditor: View {
 
             ZStack(alignment: .topLeading) {
                 if text.isEmpty {
-                    Text("무엇을, 어떻게 하는지 적어두세요")
+                    Text(L("무엇을, 어떻게 하는지 적어두세요"))
                         .font(.system(size: 13))
                         .foregroundStyle(inkColor.opacity(0.3))
                         .padding(.top, 1)
@@ -290,18 +290,18 @@ private struct DetailEditor: View {
 
     private var footer: some View {
         HStack(spacing: 0) {
-            Text("자동 저장")
+            Text(L("자동 저장"))
                 .foregroundStyle(.black.opacity(0.36))
 
             Spacer(minLength: 8)
 
             Button(action: onClose) {
-                Text("⌘↩ 완료")
+                Text(L("⌘↩ 완료"))
                     .foregroundStyle(inkColor.opacity(0.66))
             }
             .buttonStyle(.plain)
             .keyboardShortcut(.return, modifiers: .command)
-            .help("닫기 — 적은 내용은 이미 저장돼 있어요")
+            .help(L("닫기 — 적은 내용은 이미 저장돼 있어요"))
         }
         .font(.system(size: 10, weight: .semibold, design: .rounded))
         .padding(.top, 8)
