@@ -1,6 +1,98 @@
 # Posteight
 
-Posteight is a local macOS sticky-note checklist app that keeps today's work visible across the desktop.
+**Private sticky notes for your Mac — visible on your terms.**
+
+Posteight keeps today's checklist out on the desktop, in small independent windows you can
+put where the work actually happens — and hide when someone walks over.
+
+English · [한국어](README.ko.md)
+
+![Posteight notes floating on the macOS desktop](docs/images/posteight-desktop-en.png)
+
+## Install
+
+### Requirements
+
+| | |
+| --- | --- |
+| macOS | 14 (Sonoma) or later |
+| Mac | Apple silicon only — `ARCHS` is pinned to `arm64`, so Intel Macs are not supported |
+| Interface language | Korean or English, switchable in Settings |
+
+### Download
+
+Download the latest `.dmg` from [Releases](https://github.com/hmjlon/posteight/releases),
+open it, and drag **Posteight** to **Applications**.
+
+### First launch
+
+Posteight is not notarized by Apple yet, so macOS blocks it the first time it runs.
+
+1. Open Posteight. macOS shows a warning and refuses to launch it.
+2. Open **System Settings → Privacy & Security**.
+3. Scroll down and click **Open Anyway**.
+
+This is a one-time step per install. The same thing from a terminal:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Posteight.app
+```
+
+Notarization needs a paid Apple Developer Program membership. Until that is in place, this
+step is unavoidable for anyone but the person who built the app.
+
+## Using Posteight
+
+### Memo windows
+
+<img src="docs/images/posteight-note-en.png" alt="A memo window with two tabs and a completed item struck through" width="300">
+
+Each memo is its own floating window that remembers where you put it. Inside, a compact
+tab bar splits the memo width evenly — no horizontal scrolling — so one window can hold
+several lists side by side.
+
+- Multiple independent, floating, resizable memo windows
+- Per-memo tabs, renamed inline by clicking the active tab again
+- Checklists with an animated pen strike-through on completion
+- Paper colors, pen colors, pen styles, and category stickers
+- Trash with restore and permanent-delete actions
+- Daily work log preview and clipboard export as Markdown
+
+### Menu bar
+
+<img src="docs/images/posteight-menubar.png" alt="The Posteight status item, a folded card carrying today's count" width="44">
+
+Posteight has no main window. The status item is the only permanent surface: one folded
+card with today's count written on it, filling from the bottom as items get done. Clicking
+it opens the popover — quick capture, opening memo windows, the daily log, the trash,
+settings, and quit.
+
+Settings stay small: what the status item counts, whether notes float above other apps,
+and whether Posteight keeps a Dock icon. The Dock icon is on by default, so a running
+Posteight can be reached from the Dock and Command-Tab, and clicking it brings the memo
+windows back. Turning it off leaves a menu-bar-only app.
+
+### Language
+
+<img src="docs/images/posteight-settings-en.png" alt="Posteight settings, with the language options at the top" width="380">
+
+Posteight reads in Korean or English, and follows your Mac's language until you pick one.
+**Settings → Language** switches every string the app draws itself — the popover, the memo
+controls, the trash, the daily log — with no relaunch; open memo windows change as you click.
+What you typed stays exactly as you typed it: note text, tab names, and titles are yours, not
+translated.
+
+The menus macOS draws itself — File, Edit, Window — still follow the system language.
+
+### Where your notes live
+
+Notes are stored locally in `~/Library/Application Support/Posteight/`. There is no
+account, no sync, and no telemetry. Export is explicit: the daily log copies to the
+clipboard as Markdown. Notion synchronization is not implemented yet.
+
+This is visual privacy, not a security-vault promise. Posteight can reduce accidental
+exposure when you step away or share a screen, but it cannot prevent someone nearby from
+reading content that is currently visible on an unlocked display.
 
 ## Product Direction
 
@@ -16,11 +108,6 @@ Posteight combines the useful parts of both:
 The product is intended for people who work on a Mac in open offices, shared
 workspaces, or screen-sharing-heavy environments. Notes should remain easy for
 the owner to see during work and easy to hide when the situation changes.
-
-This is visual privacy, not a security-vault promise. Posteight can reduce
-accidental exposure when the user steps away or shares a screen, but it cannot
-prevent someone nearby from reading content that is currently visible on an
-unlocked display.
 
 ### Experience Principles
 
@@ -100,49 +187,6 @@ experience will continue to be refined one decision at a time.
 Full collaboration, accounts, cloud sync, AI features, and deep third-party
 integrations are outside the current focus.
 
-## Current Prototype Features
-
-- Multiple independent, floating, resizable memo windows
-- Per-memo flexible tabs that share the available width without horizontal scrolling
-- A matte memo surface with subtle paper grain and hover editing controls
-- Checklists with animated pen strike-through effects
-- Paper colors, pen colors, pen styles, and category stickers
-- Local persistence for note content, position, size, and appearance
-- Trash with restore and permanent-delete actions
-- Per-note "Notion log" toggle
-- Daily work log preview and clipboard export as Markdown
-
-## Install
-
-Posteight requires **macOS 14 (Sonoma) or later** on **Apple silicon**. Intel Macs
-are not supported; `ARCHS` is pinned to `arm64`.
-
-With Homebrew:
-
-```bash
-brew install --cask hmjlon/posteight/posteight
-```
-
-Or download the latest `.dmg` from [Releases](https://github.com/hmjlon/posteight/releases)
-and drag Posteight to Applications.
-
-### First launch
-
-Posteight is not notarized by Apple yet, so macOS blocks it the first time it runs.
-
-1. Open Posteight. macOS shows a warning and refuses to launch it.
-2. Open **System Settings > Privacy & Security**.
-3. Scroll down and click **Open Anyway**.
-
-This is a one-time step per install. From a terminal, the same thing:
-
-```bash
-xattr -dr com.apple.quarantine /Applications/Posteight.app
-```
-
-Notarization needs a paid Apple Developer Program membership. Until that is in
-place, this step is unavoidable for anyone but the person who built the app.
-
 ## Develop with Xcode
 
 Open the app project:
@@ -164,6 +208,9 @@ Run the unit tests:
 ```bash
 swift test
 ```
+
+See [AGENTS.md](AGENTS.md) for the contributor guide: build paths, persistence notes, git
+workflow, and commit message conventions.
 
 ## Releasing
 
@@ -196,15 +243,8 @@ skipped.
 - `Posteight.xcodeproj`: Xcode app target and build settings
 - `Packaging/Info.plist`: macOS bundle metadata
 - `.github/workflows/`: CI and release automation
-
-## Landing Page
-
-The landing page lives in its own repository: [posteight-landing](https://github.com/hmjlon/posteight-landing).
+- `docs/images/`: README screenshots
 
 ## License
 
 Proprietary. See [LICENSE](LICENSE). This is not open source.
-
-## Current Scope
-
-This prototype targets macOS 14 or later and stores notes locally in `~/Library/Application Support/Posteight/`. Notion synchronization is not implemented yet; the current integration surface is Markdown preview and export.
