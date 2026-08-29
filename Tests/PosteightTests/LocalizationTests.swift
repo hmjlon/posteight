@@ -15,6 +15,23 @@ struct LocalizationTests {
         #expect(L("표에 없는 문장", language: .english) == "표에 없는 문장")
     }
 
+    @Test("환경변수가 시스템 언어를 덮어써서 CI 러너를 재현할 수 있다")
+    func systemLanguageOverride() {
+        // 개발 맥이 한국어여도 영어 러너를 흉내낼 수 있어야 한다. 이게 안 되면
+        // 로케일 버그는 푸시하기 전까지 드러나지 않는다.
+        #expect(AppLanguage.systemLanguage(override: "en", preferred: "ko-KR") == .english)
+        #expect(AppLanguage.systemLanguage(override: "ko", preferred: "en-US") == .korean)
+    }
+
+    @Test("덮어쓰기가 없거나 읽을 수 없으면 기계 설정으로 떨어진다")
+    func systemLanguageFallback() {
+        #expect(AppLanguage.systemLanguage(override: nil, preferred: "ko-KR") == .korean)
+        #expect(AppLanguage.systemLanguage(override: nil, preferred: "en-US") == .english)
+        // 알 수 없는 태그는 언어를 강제하지 않고 다음 후보로 넘어간다.
+        #expect(AppLanguage.systemLanguage(override: "zz", preferred: "ko-KR") == .korean)
+        #expect(AppLanguage.systemLanguage(override: nil, preferred: nil) == .english)
+    }
+
     @Test("resolved 는 .system 을 절대 돌려주지 않는다")
     func resolvedIsAlwaysConcrete() {
         for language in AppLanguage.allCases {

@@ -103,6 +103,26 @@ the source language, and the Korean string itself is the lookup key.
 - The menus macOS draws itself (File, Edit, Window) follow the system language and are out of
   reach without bundle-level localization.
 
+### A local green run is not proof
+
+This project is developed on a Korean Mac and CI runs on an English runner. Anything that reads
+the system language behaves differently in the two places, so a locale bug passes locally and
+only fails after a push — that is exactly how `addNote` shipped naming new tabs `Memo 1` on the
+runner and `메모 1` here.
+
+Reproduce the runner before pushing anything that touches language:
+
+```bash
+POSTEIGHT_SYSTEM_LANGUAGE=en swift test
+```
+
+`AppLanguage.resolved` honours that variable in place of `Locale.preferredLanguages`, so the
+whole suite runs as if the machine were English. Run it plain as well — both have to pass.
+
+The variable is a reproduction aid, not a fix. The fix is that nothing outside a view reads the
+current language at all: `PosteightStore` and the model types take `language:` as a parameter
+and default to `.korean`, which is what keeps the test suite deterministic in the first place.
+
 ## Git Workflow
 
 - Commit to `dev` directly. This project does not use per-feature branches.

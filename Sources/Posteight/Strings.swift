@@ -12,7 +12,28 @@ enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
     /// Never `.system` — the concrete language every lookup is answered in.
     var resolved: AppLanguage {
         guard self == .system else { return self }
-        return (Locale.preferredLanguages.first?.hasPrefix("ko") ?? false) ? .korean : .english
+        return Self.systemLanguage(
+            override: ProcessInfo.processInfo.environment[Self.systemLanguageOverride],
+            preferred: Locale.preferredLanguages.first
+        )
+    }
+
+    /// CI runs on an English machine while this project is developed on a Korean one, so a
+    /// locale bug passes locally and only fails after a push. Set this to reproduce the runner:
+    ///
+    ///     POSTEIGHT_SYSTEM_LANGUAGE=en swift test
+    ///
+    static let systemLanguageOverride = "POSTEIGHT_SYSTEM_LANGUAGE"
+
+    /// Pure on purpose. A test that set the real process environment would leak into every other
+    /// test running beside it, so both inputs are passed in instead. An unreadable tag falls
+    /// through to the next candidate rather than forcing a language.
+    static func systemLanguage(override: String?, preferred: String?) -> AppLanguage {
+        for tag in [override, preferred].compactMap(\.self).map({ $0.lowercased() }) {
+            if tag.hasPrefix("ko") { return .korean }
+            if tag.hasPrefix("en") { return .english }
+        }
+        return .english
     }
 
     /// Each option is written in its own language, so the list reads the same whichever one is on.
