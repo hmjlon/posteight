@@ -89,78 +89,11 @@ macOS 가 직접 그리는 메뉴(파일, 편집, 윈도우)는 여전히 시스
 이건 시각적 프라이버시이지 보안 금고가 아니다. 자리를 비우거나 화면을 공유할 때 우연한
 노출을 줄여 주지만, 잠기지 않은 화면에 지금 보이는 내용을 옆사람이 읽는 것까지 막지는 못한다.
 
-## 제품 방향
-
-제품 방향, 경험 원칙, 디자인 방향, 우선순위의 원본은 영어 README 의
-[Product Direction](README.md#product-direction) 이다. 제품 결정이 바뀌면 그쪽을 먼저 고친다.
-
-요약하면 이렇다.
-
-- 종이 포스트잇은 오늘 할 일을 계속 보이게 하지만, 공용 책상 위에서 내용까지 그대로 드러난다.
-  일반적인 할 일 관리 앱은 사적이지만, 다음 행동이 다른 앱 안으로 사라진다.
-  Posteight 는 두 쪽의 쓸모 있는 부분을 합친다.
-- 대상은 개방형 사무실, 공유 업무 공간, 화면 공유가 잦은 환경에서 맥으로 일하는 사람이다.
-- 원칙: 빠르게 놓고, 잊기 어렵게 두고, 쉽게 감추고, 기본은 사적이고, 끝내는 순간은
-  기분 좋고, 안 쓸 때는 조용할 것.
-- 우선순위: 로컬 저장과 창 위치 복원 → 전역 표시/숨김과 회의 모드 → 메뉴 막대 빠른 입력과
-  키보드 중심 조작 → 하루 마감 흐름과 Markdown 내보내기.
-- 협업, 계정, 클라우드 동기화, AI 기능, 깊은 서드파티 연동은 현재 범위 밖이다.
-
-## Xcode 로 개발하기
-
-앱 프로젝트를 연다.
-
-```bash
-xed Posteight.xcodeproj
-```
-
-Xcode 에서 `Posteight` 스킴과 `My Mac` 을 고르고 `Command-R` 로 빌드해 실행한다.
-
-빠른 컴파일 확인만 할 때는 이렇게 한다.
-
-```bash
-swift build
-```
-
-단위 테스트를 돌린다.
-
-```bash
-swift test
-```
-
-빌드 경로, 저장 관련 주의사항, git 흐름, 커밋 메시지 규범은 [AGENTS.md](AGENTS.md) 에 있다.
-
-## 릴리스
-
-릴리스는 손이 아니라 CI 가 만든다. `v*` 태그를 밀면
-[`release.yml`](.github/workflows/release.yml) 이 돌면서 태그에서 버전을 찍고, Release 구성으로
-빌드하고, `.dmg` 를 만들고, 체크섬과 함께 GitHub Releases 에 게시한다.
-
-```bash
-git switch release
-git tag v0.2.0
-git push origin v0.2.0
-```
-
-버전의 유일한 출처는 태그다. `Packaging/Info.plist` 는 `$(MARKETING_VERSION)` 을 읽으므로
-거기에 버전을 직접 박지 않는다.
-
-평소 작업은 `dev` 에서 하고, `release` 는 `dev` 에서 오는 머지만 받는다. 태그는 `release`
-에서 자른다. [`ci.yml`](.github/workflows/ci.yml) 은 `dev` 와 `release` 로의 모든 푸시와
-`release` 로 향하는 모든 PR 에서 `swift test` 와 실제 `.app` 번들 `xcodebuild` 를 돌린다.
-문서만 고친 커밋은 건너뛴다.
-
-로컬에서 한 번 만들어 볼 때는 Xcode 의 `Product > Archive` 도 여전히 쓸 수 있다.
-
-## 저장소 구조
-
-- `Sources/Posteight/`: SwiftUI 뷰, 모델, 로컬 저장
-- `Tests/PosteightTests/`: 스토어와 저장 경로 테스트
-- `Posteight.xcodeproj`: Xcode 앱 타겟과 빌드 설정
-- `Packaging/Info.plist`: macOS 번들 메타데이터
-- `.github/workflows/`: CI 와 릴리스 자동화
-- `docs/images/`: README 스크린샷
-
 ## 라이선스
 
 독점 소프트웨어다. [LICENSE](LICENSE) 를 참고한다. 오픈소스가 아니다.
+
+---
+
+Posteight 를 직접 빌드하거나 동작을 고치려면 [AGENTS.md](AGENTS.md) 에 빌드 경로, 저장 규칙,
+릴리스 절차, 커밋 규범이 있다. 제품과 디자인 방향은 [docs/PRODUCT.md](docs/PRODUCT.md) 가 원본이다.

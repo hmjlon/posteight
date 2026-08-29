@@ -6,10 +6,10 @@ Posteight is a macOS SwiftUI sticky-note checklist app. It keeps today's work vi
 
 ## Product and Design Direction
 
-Before changing product behavior, UX, or visual design, read the `Product Direction`
-section in `README.md`. Treat it as the current source of truth for product positioning,
-experience principles, menu bar behavior, design direction, priorities, and non-goals.
-When those decisions change, update `README.md` in the same change.
+Before changing product behavior, UX, or visual design, read [docs/PRODUCT.md](docs/PRODUCT.md).
+Treat it as the current source of truth for product positioning, experience principles, menu bar
+behavior, design direction, priorities, and non-goals. When those decisions change, update that
+file in the same change.
 
 ## Repository Structure
 
@@ -18,8 +18,11 @@ When those decisions change, update `README.md` in the same change.
 - `Posteight.xcodeproj`: Xcode app target; builds the real `.app` bundle
 - `Package.swift`: Swift Package Manager configuration, for fast command-line builds
 - `Packaging/Info.plist`: macOS app bundle metadata, shared by both build paths
+- `docs/PRODUCT.md`: product and design direction — the source of truth for behaviour decisions
+- `docs/images/`: README screenshots
+- `README.md` / `README.ko.md`: for people installing the app, not for people building it
 
-The landing page is not in this repository. It lives in [posteight-landing](https://github.com/hmjlon/posteight-landing); send web changes there.
+The landing page is not in this repository and does not exist yet; when it does, link it here.
 
 ## Development Commands
 
@@ -51,8 +54,7 @@ Run the tests:
 swift test
 ```
 
-A distributable dmg comes from pushing a `v*` tag on `release`; `.github/workflows/release.yml`
-builds and publishes it. Product > Archive in Xcode still works for a local one-off.
+A distributable dmg comes from pushing a `v*` tag on `release`; see `Releasing` below.
 
 `swift run` still works, but it launches an unbundled binary: `Bundle.main.bundleIdentifier`
 is `nil`, so macOS logs `linkd`/Process Instance Registry XPC failures and window positions
@@ -132,6 +134,30 @@ whole suite runs as if the machine were English. Run it plain as well — both h
 The variable is a reproduction aid, not a fix. The fix is that nothing outside a view reads the
 current language at all: `PosteightStore` and the model types take `language:` as a parameter
 and default to `.korean`, which is what keeps the test suite deterministic in the first place.
+
+## Releasing
+
+Releases are built by CI, not by hand. Pushing a `v*` tag runs
+[`release.yml`](.github/workflows/release.yml), which stamps the version from the
+tag, builds the Release configuration, packages a `.dmg`, and publishes it to
+GitHub Releases with its checksum:
+
+```bash
+git switch release
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+The tag is the only source of truth for the version. `Packaging/Info.plist` reads
+`$(MARKETING_VERSION)`, so never hardcode a version there.
+
+Day-to-day work happens on `dev`; `release` only receives merges from `dev`, and
+tags are cut there. [`ci.yml`](.github/workflows/ci.yml) runs `swift test` for the
+unit tests and `xcodebuild` for the real `.app` bundle, on every push to `dev` or
+`release` and on every pull request into `release`. Documentation-only commits are
+skipped.
+
+`Product > Archive` in Xcode still works for a local one-off build.
 
 ## Git Workflow
 
