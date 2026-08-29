@@ -255,7 +255,13 @@ struct StickerOption: Identifiable {
 }
 
 enum DesignTokens {
-    static let defaultNoteSize = NoteSize(width: 244, height: 292)
+    /// A row spends 102pt on chrome — 26 padding, a 20 checkbox, two 16 buttons, three 8 gaps —
+    /// so the title only gets `width - 102`. Measured at 15pt medium, a typical Korean title
+    /// needs about 230pt of note and an English one up to 304pt: 244 was picked when the app
+    /// only spoke Korean and truncated ordinary English titles at roughly 18 characters.
+    static let defaultNoteSize = NoteSize(width: 310, height: 292)
+    /// Left at 244 on purpose. Raising it would push every saved note wider through `clamped`,
+    /// rewriting a layout the user arranged themselves.
     static let minimumNoteSize = NoteSize(width: 244, height: 220)
     static let maximumNoteSize = NoteSize(width: 430, height: 560)
 
