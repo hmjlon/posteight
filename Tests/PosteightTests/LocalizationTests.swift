@@ -85,6 +85,43 @@ struct LocalizationTests {
         #expect(PosteightStore.compacted([note], language: .korean)[0].tabs[0].name == "메모 1")
     }
 
+    /// 스토어가 `AppSettings.shared` 를 몰래 읽던 시절, 새 탭 이름이 기계의 시스템 언어를
+    /// 따라가서 한국어 맥에서는 통과하고 영어 CI 에서는 깨졌다. 두 언어를 다 못 박는다.
+    @Test @MainActor
+    func newTabNamesFollowTheLanguagePassedIn() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+
+        let store = PosteightStore(directory: directory)
+        let korean = store.addNote(language: .korean)
+        let english = store.addNote(language: .english)
+
+        #expect(try tabNames(store, korean) == ["메모 1"])
+        #expect(try tabNames(store, english) == ["Memo 1"])
+
+        _ = store.addTab(to: korean, language: .korean)
+        _ = store.addTab(to: english, language: .english)
+
+        #expect(try tabNames(store, korean) == ["메모 1", "메모 2"])
+        #expect(try tabNames(store, english) == ["Memo 1", "Memo 2"])
+    }
+
+    /// 언어를 넘기지 않으면 소스 언어인 한국어다. 기존 테스트가 기대는 계약이라, 여기가
+    /// 흔들리면 `PersistenceTests` 전체가 기계 설정을 타기 시작한다.
+    @Test @MainActor
+    func omittingTheLanguageMeansKorean() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+
+        let store = PosteightStore(directory: directory)
+        #expect(try tabNames(store, store.addNote()) == ["메모 1"])
+    }
+
+    @MainActor
+    private func tabNames(_ store: PosteightStore, _ noteID: UUID) throws -> [String] {
+        try #require(store.notes.first { $0.id == noteID }).tabs.map(\.name)
+    }
+
     /// 옛 빌드가 디스크에 쓴 문자열과 비교하는 자리라, 번역되면 마이그레이션이 통째로 끊긴다.
     @Test("레거시 제목 마이그레이션은 언어와 무관하게 동작한다")
     func legacyTitleMigrationIsLanguageIndependent() throws {

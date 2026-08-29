@@ -40,6 +40,7 @@ final class PosteightStore: ObservableObject {
         .appendingPathComponent("Posteight", isDirectory: true)
 
     private let directory: URL
+    private let loadLanguage: AppLanguage
     private let notesURL: URL
     private let trashURL: URL
     private let trashedTabsURL: URL
@@ -47,8 +48,12 @@ final class PosteightStore: ObservableObject {
     private var saveTask: Task<Void, Never>?
 
     /// `directory` is only overridden by tests, so they never touch the real notes on disk.
-    init(directory: URL = PosteightStore.storeDirectory) {
+    /// `language` is what the first load names things in — sample notes and any tab whose name
+    /// has to be filled in. It defaults to the source language so tests do not depend on the
+    /// language of the machine running them.
+    init(directory: URL = PosteightStore.storeDirectory, language: AppLanguage = .korean) {
         self.directory = directory
+        self.loadLanguage = language
         self.notesURL = directory.appendingPathComponent("notes.json")
         self.trashURL = directory.appendingPathComponent("trash.json")
         self.trashedTabsURL = directory.appendingPathComponent("trashed-tabs.json")
@@ -87,7 +92,7 @@ final class PosteightStore: ObservableObject {
     }
 
     @discardableResult
-    func addNote() -> UUID {
+    func addNote(language: AppLanguage = .korean) -> UUID {
         let offset = Double(notes.count % 4) * 34
         let note = StickyNote(
             stickerSymbol: "tag",
@@ -97,8 +102,8 @@ final class PosteightStore: ObservableObject {
             position: NotePoint(x: 270 + offset, y: 240 + offset),
             tabs: [
                 MemoTab(
-                    name: Lf("메모 %d", 1),
-                    title: Self.todayTitle(language: AppSettings.shared.language),
+                    name: Lf("메모 %d", language: language, 1),
+                    title: Self.todayTitle(language: language),
                     items: [TodoItem(title: "")]
                 )
             ]
@@ -150,15 +155,15 @@ final class PosteightStore: ObservableObject {
     }
 
     @discardableResult
-    func addTab(to noteID: UUID) -> UUID? {
+    func addTab(to noteID: UUID, language: AppLanguage = .korean) -> UUID? {
         let tabID = UUID()
         updateNote(noteID) { note in
             let nextNumber = note.tabs.count + 1
             note.tabs.append(
                 MemoTab(
                     id: tabID,
-                    name: Lf("메모 %d", nextNumber),
-                    title: Self.todayTitle(language: AppSettings.shared.language),
+                    name: Lf("메모 %d", language: language, nextNumber),
+                    title: Self.todayTitle(language: language),
                     items: [TodoItem(title: "")]
                 )
             )
@@ -347,8 +352,8 @@ final class PosteightStore: ObservableObject {
         }
     }
 
-    func dailyLogMarkdown(for date: Date = Date()) -> String {
-        Self.dailyLogMarkdown(notes: notes, date: date, language: AppSettings.shared.language)
+    func dailyLogMarkdown(for date: Date = Date(), language: AppLanguage = .korean) -> String {
+        Self.dailyLogMarkdown(notes: notes, date: date, language: language)
     }
 
     nonisolated static func dailyLogMarkdown(
@@ -387,9 +392,9 @@ final class PosteightStore: ObservableObject {
         return lines.joined(separator: "\n")
     }
 
-    func copyDailyLogToClipboard() {
+    func copyDailyLogToClipboard(language: AppLanguage = .korean) {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(dailyLogMarkdown(), forType: .string)
+        NSPasteboard.general.setString(dailyLogMarkdown(language: language), forType: .string)
     }
 
     private func updateNote(_ noteID: UUID, mutate: (inout StickyNote) -> Void) {
@@ -441,11 +446,11 @@ final class PosteightStore: ObservableObject {
             let data = storedData(notesURL, key: storageKey, legacy: legacyStorageKey),
             let decoded = try? JSONDecoder().decode([StickyNote].self, from: data)
         else {
-            notes = Self.sampleNotes(language: AppSettings.shared.language)
+            notes = Self.sampleNotes(language: loadLanguage)
             return
         }
 
-        notes = Self.compacted(decoded, language: AppSettings.shared.language)
+        notes = Self.compacted(decoded, language: loadLanguage)
     }
 
     private func loadTrashedNotes() {
@@ -459,7 +464,7 @@ final class PosteightStore: ObservableObject {
 
         trashedNotes = decoded.map { trashedNote in
             var migrated = trashedNote
-            migrated.note = Self.compacted([trashedNote.note], language: AppSettings.shared.language)[0]
+            migrated.note = Self.compacted([trashedNote.note], language: loadLanguage)[0]
             return migrated
         }
     }

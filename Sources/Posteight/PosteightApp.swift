@@ -66,7 +66,7 @@ final class NoteWindowCoordinator {
 @main
 struct PosteightApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @StateObject private var store = PosteightStore()
+    @StateObject private var store = PosteightStore(language: AppSettings.shared.language)
 
     var body: some Scene {
         MenuBarExtra {
@@ -92,7 +92,7 @@ struct PosteightApp: App {
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button(L("새 메모")) {
-                    store.addNote()
+                    store.addNote(language: AppSettings.shared.language)
                 }
                 .keyboardShortcut("n", modifiers: [.command])
             }

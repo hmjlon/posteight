@@ -14,7 +14,7 @@ struct DailyLogPreviewView: View {
                 Spacer()
 
                 Button {
-                    store.copyDailyLogToClipboard()
+                    store.copyDailyLogToClipboard(language: settings.language)
                 } label: {
                     Label(L("Markdown 복사"), systemImage: "doc.on.doc")
                 }
@@ -33,7 +33,7 @@ struct DailyLogPreviewView: View {
                 .foregroundStyle(.secondary)
 
             ScrollView {
-                Text(store.dailyLogMarkdown())
+                Text(store.dailyLogMarkdown(language: settings.language))
                     .font(.system(size: 13, weight: .regular, design: .monospaced))
                     .foregroundStyle(.primary.opacity(0.82))
                     .frame(maxWidth: .infinity, alignment: .leading)

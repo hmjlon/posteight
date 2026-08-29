@@ -95,7 +95,7 @@ struct StickyNoteWindowView: View {
 
                 Button {
                     commitTabName(note: note)
-                    _ = store.addTab(to: note.id)
+                    _ = store.addTab(to: note.id, language: settings.language)
                 } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 11, weight: .semibold))
