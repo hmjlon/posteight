@@ -74,7 +74,7 @@ struct MenuBarPanelView: View {
             return L("메모 없음")
         }
 
-        return store.remainingCount > 0 ? Lf("%d개 남음", store.remainingCount) : L("모두 완료")
+        return store.remainingCount > 0 ? Lf("%ld개 남음", store.remainingCount) : L("모두 완료")
     }
 
     private func showNote(_ noteID: UUID) {

@@ -79,7 +79,7 @@ private let englishStrings: [String: String] = [
     "설정…": "Settings…",
     "Posteight 종료": "Quit Posteight",
     "메모 없음": "No memos",
-    "%d개 남음": "%d left",
+    "%ld개 남음": "%ld left",
     "모두 완료": "All done",
 
     // Models — pen styles
@@ -113,7 +113,7 @@ private let englishStrings: [String: String] = [
     "이 메모를 휴지통으로 보냅니다": "Moves this memo to the trash",
 
     // PosteightStore — memo tabs and the daily log
-    "메모 %d": "Memo %d",
+    "메모 %ld": "Memo %ld",
     "%@ 업무 기록": "%@ Work Log",
     "Notion 기록에 포함된 메모가 없습니다.": "No memos are included in the Notion log.",
     "완료한 일": "Done",
@@ -158,6 +158,7 @@ private let englishStrings: [String: String] = [
 
     // StickyNoteWindowView
     "이 메모에 새 탭 추가": "Add a tab to this memo",
+    "탭은 이 메모에 최대 5개까지 둘 수 있어요": "A memo holds at most 5 tabs",
     "현재 탭 — 다시 클릭하면 이름을 수정할 수 있어요": "Current tab — click it again to rename",
     "%@ 탭으로 이동": "Switch to %@",
     "이 탭 닫기 — 휴지통에서 복구할 수 있어요": "Close this tab — you can restore it from the trash",
@@ -180,10 +181,10 @@ private let englishStrings: [String: String] = [
     "비우기": "Empty",
     "휴지통이 비어 있어요": "The trash is empty",
     "메모": "Memo",
-    "탭 %d개 · 할 일 %d개": "%d tabs · %d items",
+    "탭 %ld개 · 할 일 %ld개": "%ld tabs · %ld items",
     "복구": "Restore",
     "완전 삭제": "Delete permanently",
-    "탭 · 할 일 %d개": "Tab · %d items"
+    "탭 · 할 일 %ld개": "Tab · %ld items"
 ]
 
 /// The reading language, for pure code that must not reach for `AppSettings`.

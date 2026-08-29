@@ -12,6 +12,9 @@ struct TodoItemRow: View {
     @State private var isEditingText = false
     @State private var isRowHovered = false
     @State private var showDetail = false
+    @State private var measuredTitleWidth: CGFloat = 0
+    /// Bumped on every strike so a stale timer cannot end a newer flourish early.
+    @State private var penGeneration = 0
 
     var body: some View {
         HStack(alignment: .center, spacing: 8) {
@@ -71,7 +74,7 @@ struct TodoItemRow: View {
                 StrikeLine(
                     color: Color(hex: note.penHex),
                     style: note.penStyle,
-                    textWidth: titleWidth,
+                    textWidth: measuredTitleWidth,
                     progress: isStruck ? 1 : 0,
                     showPen: showPen
                 )
@@ -130,6 +133,9 @@ struct TodoItemRow: View {
         .contentShape(Rectangle())
         .onHover { isRowHovered = $0 }
         .animation(.easeOut(duration: 0.12), value: isRowHovered)
+        .onChange(of: currentTitle, initial: true) { _, title in
+            measuredTitleWidth = Self.width(of: title)
+        }
         // Only the travelling pen is a one-off flourish; the line itself follows the item.
         .onChange(of: isStruck) { _, isStruck in
             guard isStruck else {
@@ -138,7 +144,10 @@ struct TodoItemRow: View {
             }
 
             showPen = true
+            penGeneration += 1
+            let generation = penGeneration
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.76) {
+                guard penGeneration == generation else { return }
                 showPen = false
             }
         }
@@ -147,10 +156,15 @@ struct TodoItemRow: View {
     private static let titleFontSize: CGFloat = 15
     private static let titleFontWeight: NSFont.Weight = .medium
 
-    /// The strike stops where the text does, so it is measured in the field's own font.
-    private var titleWidth: CGFloat {
-        let title = store.itemTitle(noteID: note.id, tabID: tab.id, itemID: item.id) ?? item.title
-        let font = NSFont.systemFont(ofSize: Self.titleFontSize, weight: Self.titleFontWeight)
+    private var currentTitle: String {
+        store.itemTitle(noteID: note.id, tabID: tab.id, itemID: item.id) ?? item.title
+    }
+
+    /// The strike stops where the text does, so it is measured in the field's own font. Measured
+    /// on change rather than per render: hovering a row mutates `isRowHovered`, which re-runs the
+    /// body, and laying out a string is not free at one call per row per pointer move.
+    private static func width(of title: String) -> CGFloat {
+        let font = NSFont.systemFont(ofSize: titleFontSize, weight: titleFontWeight)
         return (title as NSString).size(withAttributes: [.font: font]).width
     }
 

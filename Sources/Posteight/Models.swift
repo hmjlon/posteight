@@ -87,7 +87,23 @@ struct StickyNote: Identifiable, Codable, Equatable {
         } else {
             let legacyTitle = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
             let legacyItems = try container.decodeIfPresent([TodoItem].self, forKey: .items) ?? []
-            tabs = [MemoTab(name: "메모 1", title: legacyTitle, items: legacyItems)]
+            // The pre-tab model kept the note's name in `label`, so a rename carries over
+            // instead of being dropped. Every old note also got an automatic "Posteight N" from
+            // `addNote`, though, and importing those would dress machine-generated numbering up
+            // as something the user chose — so only a label they actually changed survives.
+            let legacyLabel = try container.decodeIfPresent(String.self, forKey: .label)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let wasRenamed = legacyLabel.map { label in
+                !label.isEmpty
+                    && label.range(of: "^Posteight [0-9]+$", options: .regularExpression) == nil
+            } ?? false
+            tabs = [
+                MemoTab(
+                    name: wasRenamed ? legacyLabel! : "메모 1",
+                    title: legacyTitle,
+                    items: legacyItems
+                )
+            ]
         }
 
         let decodedSelection = try container.decodeIfPresent(UUID.self, forKey: .selectedTabID)
@@ -148,6 +164,9 @@ struct TrashedMemoTab: Identifiable, Codable, Equatable {
     var paperHex: String
     var penHex: String
     var stickerSymbol: String
+    /// Optional so trash written before this field existed still decodes — dropping it would
+    /// empty the tab trash on the first launch after an upgrade.
+    var includeInNotionLog: Bool?
     var deletedAt: Date
 }
 

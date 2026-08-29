@@ -104,6 +104,32 @@ struct MemoTabMigrationTests {
         #expect(tab.items.map(\.title) == ["이전 할 일"])
     }
 
+    private struct RenamedLegacyNote: Encodable {
+        let id = UUID()
+        let title = "이전 내용"
+        let stickerSymbol = "tag"
+        let paperHex = "#FADDE5"
+        let penHex = "#B84A62"
+        let penStyle = PenStyle.ballpoint
+        let includeInNotionLog = false
+        let position = NotePoint(x: 10, y: 20)
+        let size = DesignTokens.defaultNoteSize
+        let items = [TodoItem(title: "이전 할 일")]
+        let label: String
+    }
+
+    /// 자동으로 붙던 "Posteight N" 은 버리고, 사용자가 직접 바꾼 이름만 탭 이름으로 넘어온다.
+    @Test("이름을 바꿨던 레거시 메모는 그 이름을 탭에 유지한다")
+    func keepsRenamedLegacyLabel() throws {
+        let data = try JSONEncoder().encode(RenamedLegacyNote(label: "업무"))
+        let migrated = try JSONDecoder().decode(StickyNote.self, from: data)
+        #expect(try firstTab(migrated).name == "업무")
+
+        let generated = try JSONEncoder().encode(RenamedLegacyNote(label: "Posteight 12"))
+        let fromGenerated = try JSONDecoder().decode(StickyNote.self, from: generated)
+        #expect(try firstTab(fromGenerated).name == "메모 1")
+    }
+
     @Test("Blank tab names receive a local default name")
     func fillsBlankTabName() throws {
         let migrated = PosteightStore.compacted([note(tabName: "   ")])
@@ -146,8 +172,8 @@ struct DailyLogTests {
             ],
             date: date
         )
-        #expect(markdown.contains("## 포함"))
-        #expect(!markdown.contains("## 제외"))
+        #expect(markdown.contains("## 메모 1 · 포함"))
+        #expect(!markdown.contains("· 제외"))
     }
 
     @Test("Done and pending items are split under their tab")
@@ -159,8 +185,8 @@ struct DailyLogTests {
             ])],
             date: date
         )
-        let done = try #require(markdown.range(of: "### 메모 1 · 완료한 일"))
-        let pending = try #require(markdown.range(of: "### 메모 1 · 남은 일"))
+        let done = try #require(markdown.range(of: "### 완료한 일"))
+        let pending = try #require(markdown.range(of: "### 남은 일"))
         #expect(markdown.range(of: "- 끝난 일")!.lowerBound > done.lowerBound)
         #expect(markdown.range(of: "- 끝난 일")!.lowerBound < pending.lowerBound)
         #expect(markdown.range(of: "- 남은 일")!.lowerBound > pending.lowerBound)
@@ -172,7 +198,31 @@ struct DailyLogTests {
             notes: [note(items: [TodoItem(title: "남은 일")])],
             date: date
         )
-        #expect(markdown.contains("### 메모 1 · 완료한 일\n- 없음"))
+        #expect(markdown.contains("### 완료한 일\n- 없음"))
+    }
+
+    /// 탭 제목은 만든 날짜라 같은 날 만든 탭끼리 똑같다. 제목만 H2 로 쓰면 같은 헤딩이
+    /// 여러 번 나와 문서 개요가 무너진다.
+    @Test("탭이 여럿이어도 같은 헤딩이 반복되지 않는다")
+    func headingsStayDistinctAcrossTabs() throws {
+        let shared = "26.08.29(토)"
+        let memo = StickyNote(
+            stickerSymbol: "tag",
+            paperHex: "#FFFFFF",
+            penHex: "#000000",
+            includeInNotionLog: true,
+            position: NotePoint(x: 0, y: 0),
+            tabs: [
+                MemoTab(name: "메모 1", title: shared, items: [TodoItem(title: "가")]),
+                MemoTab(name: "메모 2", title: shared, items: [TodoItem(title: "나")])
+            ]
+        )
+
+        let markdown = PosteightStore.dailyLogMarkdown(notes: [memo], date: date)
+        let headings = markdown.split(separator: "\n").filter { $0.hasPrefix("## ") }
+
+        #expect(headings.count == 2)
+        #expect(Set(headings).count == 2, "같은 H2 가 반복된다: \(headings)")
     }
 
     @Test("A detail stays in the app and never reaches the log")

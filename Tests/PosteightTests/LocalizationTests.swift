@@ -48,7 +48,7 @@ struct LocalizationTests {
         }
     }
 
-    /// `%d`/`%@` 자리 개수가 어긋나면 `String(format:)` 이 조용히 쓰레기를 낸다.
+    /// `%ld`/`%@` 자리 개수가 어긋나면 `String(format:)` 이 조용히 쓰레기를 낸다.
     @Test("서식 문자열의 자리표시자 개수가 두 언어에서 같다")
     func formatSpecifiersMatch() {
         for key in StringTable.englishKeys where key.contains("%") {
@@ -62,9 +62,9 @@ struct LocalizationTests {
 
     @Test("서식 헬퍼가 두 언어에서 값을 채운다")
     func formatting() {
-        #expect(Lf("메모 %d", language: .korean, 3) == "메모 3")
-        #expect(Lf("메모 %d", language: .english, 3) == "Memo 3")
-        #expect(Lf("탭 %d개 · 할 일 %d개", language: .english, 2, 5) == "2 tabs · 5 items")
+        #expect(Lf("메모 %ld", language: .korean, 3) == "메모 3")
+        #expect(Lf("메모 %ld", language: .english, 3) == "Memo 3")
+        #expect(Lf("탭 %ld개 · 할 일 %ld개", language: .english, 2, 5) == "2 tabs · 5 items")
     }
 
     @Test("일일 기록이 영어로 나온다")
@@ -82,8 +82,9 @@ struct LocalizationTests {
         let markdown = PosteightStore.dailyLogMarkdown(notes: notes, language: .english)
 
         #expect(markdown.contains("Work Log"))
-        #expect(markdown.contains("### Memo 1 · Done"))
-        #expect(markdown.contains("### Memo 1 · Remaining"))
+        #expect(markdown.contains("## Memo 1 · Today"))
+        #expect(markdown.contains("### Done"))
+        #expect(markdown.contains("### Remaining"))
         #expect(markdown.contains("- None"))
     }
 

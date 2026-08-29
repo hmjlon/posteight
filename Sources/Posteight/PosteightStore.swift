@@ -102,7 +102,7 @@ final class PosteightStore: ObservableObject {
             position: NotePoint(x: 270 + offset, y: 240 + offset),
             tabs: [
                 MemoTab(
-                    name: Lf("메모 %d", language: language, 1),
+                    name: Lf("메모 %ld", language: language, 1),
                     title: Self.todayTitle(language: language),
                     items: [TodoItem(title: "")]
                 )
@@ -156,13 +156,18 @@ final class PosteightStore: ObservableObject {
 
     @discardableResult
     func addTab(to noteID: UUID, language: AppLanguage = .korean) -> UUID? {
+        // The tab strip divides a fixed width and never scrolls, so past this count a tab would
+        // be clipped out of reach — selectable by nothing, closable by nothing.
+        guard let note = notes.first(where: { $0.id == noteID }),
+              note.tabs.count < MemoSurfaceMetrics.maximumTabCount else { return nil }
+
         let tabID = UUID()
         updateNote(noteID) { note in
             let nextNumber = note.tabs.count + 1
             note.tabs.append(
                 MemoTab(
                     id: tabID,
-                    name: Lf("메모 %d", language: language, nextNumber),
+                    name: Lf("메모 %ld", language: language, nextNumber),
                     title: Self.todayTitle(language: language),
                     items: [TodoItem(title: "")]
                 )
@@ -209,6 +214,7 @@ final class PosteightStore: ObservableObject {
                 paperHex: note.paperHex,
                 penHex: note.penHex,
                 stickerSymbol: note.stickerSymbol,
+                includeInNotionLog: note.includeInNotionLog,
                 deletedAt: Date()
             ),
             at: 0
@@ -232,7 +238,7 @@ final class PosteightStore: ObservableObject {
                     stickerSymbol: trashed.stickerSymbol,
                     paperHex: trashed.paperHex,
                     penHex: trashed.penHex,
-                    includeInNotionLog: false,
+                    includeInNotionLog: trashed.includeInNotionLog ?? false,
                     position: NotePoint(x: 270 + offset, y: 240 + offset),
                     tabs: [trashed.tab]
                 )
@@ -299,10 +305,10 @@ final class PosteightStore: ObservableObject {
     @discardableResult
     func addItem(to noteID: UUID, tabID: UUID) -> UUID? {
         let itemID = UUID()
-        updateTab(noteID: noteID, tabID: tabID) { tab in
+        let didAdd = updateTab(noteID: noteID, tabID: tabID) { tab in
             tab.items.append(TodoItem(id: itemID, title: ""))
         }
-        return itemTitle(noteID: noteID, tabID: tabID, itemID: itemID) == nil ? nil : itemID
+        return didAdd ? itemID : nil
     }
 
     func updateItemTitle(noteID: UUID, tabID: UUID, itemID: UUID, title: String) {
@@ -372,18 +378,19 @@ final class PosteightStore: ObservableObject {
             return lines.joined(separator: "\n")
         }
 
+        let none = "- " + L("없음", language: language)
+
         for note in logNotes {
             for tab in note.tabs {
                 let doneItems = tab.items.filter(\.isDone)
                 let pendingItems = tab.items.filter { !$0.isDone }
 
-                lines.append("## \(tab.title)")
+                lines.append("## \(tab.name) · \(tab.title)")
                 lines.append("")
-                let none = "- " + L("없음", language: language)
-                lines.append("### \(tab.name) · " + L("완료한 일", language: language))
+                lines.append("### " + L("완료한 일", language: language))
                 lines.append(contentsOf: doneItems.isEmpty ? [none] : doneItems.map { "- \($0.title)" })
                 lines.append("")
-                lines.append("### \(tab.name) · " + L("남은 일", language: language))
+                lines.append("### " + L("남은 일", language: language))
                 lines.append(contentsOf: pendingItems.isEmpty ? [none] : pendingItems.map { "- \($0.title)" })
                 lines.append("")
             }
@@ -407,11 +414,17 @@ final class PosteightStore: ObservableObject {
             .tabs.first { $0.id == tabID }
     }
 
-    private func updateTab(noteID: UUID, tabID: UUID, mutate: (inout MemoTab) -> Void) {
+    /// Returns whether the tab was found, so callers do not have to read the store back to
+    /// find out whether their own write landed.
+    @discardableResult
+    private func updateTab(noteID: UUID, tabID: UUID, mutate: (inout MemoTab) -> Void) -> Bool {
+        var didUpdate = false
         updateNote(noteID) { note in
             guard let index = note.tabs.firstIndex(where: { $0.id == tabID }) else { return }
+            didUpdate = true
             mutate(&note.tabs[index])
         }
+        return didUpdate
     }
 
     private func updateItem(
@@ -525,7 +538,7 @@ final class PosteightStore: ObservableObject {
 
             for tabIndex in compactNote.tabs.indices {
                 if compactNote.tabs[tabIndex].name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    compactNote.tabs[tabIndex].name = Lf("메모 %d", language: language, tabIndex + 1)
+                    compactNote.tabs[tabIndex].name = Lf("메모 %ld", language: language, tabIndex + 1)
                 }
 
                 // Older builds let blank rows be checked off; those completions are phantoms.
@@ -547,8 +560,9 @@ final class PosteightStore: ObservableObject {
                 }
             }
 
-            if !compactNote.tabs.contains(where: { $0.id == compactNote.selectedTabID }) {
-                compactNote.selectedTabID = compactNote.tabs[0].id
+            if let firstTab = compactNote.tabs.first,
+               !compactNote.tabs.contains(where: { $0.id == compactNote.selectedTabID }) {
+                compactNote.selectedTabID = firstTab.id
             }
             return compactNote
         }
@@ -573,7 +587,7 @@ final class PosteightStore: ObservableObject {
             position: NotePoint(x: 260, y: 260),
             tabs: [
                 MemoTab(
-                    name: Lf("메모 %d", language: language, 1),
+                    name: Lf("메모 %ld", language: language, 1),
                     title: L("오늘 업무", language: language),
                     items: [
                         TodoItem(title: L("메모 앱 첫 화면 만들기", language: language)),
@@ -596,7 +610,7 @@ final class PosteightStore: ObservableObject {
             position: NotePoint(x: 590, y: 300),
             tabs: [
                 MemoTab(
-                    name: Lf("메모 %d", language: language, 1),
+                    name: Lf("메모 %ld", language: language, 1),
                     title: L("개인 메모", language: language),
                     items: [
                         TodoItem(title: L("점심 메뉴 정하기", language: language)),

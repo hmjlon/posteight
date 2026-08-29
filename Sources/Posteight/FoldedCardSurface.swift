@@ -6,10 +6,13 @@ enum MemoSurfaceMetrics {
     static let activeTabHeight: CGFloat = 32
     static let inactiveTabHeight: CGFloat = 27
     static let maximumTabWidth: CGFloat = 180
-    /// Below this, the sticker and its drag handle no longer fit (`showsSticker` needs 54pt) —
-    /// so equal division stops shrinking tabs here instead of squeezing them into unreadable
-    /// slivers, and the tab strip clips whatever no longer fits rather than distorting it.
-    static let minimumTabWidth: CGFloat = 56
+    /// Equal division stops shrinking here. The floor is low enough that `maximumTabCount`
+    /// tabs still fit inside the narrowest memo (244 − 56 − 30 = 158pt of strip), because a tab
+    /// the strip clips away is one nothing can select and nothing can close — the sticker drops
+    /// out below 54pt and the name truncates, which is recoverable, but disappearing is not.
+    static let minimumTabWidth: CGFloat = 30
+    /// Chosen against the narrowest memo: 158 / 5 ≈ 31pt, just above `minimumTabWidth`.
+    static let maximumTabCount = 5
     static let addTabButtonWidth: CGFloat = 30
     static let trailingControlsWidth: CGFloat = 56
     static let tabCornerRadius: CGFloat = 8

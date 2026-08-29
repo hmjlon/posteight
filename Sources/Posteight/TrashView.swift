@@ -99,7 +99,7 @@ private struct TrashNoteRow: View {
                     .font(.system(size: 14, weight: .bold, design: .rounded))
                     .lineLimit(1)
 
-                Text(Lf("탭 %d개 · 할 일 %d개", trashedNote.note.tabs.count, trashedNote.note.allItems.count))
+                Text(Lf("탭 %ld개 · 할 일 %ld개", trashedNote.note.tabs.count, trashedNote.note.allItems.count))
                     .font(.system(size: 11, weight: .medium, design: .rounded))
                     .foregroundStyle(.secondary)
             }
@@ -152,7 +152,7 @@ private struct TrashTabRow: View {
                     .font(.system(size: 14, weight: .bold, design: .rounded))
                     .lineLimit(1)
 
-                Text(Lf("탭 · 할 일 %d개", trashedTab.tab.items.count))
+                Text(Lf("탭 · 할 일 %ld개", trashedTab.tab.items.count))
                     .font(.system(size: 11, weight: .medium, design: .rounded))
                     .foregroundStyle(.secondary)
             }

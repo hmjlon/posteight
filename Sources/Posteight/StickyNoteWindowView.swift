@@ -14,7 +14,6 @@ struct StickyNoteWindowView: View {
     @State private var isPencilCaseOpen = false
     @State private var isCardHovered = false
     @State private var editingTabID: UUID?
-    @State private var tabNameDraft = ""
     @State private var hoveredTabID: UUID?
 
     var body: some View {
@@ -93,8 +92,10 @@ struct StickyNoteWindowView: View {
                 memoTabs(note: note, selectedTab: selectedTab, availableWidth: availableTabWidth)
                     .frame(width: availableTabWidth)
 
+                let canAddTab = note.tabs.count < MemoSurfaceMetrics.maximumTabCount
+
                 Button {
-                    commitTabName(note: note)
+                    editingTabID = nil
                     _ = store.addTab(to: note.id, language: settings.language)
                 } label: {
                     Image(systemName: "plus")
@@ -103,8 +104,9 @@ struct StickyNoteWindowView: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(Color.black.opacity(0.48))
-                .help(L("이 메모에 새 탭 추가"))
+                .disabled(!canAddTab)
+                .foregroundStyle(Color.black.opacity(canAddTab ? 0.48 : 0.18))
+                .help(canAddTab ? L("이 메모에 새 탭 추가") : L("탭은 이 메모에 최대 5개까지 둘 수 있어요"))
                 .padding(.bottom, 3)
 
                 tabBarControls
@@ -166,8 +168,15 @@ struct StickyNoteWindowView: View {
                     memoTabSurface(note, isSelected: true)
 
                     if editingTabID == tab.id {
+                        // Bound straight to the store, the way an item title is. A local draft
+                        // loses the edit whenever the commit is triggered by another control:
+                        // AppKit resigns first responder on mouseDown and the field's write is
+                        // deferred one hop, so the button's action would read a stale draft.
                         PlainEditableTextField(
-                            text: $tabNameDraft,
+                            text: Binding(
+                                get: { store.tabName(noteID: note.id, tabID: tab.id) ?? tab.name },
+                                set: { store.updateTabName(noteID: note.id, tabID: tab.id, name: $0) }
+                            ),
                             placeholder: tab.name,
                             fontSize: 10,
                             fontWeight: .semibold,
@@ -175,11 +184,11 @@ struct StickyNoteWindowView: View {
                             isFocused: true,
                             onEditingChanged: { isEditing in
                                 if !isEditing, editingTabID == tab.id {
-                                    commitTabName(note: note)
+                                    editingTabID = nil
                                 }
                             },
                             onSubmit: {
-                                commitTabName(note: note)
+                                editingTabID = nil
                             }
                         )
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -215,7 +224,7 @@ struct StickyNoteWindowView: View {
         } else {
             ZStack(alignment: .trailing) {
                 Button {
-                    commitTabName(note: note)
+                    editingTabID = nil
                     withAnimation(.easeOut(duration: 0.16)) {
                         store.selectTab(noteID: note.id, tabID: tab.id)
                     }
@@ -256,7 +265,11 @@ struct StickyNoteWindowView: View {
     }
 
     private func tabCloseButton(note: StickyNote, tab: MemoTab) -> some View {
-        Button {
+        // The last tab has nowhere to go — closing it hides the card instead of trashing
+        // anything, so it must not promise the trash.
+        let isLastTab = note.tabs.count <= 1
+
+        return Button {
             closeTab(note: note, tab: tab)
         } label: {
             Image(systemName: "xmark")
@@ -266,7 +279,9 @@ struct StickyNoteWindowView: View {
         }
         .buttonStyle(.plain)
         .foregroundStyle(Color(hex: note.penHex).opacity(0.6))
-        .help(L("이 탭 닫기 — 휴지통에서 복구할 수 있어요"))
+        .help(isLastTab
+            ? L("닫기 — 메모는 그대로 있어요")
+            : L("이 탭 닫기 — 휴지통에서 복구할 수 있어요"))
     }
 
     private func tabLabel(
@@ -316,14 +331,6 @@ struct StickyNoteWindowView: View {
 
     private func beginEditing(_ tab: MemoTab) {
         editingTabID = tab.id
-        tabNameDraft = tab.name
-    }
-
-    private func commitTabName(note: StickyNote) {
-        guard let editingTabID else { return }
-        store.updateTabName(noteID: note.id, tabID: editingTabID, name: tabNameDraft)
-        self.editingTabID = nil
-        tabNameDraft = ""
     }
 
     private var tabBarControls: some View {
