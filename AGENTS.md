@@ -92,11 +92,19 @@ the source language, and the Korean string itself is the lookup key.
 - `Tests/PosteightTests/LocalizationTests.swift` checks that every entry is non-empty, differs
   from its key, and keeps the same `%d`/`%@` count in both languages. It cannot see a string you
   never added to the table, so the entry is on you.
-- Pure and `nonisolated` code takes `language: AppLanguage` as a parameter and defaults to
-  `.korean`. Do not read `AppSettings.shared` from inside a SwiftUI view builder: the dependency
-  is invisible to SwiftUI, and the view keeps the language it was first drawn in. Pass
-  `settings.language` in instead — that is what `title(in:)` on `PenStyle`, `MenuBarCountStyle`,
-  `StickerOption`, and `AppLanguage` is for.
+- Pure and `nonisolated` code — `PosteightStore`, the model types, anything static — takes
+  `language: AppLanguage` as a parameter and defaults to `.korean`. It must never reach for
+  `AppSettings.shared`; that is what made `addNote` name new tabs after the machine's system
+  language instead of the app's setting.
+- Views may call the `@MainActor` `L(_:)`, which does read `AppSettings.shared`. That only works
+  because **every window's root view holds `@ObservedObject var settings = AppSettings.shared`**
+  — `MenuBarPanelView`, `StickyNoteWindowView`, `TrashView`, `DailyLogPreviewView`,
+  `PencilCaseView`, `SettingsView`, `MenuBarLabel`. A new root that forgets it keeps the language
+  it was first drawn in. Child views inherit the rebuild from their root and need nothing.
+- A value SwiftUI has to diff — a `Picker` option label, anything inside a `ForEach` — takes the
+  language explicitly through `title(in:)` on `PenStyle`, `MenuBarCountStyle`, `StickerOption`,
+  or `AppLanguage`. Reading the singleton there is invisible to SwiftUI and the label sticks at
+  whatever it was first built with.
 - Never localize a string that is compared against saved data. `"새 포스트잇"` in
   `PosteightStore.compacted` is what older builds actually wrote to disk; translating it breaks
   the migration. Note text, tab names, and titles are the user's own words and stay as typed.

@@ -7,7 +7,7 @@ Posteight 는 오늘 할 일을 바탕화면에 꺼내 둔다. 작업이 실제�
 
 [English](README.md) · 한국어
 
-![바탕화면에 떠 있는 Posteight 메모들](docs/images/posteight-desktop-ko.png)
+![바탕화면에 떠 있는 Posteight 메모들](docs/images/posteight-desktop-ko.jpg)
 
 ## 설치
 

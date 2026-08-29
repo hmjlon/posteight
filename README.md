@@ -7,7 +7,7 @@ put where the work actually happens — and hide when someone walks over.
 
 English · [한국어](README.ko.md)
 
-![Posteight notes floating on the macOS desktop](docs/images/posteight-desktop-en.png)
+![Posteight notes floating on the macOS desktop](docs/images/posteight-desktop-en.jpg)
 
 ## Install
 
