@@ -4,6 +4,15 @@
 <dict>
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
+    <!-- The File/Edit/Window menus are drawn by AppKit, not by Posteight, so they follow the
+         bundle's declared localizations against the system language — never the in-app language
+         setting. Without this list the app is English-only and a Korean Mac still gets English
+         menus above a Korean UI. -->
+    <key>CFBundleLocalizations</key>
+    <array>
+        <string>en</string>
+        <string>ko</string>
+    </array>
     <key>CFBundleDisplayName</key>
     <string>Posteight</string>
     <key>CFBundleExecutable</key>

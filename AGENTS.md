@@ -108,8 +108,10 @@ the source language, and the Korean string itself is the lookup key.
 - Never localize a string that is compared against saved data. `"새 포스트잇"` in
   `PosteightStore.compacted` is what older builds actually wrote to disk; translating it breaks
   the migration. Note text, tab names, and titles are the user's own words and stay as typed.
-- The menus macOS draws itself (File, Edit, Window) follow the system language and are out of
-  reach without bundle-level localization.
+- The menus macOS draws itself (File, Edit, Window) are AppKit's, not Posteight's. They follow
+  the system language against `CFBundleLocalizations` in `Packaging/Info.plist`, which lists
+  `en` and `ko` — drop a language from that list and its menus fall back to English. They can
+  never follow the in-app setting, because AppKit picks them once at launch.
 
 ### A local green run is not proof
 
