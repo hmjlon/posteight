@@ -53,8 +53,8 @@ to come.
 The selected visual foundation is **Tabbed Memo**: every independent memo window
 has one warm, matte surface under its own compact macOS-style tab bar. A memo owns
 its position, size, colour, appearance, tabs, and selected tab. Each tab owns its
-editable name, content title, and checklist; the selected tab and memo body read
-as one continuous surface.
+editable name, icon, content title, and checklist; the selected tab and memo body
+read as one continuous surface.
 
 - Give the tab bar its own consistent height and layout instead of floating small
   indexes over the memo.

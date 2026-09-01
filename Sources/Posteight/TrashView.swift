@@ -84,7 +84,7 @@ private struct TrashNoteRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: trashedNote.note.stickerSymbol)
+            Image(systemName: trashedNote.note.selectedTab?.stickerSymbol ?? "tag")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(Color(hex: trashedNote.note.penHex))
                 .frame(width: 32, height: 32)
@@ -137,7 +137,9 @@ private struct TrashTabRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: trashedTab.stickerSymbol)
+            Image(systemName: trashedTab.tab.stickerSymbol.isEmpty
+                ? trashedTab.stickerSymbol
+                : trashedTab.tab.stickerSymbol)
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(Color(hex: trashedTab.penHex))
                 .frame(width: 32, height: 32)

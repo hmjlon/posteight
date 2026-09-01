@@ -100,7 +100,7 @@ struct TodoItemRow: View {
                 DetailEditor(
                     text: store.itemDetail(noteID: note.id, tabID: tab.id, itemID: item.id) ?? "",
                     title: store.itemTitle(noteID: note.id, tabID: tab.id, itemID: item.id) ?? item.title,
-                    symbol: note.stickerSymbol,
+                    symbol: tab.stickerSymbol,
                     paperColor: Color(hex: note.paperHex),
                     inkColor: Color(hex: note.penHex),
                     onEdit: {

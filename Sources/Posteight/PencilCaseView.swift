@@ -80,33 +80,39 @@ struct PencilCaseView: View {
             .pickerStyle(.segmented)
             .font(.system(size: 11, weight: .semibold, design: .rounded))
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text(L("스티커"))
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .foregroundStyle(.black.opacity(0.48))
+            if let selectedTab = note.selectedTab {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(L("탭 아이콘"))
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .foregroundStyle(.black.opacity(0.48))
 
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 26, maximum: 34), spacing: 5)], spacing: 5) {
-                    ForEach(DesignTokens.stickers) { sticker in
-                        Button {
-                            store.updateSticker(note.id, symbol: sticker.symbol)
-                        } label: {
-                            Image(systemName: sticker.symbol)
-                                .font(.system(size: 12, weight: .semibold))
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 22)
-                                .overlay {
-                                    Rectangle()
-                                        .stroke(
-                                            sticker.symbol == note.stickerSymbol
-                                                ? Color(hex: note.penHex).opacity(0.58)
-                                                : .black.opacity(0.06),
-                                            lineWidth: 1
-                                        )
-                                }
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 26, maximum: 34), spacing: 5)], spacing: 5) {
+                        ForEach(DesignTokens.stickers) { sticker in
+                            Button {
+                                store.updateTabSticker(
+                                    noteID: note.id,
+                                    tabID: selectedTab.id,
+                                    symbol: sticker.symbol
+                                )
+                            } label: {
+                                Image(systemName: sticker.symbol)
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 22)
+                                    .overlay {
+                                        Rectangle()
+                                            .stroke(
+                                                sticker.symbol == selectedTab.stickerSymbol
+                                                    ? Color(hex: note.penHex).opacity(0.58)
+                                                    : .black.opacity(0.06),
+                                                lineWidth: 1
+                                            )
+                                    }
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(Color(hex: note.penHex).opacity(0.86))
+                            .help(sticker.title(in: settings.language))
                         }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(Color(hex: note.penHex).opacity(0.86))
-                        .help(sticker.title(in: settings.language))
                     }
                 }
             }

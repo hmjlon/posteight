@@ -78,6 +78,36 @@ struct LegacyTitleTests {
 
 @Suite("Memo tab migration")
 struct MemoTabMigrationTests {
+    private struct TabWithoutSticker: Encodable {
+        let id: UUID
+        let name: String
+        let title: String
+        let items: [TodoItem]
+    }
+
+    private struct NoteBeforePerTabStickers: Encodable {
+        let id = UUID()
+        let stickerSymbol = "briefcase"
+        let paperHex = "#FADDE5"
+        let penHex = "#B84A62"
+        let penStyle = PenStyle.ballpoint
+        let includeInNotionLog = false
+        let position = NotePoint(x: 10, y: 20)
+        let size = DesignTokens.defaultNoteSize
+        let tabs: [TabWithoutSticker]
+        let selectedTabID: UUID
+
+        init() {
+            let firstID = UUID()
+            let secondID = UUID()
+            tabs = [
+                TabWithoutSticker(id: firstID, name: "회사", title: "업무", items: []),
+                TabWithoutSticker(id: secondID, name: "개인", title: "생활", items: [])
+            ]
+            selectedTabID = firstID
+        }
+    }
+
     private struct LegacyStickyNote: Encodable {
         let id = UUID()
         let title = "이전 내용"
@@ -134,6 +164,14 @@ struct MemoTabMigrationTests {
     func fillsBlankTabName() throws {
         let migrated = PosteightStore.compacted([note(tabName: "   ")])
         #expect(try firstTab(migrated[0]).name == "메모 1")
+    }
+
+    @Test("기존 메모 아이콘을 각 탭의 아이콘으로 이전한다")
+    func migratesNoteStickerIntoEveryTab() throws {
+        let data = try JSONEncoder().encode(NoteBeforePerTabStickers())
+        let migrated = try JSONDecoder().decode(StickyNote.self, from: data)
+
+        #expect(migrated.tabs.map(\.stickerSymbol) == ["briefcase", "briefcase"])
     }
 }
 

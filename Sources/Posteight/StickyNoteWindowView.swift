@@ -294,7 +294,7 @@ struct StickyNoteWindowView: View {
         HStack(spacing: showsSticker ? 6 : 0) {
             if showsSticker {
                 ZStack {
-                    Image(systemName: note.stickerSymbol)
+                    Image(systemName: tab.stickerSymbol)
                         .font(.system(size: isSelected ? 10 : 9, weight: .semibold))
 
                     if isSelected {

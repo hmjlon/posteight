@@ -3,7 +3,6 @@ import SwiftUI
 
 struct StickyNote: Identifiable, Codable, Equatable {
     var id: UUID
-    var stickerSymbol: String
     var paperHex: String
     var penHex: String
     var penStyle: PenStyle
@@ -28,20 +27,26 @@ struct StickyNote: Identifiable, Codable, Equatable {
         let safeTabs = tabs.isEmpty
             ? [MemoTab(name: "메모 1", title: "", items: [TodoItem(title: "")])]  // 손상된 데이터 복구용 기본값
             : tabs
+        let normalizedTabs = safeTabs.map { tab in
+            var tab = tab
+            if tab.stickerSymbol.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                tab.stickerSymbol = stickerSymbol
+            }
+            return tab
+        }
 
         self.id = id
-        self.stickerSymbol = stickerSymbol
         self.paperHex = paperHex
         self.penHex = penHex
         self.penStyle = penStyle
         self.includeInNotionLog = includeInNotionLog
         self.position = position
         self.size = size
-        self.tabs = safeTabs
-        if let selectedTabID, safeTabs.contains(where: { $0.id == selectedTabID }) {
+        self.tabs = normalizedTabs
+        if let selectedTabID, normalizedTabs.contains(where: { $0.id == selectedTabID }) {
             self.selectedTabID = selectedTabID
         } else {
-            self.selectedTabID = safeTabs[0].id
+            self.selectedTabID = normalizedTabs[0].id
         }
     }
 
@@ -73,7 +78,7 @@ struct StickyNote: Identifiable, Codable, Equatable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
-        stickerSymbol = try container.decode(String.self, forKey: .stickerSymbol)
+        let legacyStickerSymbol = try container.decodeIfPresent(String.self, forKey: .stickerSymbol) ?? "tag"
         paperHex = try container.decode(String.self, forKey: .paperHex)
         penHex = try container.decode(String.self, forKey: .penHex)
         penStyle = try container.decodeIfPresent(PenStyle.self, forKey: .penStyle) ?? .ballpoint
@@ -83,7 +88,13 @@ struct StickyNote: Identifiable, Codable, Equatable {
 
         if let decodedTabs = try container.decodeIfPresent([MemoTab].self, forKey: .tabs),
            !decodedTabs.isEmpty {
-            tabs = decodedTabs
+            tabs = decodedTabs.map { tab in
+                var tab = tab
+                if tab.stickerSymbol.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    tab.stickerSymbol = legacyStickerSymbol
+                }
+                return tab
+            }
         } else {
             let legacyTitle = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
             let legacyItems = try container.decodeIfPresent([TodoItem].self, forKey: .items) ?? []
@@ -101,6 +112,7 @@ struct StickyNote: Identifiable, Codable, Equatable {
                 MemoTab(
                     name: wasRenamed ? legacyLabel! : "메모 1",
                     title: legacyTitle,
+                    stickerSymbol: legacyStickerSymbol,
                     items: legacyItems
                 )
             ]
@@ -117,7 +129,9 @@ struct StickyNote: Identifiable, Codable, Equatable {
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
-        try container.encode(stickerSymbol, forKey: .stickerSymbol)
+        // Older builds still read this field, so mirror the selected tab while the per-tab field
+        // becomes the source of truth in current builds.
+        try container.encode(selectedTab?.stickerSymbol ?? "tag", forKey: .stickerSymbol)
         try container.encode(paperHex, forKey: .paperHex)
         try container.encode(penHex, forKey: .penHex)
         try container.encode(penStyle, forKey: .penStyle)
@@ -133,18 +147,39 @@ struct MemoTab: Identifiable, Codable, Equatable {
     var id: UUID
     var name: String
     var title: String
+    var stickerSymbol: String
     var items: [TodoItem]
 
     init(
         id: UUID = UUID(),
         name: String,
         title: String,
+        stickerSymbol: String = "",
         items: [TodoItem] = []
     ) {
         self.id = id
         self.name = name
         self.title = title
+        self.stickerSymbol = stickerSymbol
         self.items = items
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case title
+        case stickerSymbol
+        case items
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        title = try container.decode(String.self, forKey: .title)
+        // StickyNote fills this from its legacy note-level icon after decoding the tabs.
+        stickerSymbol = try container.decodeIfPresent(String.self, forKey: .stickerSymbol) ?? ""
+        items = try container.decodeIfPresent([TodoItem].self, forKey: .items) ?? []
     }
 }
 

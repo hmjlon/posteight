@@ -164,11 +164,13 @@ final class PosteightStore: ObservableObject {
         let tabID = UUID()
         updateNote(noteID) { note in
             let nextNumber = note.tabs.count + 1
+            let inheritedSticker = note.selectedTab?.stickerSymbol ?? "tag"
             note.tabs.append(
                 MemoTab(
                     id: tabID,
                     name: Lf("메모 %ld", language: language, nextNumber),
                     title: Self.todayTitle(language: language),
+                    stickerSymbol: inheritedSticker,
                     items: [TodoItem(title: "")]
                 )
             )
@@ -213,7 +215,7 @@ final class PosteightStore: ObservableObject {
                 tab: tab,
                 paperHex: note.paperHex,
                 penHex: note.penHex,
-                stickerSymbol: note.stickerSymbol,
+                stickerSymbol: tab.stickerSymbol,
                 includeInNotionLog: note.includeInNotionLog,
                 deletedAt: Date()
             ),
@@ -229,8 +231,12 @@ final class PosteightStore: ObservableObject {
         let trashed = trashedTabs.remove(at: index)
 
         if let noteIndex = notes.firstIndex(where: { $0.id == trashed.sourceNoteID }) {
-            notes[noteIndex].tabs.append(trashed.tab)
-            notes[noteIndex].selectedTabID = trashed.tab.id
+            var restoredTab = trashed.tab
+            if restoredTab.stickerSymbol.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                restoredTab.stickerSymbol = trashed.stickerSymbol
+            }
+            notes[noteIndex].tabs.append(restoredTab)
+            notes[noteIndex].selectedTabID = restoredTab.id
         } else {
             let offset = Double(notes.count % 4) * 34
             notes.append(
@@ -290,9 +296,9 @@ final class PosteightStore: ObservableObject {
         }
     }
 
-    func updateSticker(_ noteID: UUID, symbol: String) {
-        updateNote(noteID) { note in
-            note.stickerSymbol = symbol
+    func updateTabSticker(noteID: UUID, tabID: UUID, symbol: String) {
+        updateTab(noteID: noteID, tabID: tabID) { tab in
+            tab.stickerSymbol = symbol
         }
     }
 
@@ -537,6 +543,11 @@ final class PosteightStore: ObservableObject {
             compactNote.size = clamped(note.size)
 
             for tabIndex in compactNote.tabs.indices {
+                if compactNote.tabs[tabIndex].stickerSymbol
+                    .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    compactNote.tabs[tabIndex].stickerSymbol = "tag"
+                }
+
                 if compactNote.tabs[tabIndex].name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     compactNote.tabs[tabIndex].name = Lf("메모 %ld", language: language, tabIndex + 1)
                 }

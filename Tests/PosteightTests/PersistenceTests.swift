@@ -107,6 +107,25 @@ struct PersistenceTests {
         #expect(store.tabName(noteID: secondID, tabID: secondOriginalTabID) == "메모 1")
     }
 
+    @Test("각 탭의 아이콘을 독립적으로 바꾸고 저장한다")
+    func tabStickersAreIndependentAndPersistent() throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = PosteightStore(directory: directory)
+        let noteID = store.addNote()
+        let firstTabID = try memo(store, id: noteID).selectedTabID
+        let secondTabID = try #require(store.addTab(to: noteID))
+
+        store.updateTabSticker(noteID: noteID, tabID: firstTabID, symbol: "briefcase")
+        store.updateTabSticker(noteID: noteID, tabID: secondTabID, symbol: "house")
+        store.flush()
+
+        let reloaded = PosteightStore(directory: directory)
+        let tabs = try memo(reloaded, id: noteID).tabs
+        #expect(tabs.first { $0.id == firstTabID }?.stickerSymbol == "briefcase")
+        #expect(tabs.first { $0.id == secondTabID }?.stickerSymbol == "house")
+    }
+
     @Test("Closing a tab that isn't selected leaves the current one open")
     func closingOtherTabKeepsSelection() throws {
         let directory = temporaryDirectory()

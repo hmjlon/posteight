@@ -110,6 +110,7 @@ private let englishStrings: [String: String] = [
     "펜 색 직접 선택": "Pick a pen color",
     "펜촉": "Nib",
     "스티커": "Stickers",
+    "탭 아이콘": "Tab Icon",
     "메모 삭제": "Delete Memo",
     "이 메모를 휴지통으로 보냅니다": "Moves this memo to the trash",
 
