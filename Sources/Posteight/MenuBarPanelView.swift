@@ -23,6 +23,10 @@ struct MenuBarPanelView: View {
                 showNotes(store.notes.map(\.id))
             }
 
+            PanelRow(title: L("모든 메모 숨기기"), systemImage: "eye.slash") {
+                NoteWindowCoordinator.shared.hideAll()
+            }
+
             PanelRow(title: L("오늘 기록 미리보기"), systemImage: "square.and.arrow.up") {
                 open(windowID: WindowID.dailyLog)
             }

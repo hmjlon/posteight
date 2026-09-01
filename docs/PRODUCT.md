@@ -44,7 +44,9 @@ Settings stay deliberately small: what the status item counts, whether notes
 float above other apps, and whether Posteight keeps a Dock icon. The Dock icon is
 on by default, so a running Posteight can be reached from the Dock and
 Command-Tab, and clicking it brings the memo windows back. Turning it off leaves a
-menu-bar-only app. Hiding all notes and a manual meeting mode are still to come.
+menu-bar-only app. The popover can hide every memo at once and its Show Memos
+control restores them; hide-on-lock behavior and a manual meeting mode are still
+to come.
 
 ## Design Direction: Tabbed Memo
 

@@ -6,6 +6,27 @@ enum WindowID {
     static let trash = "posteight.trash"
 }
 
+struct NoteWindowVisibility {
+    private(set) var hiddenNoteIDs: Set<UUID> = []
+
+    mutating func hideAll(registered: Set<UUID>, pending: Set<UUID>) {
+        hiddenNoteIDs.formUnion(registered)
+        hiddenNoteIDs.formUnion(pending)
+    }
+
+    mutating func present(_ noteID: UUID) {
+        hiddenNoteIDs.remove(noteID)
+    }
+
+    mutating func remove(_ noteID: UUID) {
+        hiddenNoteIDs.remove(noteID)
+    }
+
+    func isHidden(_ noteID: UUID) -> Bool {
+        hiddenNoteIDs.contains(noteID)
+    }
+}
+
 /// `WindowGroup` creates a new window on every `openWindow` call, even for the same value.
 /// Keep presentation idempotent while still allowing every memo ID its own window.
 @MainActor
@@ -22,10 +43,13 @@ final class NoteWindowCoordinator {
 
     private var windows: [UUID: WeakWindow] = [:]
     private var pendingNoteIDs: Set<UUID> = []
+    private var visibility = NoteWindowVisibility()
 
     private init() {}
 
     func present(_ noteID: UUID, openWindow: (UUID) -> Void) {
+        visibility.present(noteID)
+
         if let window = windows[noteID]?.value {
             // `makeKeyAndOrderFront` leaves a miniaturized window in the Dock.
             if window.isMiniaturized {
@@ -47,6 +71,10 @@ final class NoteWindowCoordinator {
 
         if let existingWindow = windows[noteID]?.value, existingWindow !== window {
             window.close()
+            if visibility.isHidden(noteID) {
+                existingWindow.orderOut(nil)
+                return
+            }
             if existingWindow.isMiniaturized {
                 existingWindow.deminiaturize(nil)
             }
@@ -55,10 +83,25 @@ final class NoteWindowCoordinator {
         }
 
         windows[noteID] = WeakWindow(window)
+
+        // A window requested just before Hide All can finish being created afterwards. Keep it
+        // out of sight until the user explicitly presents that memo again.
+        if visibility.isHidden(noteID) {
+            window.orderOut(nil)
+        }
+    }
+
+    func hideAll() {
+        visibility.hideAll(registered: Set(windows.keys), pending: pendingNoteIDs)
+
+        for window in windows.values.compactMap(\.value) {
+            window.orderOut(nil)
+        }
     }
 
     func remove(_ noteID: UUID) {
         pendingNoteIDs.remove(noteID)
+        visibility.remove(noteID)
         windows[noteID] = nil
     }
 }

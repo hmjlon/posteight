@@ -74,6 +74,7 @@ private let englishStrings: [String: String] = [
     // MenuBarPanelView
     "새 메모": "New Memo",
     "메모 보기": "Show Memos",
+    "모든 메모 숨기기": "Hide All Memos",
     "오늘 기록 미리보기": "Preview Today's Log",
     "휴지통": "Trash",
     "설정…": "Settings…",
