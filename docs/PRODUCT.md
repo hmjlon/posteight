@@ -66,6 +66,8 @@ read as one continuous surface.
   decorative pattern.
 - Use a restrained palette of ivory, blush, sage, mist, butter, and lilac paper.
 - Keep the checklist visually dominant and reveal editing controls on hover.
+- Separate checklist rows with faint paper-guide rules from the writing inset through
+  the trailing editing controls; leave the checkbox and final row outside the rule.
 - Keep memo IDs and tab IDs separate. A new memo starts with `메모 1`; its local `+`
   adds `메모 2`, `메모 3`, and so on only to that window, and activates the new tab.
 - A tab click switches content. Clicking the already-active tab again edits its name

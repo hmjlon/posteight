@@ -8,6 +8,7 @@ struct TodoItemRow: View {
     let item: TodoItem
     @Binding var focusedItemID: UUID?
 
+    @State private var strikeProgress: CGFloat = 0
     @State private var showPen = false
     @State private var isEditingText = false
     @State private var isRowHovered = false
@@ -75,18 +76,17 @@ struct TodoItemRow: View {
                     color: Color(hex: note.penHex),
                     style: note.penStyle,
                     textWidth: measuredTitleWidth,
-                    progress: isStruck ? 1 : 0,
+                    progress: strikeProgress,
                     showPen: showPen
                 )
                 .allowsHitTesting(false)
-                .animation(.easeInOut(duration: 0.68), value: isStruck)
             }
             .frame(height: 28)
 
             Button {
                 showDetail = true
             } label: {
-                Image(systemName: hasDetail ? "text.alignleft" : "plus.bubble")
+                Image(systemName: hasDetail ? "bubble.fill" : "plus.bubble")
                     .font(.system(size: 10, weight: .semibold))
                     .frame(width: 16, height: 16)
             }
@@ -131,24 +131,59 @@ struct TodoItemRow: View {
             .help(L("삭제"))
         }
         .contentShape(Rectangle())
+        .overlay(alignment: .bottomLeading) {
+            if tab.items.last?.id != item.id {
+                Rectangle()
+                    .fill(.black.opacity(0.1))
+                    .frame(height: 0.5)
+                    // Like a ruled memo pad, the line starts after the checkbox and continues
+                    // beneath the hover-only controls to the trailing edge.
+                    .padding(.leading, 28)
+                    .offset(y: 2.5)
+                    .allowsHitTesting(false)
+            }
+        }
         .onHover { isRowHovered = $0 }
         .animation(.easeOut(duration: 0.12), value: isRowHovered)
         .onChange(of: currentTitle, initial: true) { _, title in
             measuredTitleWidth = Self.width(of: title)
         }
-        // Only the travelling pen is a one-off flourish; the line itself follows the item.
+        .onAppear {
+            // Persisted completions open already struck without replaying the flourish.
+            strikeProgress = isStruck ? 1 : 0
+        }
         .onChange(of: isStruck) { _, isStruck in
+            penGeneration += 1
+            let generation = penGeneration
+
             guard isStruck else {
                 showPen = false
+                withAnimation(.easeOut(duration: 0.18)) {
+                    strikeProgress = 0
+                }
                 return
             }
 
-            showPen = true
-            penGeneration += 1
-            let generation = penGeneration
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.76) {
+            // Put the nib at the start in a separate render pass. If zero and one are written
+            // in the same pass SwiftUI coalesces them, leaving the pen visible only at the end.
+            var reset = Transaction()
+            reset.disablesAnimations = true
+            withTransaction(reset) {
+                strikeProgress = 0
+                showPen = true
+            }
+
+            DispatchQueue.main.async {
                 guard penGeneration == generation else { return }
-                showPen = false
+
+                withAnimation(.easeInOut(duration: 0.68)) {
+                    strikeProgress = 1
+                }
+
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.76) {
+                    guard penGeneration == generation else { return }
+                    showPen = false
+                }
             }
         }
     }
@@ -354,6 +389,7 @@ private struct StrikeLine: View {
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
         }
-        .clipped()
+        // The rotated nib intentionally sits above the strike and can pass the text field's
+        // trailing edge. Clipping this layer cuts off the icon at both ends of the flourish.
     }
 }
