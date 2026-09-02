@@ -79,8 +79,9 @@ private let englishStrings: [String: String] = [
     "휴지통": "Trash",
     "설정…": "Settings…",
     "Posteight 종료": "Quit Posteight",
-    "메모 없음": "No memos",
-    "%ld개 남음": "%ld left",
+    "할 일 없음": "No tasks",
+    "남은 일 %ld개": "%ld remaining",
+    "완료 %ld개": "%ld done",
     "모두 완료": "All done",
 
     // Models — pen styles

@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// The menu bar popover: quick capture, remaining-task status, and access to the
+/// The menu bar popover: quick capture, today's task status, and access to the
 /// log and trash windows. Kept compact on purpose — notes stay the working surface.
 struct MenuBarPanelView: View {
     @EnvironmentObject private var store: PosteightStore
@@ -74,11 +74,18 @@ struct MenuBarPanelView: View {
     }
 
     private var statusLabel: String {
-        if store.notes.isEmpty {
-            return L("메모 없음")
+        guard store.totalCount > 0 else {
+            return L("할 일 없음")
         }
 
-        return store.remainingCount > 0 ? Lf("%ld개 남음", store.remainingCount) : L("모두 완료")
+        switch settings.menuBarCountStyle {
+        case .remaining:
+            return store.remainingCount > 0
+                ? Lf("남은 일 %ld개", store.remainingCount)
+                : L("모두 완료")
+        case .done:
+            return Lf("완료 %ld개", store.doneCount)
+        }
     }
 
     private func showNote(_ noteID: UUID) {

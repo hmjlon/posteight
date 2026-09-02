@@ -186,10 +186,10 @@ private struct MenuBarLabel: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        // The count is written on the card itself rather than set beside it, so the status item
-        // reads as one object instead of an icon with a label stuck to it.
+        // Keep the brand mark intact and let the count read as status beside it. With no tasks,
+        // the number disappears and the quiet icon is all the app needs to leave behind.
         MenuBarProgressCard(done: store.doneCount, total: store.totalCount, count: displayCount)
-            .accessibilityLabel(store.totalCount > 0 ? "Posteight, \(countLabel)" : "Posteight")
+            .accessibilityLabel(accessibilityLabel)
         .task {
             for note in store.notes {
                 presentNote(note.id)
@@ -217,8 +217,15 @@ private struct MenuBarLabel: View {
         settings.menuBarCountStyle == .done ? store.doneCount : store.remainingCount
     }
 
-    /// VoiceOver still gets both halves, which the card no longer has room to show.
-    private var countLabel: String {
-        "\(displayCount)/\(store.totalCount)"
+    private var accessibilityLabel: String {
+        guard store.totalCount > 0 else { return "Posteight" }
+        if store.doneCount >= store.totalCount {
+            return "Posteight, \(L("모두 완료"))"
+        }
+
+        let status = settings.menuBarCountStyle == .done
+            ? Lf("완료 %ld개", store.doneCount)
+            : Lf("남은 일 %ld개", store.remainingCount)
+        return "Posteight, \(status)"
     }
 }

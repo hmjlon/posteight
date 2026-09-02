@@ -32,11 +32,15 @@ opening memo windows, the daily log, the trash, and quitting. The floating
 memos remain the main working surfaces; the popover should not become a second
 full editor.
 
-The status item is one folded card with the count written on it — remaining by
-default, or done. The card fills from the bottom as today's items get done, and
-its ink keeps moving while anything is left, so a glance says both how much is
-left and that there is still something running. The two days with no number
-worth reading get a face instead: nothing on the list, and nothing left on it.
+The status item expresses the `8` in Posteight as a compact, symmetric infinity
+loop. The mark stays still, with the chosen count beside it — remaining by
+default, or done — and hides the number when there are no tasks. Completing an
+item briefly traces the newly completed fraction; clearing the day replaces the
+count with a persistent, language-neutral checkmark until more work appears.
+The checkmark is rasterized into the same template image as the loop so the
+menu-bar renderer cannot drop it. There is no perpetual motion that could be
+mistaken for loading. The popover header names the same chosen measure as `남은
+일 n개` or `완료 n개`, rather than repeating an ambiguous bare count.
 Clicking it opens the popover, which is also where settings live: the settings
 entry opens a modal dialog over whatever is on screen.
 
