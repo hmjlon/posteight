@@ -122,30 +122,59 @@ struct PaperGrain: View {
     }
 }
 
-/// Posteight's `8` expressed as a clean infinity loop. This embraces the wide silhouette as the
-/// mark itself instead of asking a tiny menu-bar glyph to explain that a numeral was rotated.
+/// Posteight's `8` expressed as a small, softly drawn infinity loop. The matched lobes keep the
+/// rotated-eight idea clear, while the relaxed curves stop the tiny mark feeling typeset or rigid.
 private struct PosteightInfinityShape: Shape {
-    /// The lemniscate's raw y range is only about 0.35 of its nominal half-height.
-    private static let lobeCorrection: CGFloat = 2.83
-
     func path(in rect: CGRect) -> Path {
-        let cx = rect.midX
-        let cy = rect.midY
-        let halfWidth = rect.width / 2
-        let halfHeight = rect.height / 2
         var path = Path()
-        let steps = 64
-        for step in 0...steps {
-            let t = Double(step) / Double(steps) * 2 * .pi
-            let sine = sin(t)
-            let cosine = cos(t)
-            let denominator = 1 + sine * sine
-            let point = CGPoint(
-                x: cx + halfWidth * cosine / denominator,
-                y: cy + halfHeight * Self.lobeCorrection * cosine * sine / denominator
-            )
-            step == 0 ? path.move(to: point) : path.addLine(to: point)
+        let point: (CGFloat, CGFloat) -> CGPoint = { x, y in
+            CGPoint(x: rect.minX + rect.width * x, y: rect.minY + rect.height * y)
         }
+
+        // Draw both lobes from the waist so the completion trim still reads as a single pen line.
+        // The slightly lower return curve gives the mathematically symmetric mark a warmer,
+        // hand-drawn tension without making either side look larger than the other.
+        path.move(to: point(0.50, 0.49))
+        path.addCurve(
+            to: point(0.20, 0.10),
+            control1: point(0.41, 0.31),
+            control2: point(0.34, 0.10)
+        )
+        path.addCurve(
+            to: point(0.02, 0.50),
+            control1: point(0.08, 0.10),
+            control2: point(0.02, 0.29)
+        )
+        path.addCurve(
+            to: point(0.20, 0.90),
+            control1: point(0.02, 0.71),
+            control2: point(0.08, 0.90)
+        )
+        path.addCurve(
+            to: point(0.50, 0.49),
+            control1: point(0.34, 0.90),
+            control2: point(0.41, 0.67)
+        )
+        path.addCurve(
+            to: point(0.80, 0.10),
+            control1: point(0.59, 0.31),
+            control2: point(0.66, 0.10)
+        )
+        path.addCurve(
+            to: point(0.98, 0.50),
+            control1: point(0.92, 0.10),
+            control2: point(0.98, 0.29)
+        )
+        path.addCurve(
+            to: point(0.80, 0.90),
+            control1: point(0.98, 0.71),
+            control2: point(0.92, 0.90)
+        )
+        path.addCurve(
+            to: point(0.50, 0.49),
+            control1: point(0.66, 0.90),
+            control2: point(0.59, 0.67)
+        )
         path.closeSubpath()
         return path
     }
@@ -275,18 +304,18 @@ private struct CardGlyph: View {
     let hasTasks: Bool
     let isCleared: Bool
 
-    private static let trackStroke = StrokeStyle(lineWidth: 1.3, lineCap: .round, lineJoin: .round)
-    private static let progressStroke = StrokeStyle(lineWidth: 1.7, lineCap: .round, lineJoin: .round)
-    private static let markSize = CGSize(width: 18, height: 14)
+    private static let trackStroke = StrokeStyle(lineWidth: 1.0, lineCap: .round, lineJoin: .round)
+    private static let progressStroke = StrokeStyle(lineWidth: 1.35, lineCap: .round, lineJoin: .round)
+    private static let markSize = CGSize(width: 17, height: 10)
 
     static func size(isCleared: Bool) -> CGSize {
-        CGSize(width: isCleared ? 29 : markSize.width, height: 16)
+        CGSize(width: isCleared ? 28 : markSize.width, height: 16)
     }
 
     var body: some View {
         HStack(spacing: 3) {
             Canvas { context, size in
-                let rect = CGRect(origin: .zero, size: size).insetBy(dx: 0.9, dy: 0.9)
+                let rect = CGRect(origin: .zero, size: size).insetBy(dx: 0.45, dy: 1.2)
                 let loop = PosteightInfinityShape().path(in: rect)
 
                 context.stroke(

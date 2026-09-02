@@ -274,7 +274,8 @@ struct StickyNoteWindowView: View {
         } label: {
             Image(systemName: "xmark")
                 .font(.system(size: 8, weight: .bold))
-                .frame(width: 15, height: 15)
+                // Keep the glyph quiet, but do not make the pointer hunt for its thin strokes.
+                .frame(width: 18, height: 20)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -313,7 +314,7 @@ struct StickyNoteWindowView: View {
         }
         .foregroundStyle(Color(hex: note.penHex).opacity(isSelected ? 0.72 : 0.58))
         // Room for the close button sitting on top, so the truncated name doesn't run under it.
-        .padding(.trailing, reservesCloseSpace ? 15 : 0)
+        .padding(.trailing, reservesCloseSpace ? 18 : 0)
         .clipped()
     }
 
@@ -334,12 +335,13 @@ struct StickyNoteWindowView: View {
     }
 
     private var tabBarControls: some View {
-        HStack(spacing: 1) {
+        HStack(spacing: 0) {
             Button {
                 isPencilCaseOpen.toggle()
             } label: {
                 Image(systemName: "slider.horizontal.3")
-                    .frame(width: 24, height: 28)
+                    .frame(width: 28, height: 32)
+                    .contentShape(Rectangle())
             }
             .help(L("메모 꾸미기"))
 
@@ -347,7 +349,9 @@ struct StickyNoteWindowView: View {
                 closeCard()
             } label: {
                 Image(systemName: "xmark")
-                    .frame(width: 24, height: 28)
+                    // The visible x stays small; its entire 28×32pt cell closes the memo.
+                    .frame(width: 28, height: 32)
+                    .contentShape(Rectangle())
             }
             .help(L("닫기 — 메모는 그대로 있어요"))
         }

@@ -33,7 +33,9 @@ memos remain the main working surfaces; the popover should not become a second
 full editor.
 
 The status item expresses the `8` in Posteight as a compact, symmetric infinity
-loop. The mark stays still, with the chosen count beside it — remaining by
+loop with a soft, lightly hand-drawn curve. Its small, open silhouette keeps the
+mark friendly without sacrificing menu-bar legibility. The mark stays still,
+with the chosen count beside it — remaining by
 default, or done — and hides the number when there are no tasks. Completing an
 item briefly traces the newly completed fraction; clearing the day replaces the
 count with a persistent, language-neutral checkmark until more work appears.
@@ -78,6 +80,8 @@ read as one continuous surface.
   inline; Enter or focus loss commits a non-blank name.
 - Make the active tab full-height and continuous with its memo color; keep inactive
   tabs slightly shorter and quieter, like background tabs in a compact browser.
+- Keep close glyphs visually quiet but give their whole control cell a dependable
+  pointer target; thin `×` strokes should never be the only clickable pixels.
 - Keep the menu bar and popover compact, native, and mostly monochrome.
 - Use motion sparingly; the pen strike-through remains the signature completion
   moment.
