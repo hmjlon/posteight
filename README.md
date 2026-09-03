@@ -100,6 +100,6 @@ Proprietary. See [LICENSE](LICENSE). This is not open source.
 
 ---
 
-Building Posteight, or changing how it behaves? [AGENTS.md](AGENTS.md) covers the build paths,
-persistence rules, release flow, and commit conventions; [docs/PRODUCT.md](docs/PRODUCT.md) holds
-the product and design direction.
+Building Posteight, or changing how it behaves? [AGENTS.md](AGENTS.md) is the contributor guide:
+the stack, the entry point and window routing, the code structure, build paths, persistence rules,
+the release flow, and commit conventions.

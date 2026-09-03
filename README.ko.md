@@ -95,5 +95,5 @@ macOS 가 직접 그리는 메뉴(파일, 편집, 윈도우)는 여전히 시스
 
 ---
 
-Posteight 를 직접 빌드하거나 동작을 고치려면 [AGENTS.md](AGENTS.md) 에 빌드 경로, 저장 규칙,
-릴리스 절차, 커밋 규범이 있다. 제품과 디자인 방향은 [docs/PRODUCT.md](docs/PRODUCT.md) 가 원본이다.
+Posteight 를 직접 빌드하거나 동작을 고치려면 [AGENTS.md](AGENTS.md) 를 본다. 스택, 진입점과 창
+라우팅, 코드 구조, 빌드 경로, 저장 규칙, 릴리스 절차, 커밋 규범이 모두 여기에 있다.
