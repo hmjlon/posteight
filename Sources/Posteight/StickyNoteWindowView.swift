@@ -25,7 +25,7 @@ struct StickyNoteWindowView: View {
                 Color.clear
                     .frame(width: 1, height: 1)
                     .onAppear {
-                        closeCard()
+                        discardCard()
                     }
             }
         }
@@ -70,7 +70,11 @@ struct StickyNoteWindowView: View {
         .onHover { isCardHovered = $0 }
         .environment(\.colorScheme, .light)
         .background {
-            NoteWindowConfigurator(note: note, windowTitle: selectedTab.title) { configuredWindow in
+            NoteWindowConfigurator(
+                note: note,
+                windowTitle: selectedTab.title,
+                onEscape: closeCard
+            ) { configuredWindow in
                 NoteWindowCoordinator.shared.register(configuredWindow, for: noteID)
                 if window !== configuredWindow {
                     window = configuredWindow
@@ -431,6 +435,12 @@ struct StickyNoteWindowView: View {
 
     /// Closing only hides this window; the memo comes back with 메모 보기.
     private func closeCard() {
+        NoteWindowCoordinator.shared.hide(noteID)
+    }
+
+    /// Removing the memo itself also tears down its SwiftUI scene; unlike a normal close, there
+    /// is no card left for 메모 보기 to restore.
+    private func discardCard() {
         NoteWindowCoordinator.shared.remove(noteID)
         dismissWindow(value: noteID)
     }
@@ -451,7 +461,7 @@ struct StickyNoteWindowView: View {
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.38) {
             store.moveNoteToTrash(note.id)
-            closeCard()
+            discardCard()
         }
     }
 }
@@ -460,6 +470,7 @@ struct StickyNoteWindowView: View {
 private struct NoteWindowConfigurator: NSViewRepresentable {
     let note: StickyNote
     let windowTitle: String
+    let onEscape: () -> Void
     let onWindowAvailable: (NSWindow) -> Void
 
     func makeCoordinator() -> Coordinator {
@@ -479,10 +490,13 @@ private struct NoteWindowConfigurator: NSViewRepresentable {
     private func configureWindow(for view: NSView, coordinator: Coordinator) {
         DispatchQueue.main.async {
             guard let window = view.window else { return }
+            coordinator.onEscape = onEscape
+            coordinator.window = window
             onWindowAvailable(window)
             window.title = windowTitle
             guard !coordinator.didConfigure else { return }
             coordinator.didConfigure = true
+            coordinator.installEscapeMonitor()
 
             // A window can be recycled for another note after a delete faded this one out.
             window.alphaValue = 1
@@ -523,6 +537,31 @@ private struct NoteWindowConfigurator: NSViewRepresentable {
 
     final class Coordinator {
         var didConfigure = false
+        weak var window: NSWindow?
+        var onEscape: (() -> Void)?
+        private var escapeMonitor: Any?
+
+        func installEscapeMonitor() {
+            guard escapeMonitor == nil else { return }
+
+            escapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard
+                    let self,
+                    event.window === self.window,
+                    event.keyCode == 53,
+                    event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty
+                else { return event }
+
+                self.onEscape?()
+                return nil
+            }
+        }
+
+        deinit {
+            if let escapeMonitor {
+                NSEvent.removeMonitor(escapeMonitor)
+            }
+        }
     }
 }
 

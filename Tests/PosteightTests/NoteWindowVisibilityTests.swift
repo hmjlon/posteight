@@ -4,6 +4,18 @@ import Testing
 
 @Suite("Note window visibility")
 struct NoteWindowVisibilityTests {
+    @Test("한 메모만 숨김 상태로 표시한다")
+    func hidingOneMemoKeepsItsIdentity() {
+        let hiddenID = UUID()
+        let visibleID = UUID()
+        var visibility = NoteWindowVisibility()
+
+        visibility.hide(hiddenID)
+
+        #expect(visibility.isHidden(hiddenID))
+        #expect(!visibility.isHidden(visibleID))
+    }
+
     @Test("등록된 메모와 생성 중인 메모를 모두 숨긴다")
     func hideAllIncludesPendingWindows() {
         let registeredID = UUID()

@@ -9,6 +9,10 @@ enum WindowID {
 struct NoteWindowVisibility {
     private(set) var hiddenNoteIDs: Set<UUID> = []
 
+    mutating func hide(_ noteID: UUID) {
+        hiddenNoteIDs.insert(noteID)
+    }
+
     mutating func hideAll(registered: Set<UUID>, pending: Set<UUID>) {
         hiddenNoteIDs.formUnion(registered)
         hiddenNoteIDs.formUnion(pending)
@@ -97,6 +101,11 @@ final class NoteWindowCoordinator {
         for window in windows.values.compactMap(\.value) {
             window.orderOut(nil)
         }
+    }
+
+    func hide(_ noteID: UUID) {
+        visibility.hide(noteID)
+        windows[noteID]?.value?.orderOut(nil)
     }
 
     func remove(_ noteID: UUID) {
