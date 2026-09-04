@@ -123,28 +123,31 @@ jobs:
           ### Homebrew (권장)
 
           \`\`\`bash
-          brew install --cask --no-quarantine hmjlon/tap/posteight
+          brew install --cask hmjlon/tap/posteight
           \`\`\`
-
-          \`--no-quarantine\` 를 붙이면 아래 '처음 열 때' 단계 없이 바로 열린다.
 
           ### dmg 직접 내려받기
 
           아래 \`$DMG\` 를 내려받아 Posteight 를 Applications 로 끌어다 놓는다.
 
-          #### 처음 열 때
+          ### 처음 열 때
 
-          Posteight 는 아직 Apple 공증을 받지 않았다. macOS 가 한 번 차단한다.
+          Posteight 는 아직 Apple 공증을 받지 않았다. 어느 쪽으로 설치하든 macOS 가
+          첫 실행을 한 번 막는다.
 
           1. Posteight 를 연다 (차단 경고가 뜬다)
           2. 시스템 설정 > 개인정보 보호 및 보안 을 연다
           3. 아래로 내려 **그래도 열기** 를 누른다
 
-          한 번만 하면 그다음부터는 바로 열린다. 터미널을 쓴다면 아래 한 줄로도 된다.
+          터미널을 쓴다면 아래 한 줄이 같은 일을 한다.
 
           \`\`\`bash
           xattr -dr com.apple.quarantine /Applications/Posteight.app
           \`\`\`
+
+          공증을 받기 전까지는 \`brew upgrade\` 로 새 버전을 받을 때마다 이 단계가
+          한 번씩 더 필요하다. ad-hoc 서명은 빌드마다 서명이 달라져서 Homebrew 가
+          이전에 승인한 앱과 같은 앱이라고 판단하지 못한다.
 
           ### 요구 사항
 
