@@ -167,6 +167,45 @@ jobs:
             --title "Posteight $V" \
             --notes-file notes.md
 
+      # 릴리스가 게시된 뒤 tap 의 cask 를 새 버전으로 갱신한다. GITHUB_TOKEN 은
+      # 이 저장소 밖으로는 못 쓰므로 homebrew-tap 쓰기 권한을 가진 PAT 가 필요하다.
+      # 시크릿이 없거나 만료됐으면 경고만 남기고 넘어간다. 릴리스는 이미 게시됐고,
+      # cask 는 아래 요약을 보고 손으로 고치면 되기 때문이다.
+      - name: Update Homebrew cask
+        if: github.event_name == 'push'
+        env:
+          TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
+          V: ${{ steps.version.outputs.version }}
+          SHA: ${{ steps.sum.outputs.sha256 }}
+        run: |
+          if [ -z "$TAP_TOKEN" ]; then
+            echo "::warning::TAP_TOKEN 시크릿이 없어 cask 갱신을 건너뛴다. 손으로 갱신해야 한다."
+            exit 0
+          fi
+
+          git clone --depth 1 "https://x-access-token:$TAP_TOKEN@github.com/hmjlon/homebrew-tap.git" tap
+          CASK=tap/Casks/posteight.rb
+
+          # 두 줄만 바꾼다. url 은 cask 안에서 #{version} 을 쓰므로 따라온다.
+          sed -i '' -E \
+            -e "s|^  version \".*\"$|  version \"$V\"|" \
+            -e "s|^  sha256 \".*\"$|  sha256 \"$SHA\"|" \
+            "$CASK"
+
+          # sed 가 아무것도 못 바꿔도 조용히 성공한다. 실제로 박혔는지 확인한다.
+          grep -qF "  version \"$V\"" "$CASK" || { echo "::error::version 치환 실패"; exit 1; }
+          grep -qF "  sha256 \"$SHA\"" "$CASK" || { echo "::error::sha256 치환 실패"; exit 1; }
+
+          cd tap
+          if git diff --quiet; then
+            echo "cask 가 이미 $V 다. 넘어간다."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -qam "posteight $V"
+          git push -q
+
       # cask 를 손으로 고칠 때 쓸 값을 요약에 남긴다.
       - name: Cask summary
         run: |
