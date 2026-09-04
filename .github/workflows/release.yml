@@ -123,7 +123,7 @@ jobs:
           ### Homebrew (권장)
 
           \`\`\`bash
-          brew install --cask --no-quarantine hmjlon/posteight/posteight
+          brew install --cask --no-quarantine hmjlon/tap/posteight
           \`\`\`
 
           \`--no-quarantine\` 를 붙이면 아래 '처음 열 때' 단계 없이 바로 열린다.
