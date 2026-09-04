@@ -197,19 +197,32 @@ POSTEIGHT_SYSTEM_LANGUAGE=en swift test
 
 ## 릴리스
 
-릴리스는 손이 아니라 CI 가 만든다. `v*` 태그를 푸시하면 [`release.yml`](.github/workflows/release.yml)
-이 돌면서 태그에서 버전을 찍고, Release 구성으로 빌드하고, `.dmg` 로 묶어 체크섬과 함께 GitHub
-Releases 에 올린다.
+릴리스는 손이 아니라 CI 가 만든다. `dev` 를 `release` 로 머지하면
+[`release.yml`](.github/workflows/release.yml) 이 돌면서 직전 릴리스에서 마이너를 하나 올린
+버전을 정하고, Release 구성으로 빌드하고, `.dmg` 로 묶어 체크섬과 함께 GitHub Releases 에
+올린 다음, [homebrew-tap](https://github.com/hmjlon/homebrew-tap) 의 cask 까지 갱신한다.
 
 ```bash
 git switch release
-git tag v0.2.0
-git push origin v0.2.0
+git merge dev
+git push origin release
 ```
 
-버전의 유일한 원본은 태그다. `Packaging/Info.plist` 는 `$(MARKETING_VERSION)` 을 읽으므로 거기에
-버전을 박아 넣지 않는다. dmg 는 서명도 공증도 되어 있지 않아서, 설치하는 사람마다 Gatekeeper 를
-손으로 넘어야 한다.
+버전을 직접 정해야 하면 태그를 밀면 된다. 마이너 자동 증가로는 못 가는 자리 — 메이저 승격이나
+패치 릴리스 — 에 쓴다.
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+버전의 원본은 태그다. 자동 경로에서는 CI 가 그 태그를 만들어 빌드한 커밋에 붙인다.
+`Packaging/Info.plist` 는 `$(MARKETING_VERSION)` 을 읽으므로 거기에 버전을 박아 넣지 않는다.
+dmg 는 서명도 공증도 되어 있지 않아서, 설치하는 사람마다 Gatekeeper 를 손으로 넘어야 한다.
+
+cask 갱신에는 `TAP_TOKEN` 시크릿(`homebrew-tap` 의 Contents 쓰기 권한)이 필요하다. 없거나
+만료됐으면 경고만 남고 릴리스 자체는 그대로 게시된다. 그때는 작업 요약에 찍힌 값으로 cask 를
+손으로 고친다.
 
 [`ci.yml`](.github/workflows/ci.yml) 은 `dev` 나 `release` 로 푸시할 때마다, 그리고 `release` 로
 들어오는 모든 PR 에서 `swift test` 와 실제 `.app` 번들의 `xcodebuild` 를 돌린다. 문서만 바뀐

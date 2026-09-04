@@ -2,6 +2,7 @@ name: Release
 
 on:
   push:
+    branches: [release]
     tags: ['v*']
   workflow_dispatch:
     inputs:
@@ -25,19 +26,27 @@ jobs:
         with:
           persist-credentials: false
 
-      # 버전의 유일한 출처는 git 태그다. Info.plist 는 $(MARKETING_VERSION) 을 쓰므로
-      # 여기서 넘긴 값이 그대로 번들에 박힌다.
+      # 버전은 세 곳에서 온다. 태그를 직접 밀면 그 태그가, release 브랜치로
+      # 머지하면 직전 릴리스에서 마이너를 하나 올린 값이, 시험 실행이면 입력값이
+      # 쓰인다. Info.plist 는 $(MARKETING_VERSION) 을 쓰므로 여기서 넘긴 값이
+      # 그대로 번들에 박힌다.
       - name: Resolve version
         id: version
         # 입력값은 env 로만 받는다. ${{ }} 를 셸에 그대로 펼치면 형식 검증이
         # 돌기도 전에 임의 명령이 실행된다.
         env:
           INPUT_VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
             VERSION="$INPUT_VERSION"
-          else
+          elif [ "$GITHUB_REF_TYPE" = "tag" ]; then
             VERSION="${GITHUB_REF_NAME#v}"
+          else
+            LAST=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" -q .tag_name 2>/dev/null || echo v0.0.0)
+            LAST="${LAST#v}"
+            VERSION="$(echo "$LAST" | cut -d. -f1).$(( $(echo "$LAST" | cut -d. -f2) + 1 )).0"
+            echo "직전 릴리스 v$LAST -> v$VERSION"
           fi
           if ! printf '%s' "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
             echo "::error::버전 형식이 아니다: $VERSION (기대: 1.2.3)"
@@ -105,8 +114,11 @@ jobs:
           name: Posteight-${{ steps.version.outputs.version }}-dmg
           path: dist/*.dmg*
 
-      # 태그 푸시에서만 게시한다. workflow_dispatch 로 돌리면 gh 가 태그를 새로
-      # 만들어 버리고, 그 대상은 빌드한 커밋이 아니라 기본 브랜치 HEAD 다.
+      # 태그·브랜치 푸시에서만 게시한다. 시험 실행(workflow_dispatch)은 dmg 를
+      # 아티팩트로만 남긴다. --target 으로 태그가 붙을 커밋을 못 박는다. 이게
+      # 없으면 gh 는 기본 브랜치 HEAD 에 태그를 만든다 (빌드한 커밋이 아니다).
+      # 여기서 만든 태그는 GITHUB_TOKEN 이 만든 것이라 워크플로를 다시 깨우지
+      # 않는다. 재귀 실행 걱정은 없다.
       - name: Publish GitHub Release
         if: github.event_name == 'push'
         env:
@@ -162,6 +174,7 @@ jobs:
           EOF
 
           gh release create "v$V" \
+            --target "$GITHUB_SHA" \
             "dist/$DMG" \
             "dist/$DMG.sha256" \
             --title "Posteight $V" \
