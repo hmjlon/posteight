@@ -2,6 +2,8 @@
 
 **Private sticky notes for your Mac — visible on your terms.**
 
+[![Latest release](https://img.shields.io/github/v/release/hmjlon/posteight?label=download)](https://github.com/hmjlon/posteight/releases/latest)
+
 Posteight keeps today's checklist out on the desktop, in small independent windows you can
 put where the work actually happens — and hide when someone walks over.
 
@@ -67,17 +69,19 @@ several lists side by side.
 - Multiple independent, floating, resizable memo windows
 - Per-memo tabs, renamed inline by clicking the active tab again
 - Checklists with an animated pen strike-through on completion
-- Paper colors, pen colors, pen styles, and category stickers
+- Paper colors, pen colors, pen styles, and per-tab icons, all set from the pen case
+- Closing a memo window — the close button or Esc — only hides it; the memo stays
 - Trash with restore and permanent-delete actions
 - Daily work log preview and clipboard export as Markdown
 
 ### Menu bar
 
-<img src="docs/images/posteight-menubar.png" alt="The Posteight status item, a folded card carrying today's count" width="44">
+<img src="docs/images/posteight-menubar.png" alt="The Posteight status item, an infinity loop that traces itself as items get done" width="44">
 
-Posteight has no main window. The status item is the only permanent surface: one folded
-card with today's count written on it, filling from the bottom as items get done. Clicking
-it opens the popover — quick capture, opening memo windows, the daily log, the trash,
+Posteight has no main window. The status item is the only permanent surface: the `8` of
+Posteight drawn as a small infinity loop, with today's count beside it. The loop traces
+itself as items get done and completes when nothing is left. Clicking it opens the popover —
+quick capture, opening memo windows, hiding every memo at once, the daily log, the trash,
 settings, and quit.
 
 Settings stay small: what the status item counts, whether notes float above other apps,

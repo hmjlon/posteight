@@ -2,6 +2,8 @@
 
 **맥을 위한 사적인 포스트잇 — 보이는 시점은 내가 정한다.**
 
+[![Latest release](https://img.shields.io/github/v/release/hmjlon/posteight?label=download)](https://github.com/hmjlon/posteight/releases/latest)
+
 Posteight 는 오늘 할 일을 바탕화면에 꺼내 둔다. 작업이 실제로 일어나는 자리마다
 독립된 작은 창을 놓고, 누가 다가오면 감춘다.
 
@@ -65,17 +67,19 @@ xattr -dr com.apple.quarantine /Applications/Posteight.app
 - 독립적으로 떠 있고 크기를 조절할 수 있는 메모 창 여러 개
 - 메모마다 붙는 탭. 활성 탭을 한 번 더 누르면 그 자리에서 이름을 고친다
 - 완료할 때 펜으로 줄을 긋는 애니메이션 체크리스트
-- 종이 색, 펜 색, 펜 종류, 분류 스티커
+- 필통에서 고르는 종이 색, 펜 색, 펜 종류, 탭 아이콘
+- 메모 창을 닫아도 — 닫기 버튼이든 Esc 든 — 숨겨질 뿐 메모는 그대로 남는다
 - 복원과 영구 삭제가 되는 휴지통
 - 오늘 기록 미리보기와 Markdown 클립보드 내보내기
 
 ### 메뉴 막대
 
-<img src="docs/images/posteight-menubar.png" alt="오늘의 개수가 적힌 접힌 카드 모양의 Posteight 상태 아이템" width="44">
+<img src="docs/images/posteight-menubar.png" alt="할 일이 끝날 때마다 이어서 그려지는 무한대 고리 모양의 Posteight 상태 아이템" width="44">
 
-Posteight 에는 메인 창이 없다. 상태 아이템이 유일한 상설 표면이다. 오늘의 개수가 적힌
-접힌 카드 하나가 할 일이 끝날 때마다 아래에서부터 차오른다. 누르면 팝오버가 열리고,
-거기서 빠른 입력, 메모 창 열기, 오늘 기록, 휴지통, 설정, 종료로 간다.
+Posteight 에는 메인 창이 없다. 상태 아이템이 유일한 상설 표면이다. Posteight 의 `8` 을 작은
+무한대 고리로 그리고, 그 옆에 오늘의 개수를 둔다. 할 일이 끝날 때마다 고리가 이어서 그려지고,
+남은 게 없으면 한 바퀴가 닫힌다. 누르면 팝오버가 열리고, 거기서 빠른 입력, 메모 창 열기,
+모든 메모 숨기기, 오늘 기록, 휴지통, 설정, 종료로 간다.
 
 설정은 일부러 작게 유지한다. 상태 아이템이 무엇을 세는지, 메모를 다른 앱 위에 띄울지,
 Dock 아이콘을 남길지. Dock 아이콘은 기본으로 켜져 있어서 실행 중인 Posteight 를 Dock 과
