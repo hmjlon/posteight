@@ -19,24 +19,37 @@ English · [한국어](README.ko.md)
 | Mac | Apple silicon only — `ARCHS` is pinned to `arm64`, so Intel Macs are not supported |
 | Interface language | Korean or English, switchable in Settings |
 
+### Homebrew
+
+```bash
+brew install --cask hmjlon/tap/posteight
+```
+
+`brew upgrade` picks up later versions from the same tap.
+
 ### Download
 
-Download the latest `.dmg` from [Releases](https://github.com/hmjlon/posteight/releases),
+Or download the latest `.dmg` from [Releases](https://github.com/hmjlon/posteight/releases),
 open it, and drag **Posteight** to **Applications**.
 
 ### First launch
 
-Posteight is not notarized by Apple yet, so macOS blocks it the first time it runs.
+Posteight is not notarized by Apple yet, so macOS blocks it the first time it runs —
+whichever way you installed it.
 
 1. Open Posteight. macOS shows a warning and refuses to launch it.
 2. Open **System Settings → Privacy & Security**.
 3. Scroll down and click **Open Anyway**.
 
-This is a one-time step per install. The same thing from a terminal:
+The same thing from a terminal:
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/Posteight.app
 ```
+
+It comes back on every update, including `brew upgrade`. Posteight is signed ad-hoc, so its
+signature changes with each build and Homebrew cannot tell the new version is the same app
+you already approved.
 
 Notarization needs a paid Apple Developer Program membership. Until that is in place, this
 step is unavoidable for anyone but the person who built the app.

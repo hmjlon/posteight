@@ -19,24 +19,36 @@ Posteight 는 오늘 할 일을 바탕화면에 꺼내 둔다. 작업이 실제�
 | Mac | Apple Silicon 전용 — `ARCHS` 가 `arm64` 로 고정되어 있어 Intel Mac 은 지원하지 않는다 |
 | 인터페이스 언어 | 한국어 / 영어, 설정에서 전환 |
 
+### Homebrew
+
+```bash
+brew install --cask hmjlon/tap/posteight
+```
+
+다음 버전부터는 `brew upgrade` 로 받는다.
+
 ### 내려받기
 
-[Releases](https://github.com/hmjlon/posteight/releases) 에서 최신 `.dmg` 를 내려받아 열고,
+또는 [Releases](https://github.com/hmjlon/posteight/releases) 에서 최신 `.dmg` 를 내려받아 열고,
 **Posteight** 를 **응용 프로그램** 으로 끌어다 놓는다.
 
 ### 처음 열 때
 
-Posteight 는 아직 Apple 공증을 받지 않아서, macOS 가 첫 실행을 한 번 막는다.
+Posteight 는 아직 Apple 공증을 받지 않아서, 어느 쪽으로 설치하든 macOS 가 첫 실행을
+한 번 막는다.
 
 1. Posteight 를 연다. 경고가 뜨고 실행이 거부된다.
 2. **시스템 설정 → 개인정보 보호 및 보안** 을 연다.
 3. 아래로 내려 **그래도 열기** 를 누른다.
 
-설치당 한 번만 하면 된다. 터미널을 쓴다면 아래 한 줄로도 같다.
+터미널을 쓴다면 아래 한 줄로도 같다.
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/Posteight.app
 ```
+
+`brew upgrade` 를 포함해 새 버전을 받을 때마다 다시 필요하다. Posteight 는 ad-hoc 서명이라
+빌드마다 서명이 달라지고, Homebrew 는 새 버전이 이미 승인한 그 앱인지 알아보지 못한다.
 
 공증에는 유료 Apple Developer Program 멤버십이 필요하다. 그전까지는 앱을 직접 빌드한
 사람이 아닌 이상 이 단계를 피할 수 없다.
