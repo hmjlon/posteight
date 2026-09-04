@@ -78,7 +78,7 @@ several lists side by side.
 
 <img src="docs/images/posteight-menubar.png" alt="The Posteight status item, an infinity loop that traces itself as items get done" width="44">
 
-Posteight has no main window. The status item is the only permanent surface: the `8` of
+Posteight has no main window. The status item is the only permanent surface: the 8 of
 Posteight drawn as a small infinity loop, with today's count beside it. The loop traces
 itself as items get done and completes when nothing is left. Clicking it opens the popover —
 quick capture, opening memo windows, hiding every memo at once, the daily log, the trash,

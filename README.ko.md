@@ -76,7 +76,7 @@ xattr -dr com.apple.quarantine /Applications/Posteight.app
 
 <img src="docs/images/posteight-menubar.png" alt="할 일이 끝날 때마다 이어서 그려지는 무한대 고리 모양의 Posteight 상태 아이템" width="44">
 
-Posteight 에는 메인 창이 없다. 상태 아이템이 유일한 상설 표면이다. Posteight 의 `8` 을 작은
+Posteight 에는 메인 창이 없다. 상태 아이템이 유일한 상설 표면이다. Posteight 의 8 을 작은
 무한대 고리로 그리고, 그 옆에 오늘의 개수를 둔다. 할 일이 끝날 때마다 고리가 이어서 그려지고,
 남은 게 없으면 한 바퀴가 닫힌다. 누르면 팝오버가 열리고, 거기서 빠른 입력, 메모 창 열기,
 모든 메모 숨기기, 오늘 기록, 휴지통, 설정, 종료로 간다.
