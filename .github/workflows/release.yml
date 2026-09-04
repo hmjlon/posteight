@@ -172,7 +172,6 @@ jobs:
       # 시크릿이 없거나 만료됐으면 경고만 남기고 넘어간다. 릴리스는 이미 게시됐고,
       # cask 는 아래 요약을 보고 손으로 고치면 되기 때문이다.
       - name: Update Homebrew cask
-        if: github.event_name == 'push'
         env:
           TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
           V: ${{ steps.version.outputs.version }}
@@ -184,7 +183,20 @@ jobs:
           fi
 
           git clone --depth 1 "https://x-access-token:$TAP_TOKEN@github.com/hmjlon/homebrew-tap.git" tap
-          CASK=tap/Casks/posteight.rb
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # 시험 실행은 토큰이 실제로 쓸 수 있는지만 확인하고 끝낸다. 빈 커밋을
+          # --dry-run 으로 밀어 보면 인증까지 돌지만 원격은 바뀌지 않는다.
+          if [ "$GITHUB_EVENT_NAME" != "push" ]; then
+            git commit -q --allow-empty -m "TAP_TOKEN 확인"
+            git push --dry-run origin main
+            echo "TAP_TOKEN 으로 homebrew-tap 에 쓸 수 있다."
+            exit 0
+          fi
+
+          CASK=Casks/posteight.rb
 
           # 두 줄만 바꾼다. url 은 cask 안에서 #{version} 을 쓰므로 따라온다.
           sed -i '' -E \
@@ -196,13 +208,10 @@ jobs:
           grep -qF "  version \"$V\"" "$CASK" || { echo "::error::version 치환 실패"; exit 1; }
           grep -qF "  sha256 \"$SHA\"" "$CASK" || { echo "::error::sha256 치환 실패"; exit 1; }
 
-          cd tap
           if git diff --quiet; then
             echo "cask 가 이미 $V 다. 넘어간다."
             exit 0
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -qam "posteight $V"
           git push -q
 
