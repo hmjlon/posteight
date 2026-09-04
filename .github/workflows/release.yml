@@ -120,13 +120,19 @@ jobs:
           cat > notes.md <<EOF
           ## 설치
 
+          ### Homebrew (권장)
+
           \`\`\`bash
-          brew install --cask hmjlon/posteight/posteight
+          brew install --cask --no-quarantine hmjlon/posteight/posteight
           \`\`\`
 
-          또는 아래 \`$DMG\` 를 내려받아 Posteight 를 Applications 로 끌어다 놓는다.
+          \`--no-quarantine\` 를 붙이면 아래 '처음 열 때' 단계 없이 바로 열린다.
 
-          ### 처음 열 때
+          ### dmg 직접 내려받기
+
+          아래 \`$DMG\` 를 내려받아 Posteight 를 Applications 로 끌어다 놓는다.
+
+          #### 처음 열 때
 
           Posteight 는 아직 Apple 공증을 받지 않았다. macOS 가 한 번 차단한다.
 
