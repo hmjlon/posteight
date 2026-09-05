@@ -26,6 +26,7 @@ final class AppSettings: ObservableObject {
         static let dockIcon = "posteight.showsDockIcon"
         static let countStyle = "posteight.menuBarCountStyle"
         static let notesOnTop = "posteight.keepsNotesOnTop"
+        static let hidesFromCapture = "posteight.hidesNotesFromScreenCapture"
         static let language = "posteight.language"
     }
 
@@ -62,6 +63,16 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    /// On by default: a memo the user keeps on the desktop all day should not walk into a
+    /// screen share by accident. Turning it off is for the times a memo is the thing being
+    /// shown — a demo, a stream, a screenshot for documentation.
+    @Published var hidesNotesFromScreenCapture: Bool {
+        didSet {
+            guard hidesNotesFromScreenCapture != oldValue else { return }
+            UserDefaults.standard.set(hidesNotesFromScreenCapture, forKey: Key.hidesFromCapture)
+        }
+    }
+
     /// Bumped when the Dock icon is clicked, so the menu bar label can bring the card back.
     @Published private(set) var showAllNotesRequests = 0
 
@@ -69,10 +80,15 @@ final class AppSettings: ObservableObject {
         keepsNotesOnTop ? .floating : .normal
     }
 
+    var noteWindowSharingType: NSWindow.SharingType {
+        hidesNotesFromScreenCapture ? .none : .readOnly
+    }
+
     private init() {
         let defaults = UserDefaults.standard
         showsDockIcon = defaults.object(forKey: Key.dockIcon) as? Bool ?? true
         keepsNotesOnTop = defaults.object(forKey: Key.notesOnTop) as? Bool ?? true
+        hidesNotesFromScreenCapture = defaults.object(forKey: Key.hidesFromCapture) as? Bool ?? true
         menuBarCountStyle = (defaults.string(forKey: Key.countStyle)
             .flatMap(MenuBarCountStyle.init(rawValue:))) ?? .remaining
         language = (defaults.string(forKey: Key.language)

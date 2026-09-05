@@ -85,9 +85,10 @@ quick capture, opening memo windows, hiding every memo at once, the daily log, t
 settings, and quit.
 
 Settings stay small: what the status item counts, whether notes float above other apps,
-and whether Posteight keeps a Dock icon. The Dock icon is on by default, so a running
-Posteight can be reached from the Dock and Command-Tab, and clicking it brings the memo
-windows back. Turning it off leaves a menu-bar-only app.
+whether memos stay out of screen shares and screenshots, and whether Posteight keeps a
+Dock icon. The Dock icon is on by default, so a running Posteight can be reached from the
+Dock and Command-Tab, and clicking it brings the memo windows back. Turning it off leaves
+a menu-bar-only app.
 
 ### Language
 
@@ -106,6 +107,12 @@ The menus macOS draws itself — File, Edit, Window — still follow the system 
 Notes are stored locally in `~/Library/Application Support/Posteight/`. There is no
 account, no sync, and no telemetry. Export is explicit: the daily log copies to the
 clipboard as Markdown. Notion synchronization is not implemented yet.
+
+Locking the screen puts the visible memos away, and unlocking brings them back where they
+were; memos you hid yourself stay hidden either way. Memo windows are also left out of
+screen shares, recordings, and screenshots — handing your screen to a meeting does not
+hand over the memos. Turn that off in **Settings → Notes** when the memos are what you
+mean to show. Neither asks for an extra permission.
 
 This is visual privacy, not a security-vault promise. Posteight can reduce accidental
 exposure when you step away or share a screen, but it cannot prevent someone nearby from

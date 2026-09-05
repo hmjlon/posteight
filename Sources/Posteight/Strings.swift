@@ -140,6 +140,9 @@ private let englishStrings: [String: String] = [
     "노트를 항상 맨 앞에 표시": "Keep notes in front",
     "끄면 다른 앱 뒤로 밀려나서, 집중해서 일할 때 화면을 덜 가립니다.":
         "With this off, notes fall behind other apps and cover less of the screen during focused work.",
+    "화면 공유와 스크린샷에서 노트 감추기": "Hide notes from screen sharing and screenshots",
+    "켜 두면 화면을 공유하거나 녹화할 때, 스크린샷을 찍을 때 노트가 찍히지 않습니다. 노트를 직접 보여 주려면 끕니다.":
+        "With this on, notes stay out of screen shares, recordings and screenshots. Turn it off when the notes are what you mean to show.",
     "앱": "App",
     "언어": "Language",
     "시스템 설정에 따름": "Follow system setting",

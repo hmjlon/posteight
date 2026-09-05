@@ -40,4 +40,16 @@ struct NoteWindowVisibilityTests {
         #expect(!visibility.isHidden(firstID))
         #expect(visibility.isHidden(secondID))
     }
+
+    @Test("화면을 풀면 잠금이 감춘 메모만 되돌리고 사용자가 숨긴 것은 그대로 둔다")
+    func unlockRestoresOnlyWhatTheLockHid() {
+        let lockedID = UUID()
+        let userHiddenID = UUID()
+        var visibility = NoteWindowVisibility()
+        visibility.hide(userHiddenID)
+
+        let restorable = visibility.restorableAfterLock([lockedID, userHiddenID])
+
+        #expect(restorable == [lockedID])
+    }
 }

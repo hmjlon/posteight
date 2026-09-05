@@ -84,6 +84,9 @@ struct StickyNoteWindowView: View {
         .onChange(of: settings.keepsNotesOnTop) { _, _ in
             window?.level = settings.noteWindowLevel
         }
+        .onChange(of: settings.hidesNotesFromScreenCapture) { _, _ in
+            window?.sharingType = settings.noteWindowSharingType
+        }
     }
 
     private func memoTabBar(note: StickyNote, selectedTab: MemoTab) -> some View {
@@ -510,6 +513,7 @@ private struct NoteWindowConfigurator: NSViewRepresentable {
             window.backgroundColor = .clear
             window.isOpaque = false
             window.hasShadow = true
+            window.sharingType = AppSettings.shared.noteWindowSharingType
             window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
             window.contentMinSize = NSSize(
                 width: DesignTokens.minimumNoteSize.width,

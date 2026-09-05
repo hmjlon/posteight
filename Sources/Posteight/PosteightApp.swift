@@ -29,6 +29,12 @@ struct NoteWindowVisibility {
     func isHidden(_ noteID: UUID) -> Bool {
         hiddenNoteIDs.contains(noteID)
     }
+
+    /// A screen lock hides windows without changing what the user chose to hide, so unlocking
+    /// may only bring back the ones the lock itself took away.
+    func restorableAfterLock(_ lockHidden: Set<UUID>) -> Set<UUID> {
+        lockHidden.subtracting(hiddenNoteIDs)
+    }
 }
 
 /// `WindowGroup` creates a new window on every `openWindow` call, even for the same value.
@@ -48,8 +54,49 @@ final class NoteWindowCoordinator {
     private var windows: [UUID: WeakWindow] = [:]
     private var pendingNoteIDs: Set<UUID> = []
     private var visibility = NoteWindowVisibility()
+    private var lockHiddenNoteIDs: Set<UUID> = []
 
-    private init() {}
+    private init() {
+        observeScreenLock()
+    }
+
+    /// Locking the screen is the one moment the app can be certain the user walked away, and it
+    /// costs no permission to hear about. Notes drop out of sight until the session comes back.
+    private func observeScreenLock() {
+        let center = DistributedNotificationCenter.default()
+        center.addObserver(
+            forName: .init("com.apple.screenIsLocked"), object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.hideForScreenLock() }
+        }
+        center.addObserver(
+            forName: .init("com.apple.screenIsUnlocked"), object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.revealAfterScreenUnlock() }
+        }
+    }
+
+    /// A miniaturized or already hidden window has nothing left to hide. Remembering exactly
+    /// which windows the lock took away keeps the unlock from changing anything else.
+    private func hideForScreenLock() {
+        lockHiddenNoteIDs = []
+
+        for (noteID, weakWindow) in windows {
+            guard let window = weakWindow.value, window.isVisible else { continue }
+            window.orderOut(nil)
+            lockHiddenNoteIDs.insert(noteID)
+        }
+    }
+
+    private func revealAfterScreenUnlock() {
+        // `orderFront` rather than `makeKeyAndOrderFront`: coming back to a locked Mac lands in
+        // whatever app was in front, and the notes have no business taking that away.
+        for noteID in visibility.restorableAfterLock(lockHiddenNoteIDs) {
+            windows[noteID]?.value?.orderFront(nil)
+        }
+
+        lockHiddenNoteIDs = []
+    }
 
     func present(_ noteID: UUID, openWindow: (UUID) -> Void) {
         visibility.present(noteID)
@@ -115,6 +162,36 @@ final class NoteWindowCoordinator {
     }
 }
 
+/// Memo contents are the whole promise of the app, so every window that shows them stays out of
+/// screen shares, recordings and screenshots. One flag, no permission, nothing to configure.
+struct ScreenCaptureExclusion: NSViewRepresentable {
+    @ObservedObject private var settings = AppSettings.shared
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        exclude(view)
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        exclude(nsView)
+    }
+
+    private func exclude(_ view: NSView) {
+        let sharingType = settings.noteWindowSharingType
+        // The view has no window yet while SwiftUI is still building the scene.
+        DispatchQueue.main.async {
+            view.window?.sharingType = sharingType
+        }
+    }
+}
+
+extension View {
+    func excludedFromScreenCapture() -> some View {
+        background(ScreenCaptureExclusion())
+    }
+}
+
 @main
 struct PosteightApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
@@ -160,6 +237,7 @@ struct PosteightApp: App {
         Window("오늘 기록", id: WindowID.dailyLog) {
             DailyLogPreviewView()
                 .environmentObject(store)
+                .excludedFromScreenCapture()
         }
         .windowResizability(.contentSize)
         .defaultPosition(.center)
@@ -167,6 +245,7 @@ struct PosteightApp: App {
         Window("휴지통", id: WindowID.trash) {
             TrashView()
                 .environmentObject(store)
+                .excludedFromScreenCapture()
         }
         .windowResizability(.contentSize)
         .defaultPosition(.center)
