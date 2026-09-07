@@ -213,6 +213,7 @@ struct TodoItem: Identifiable, Codable, Equatable {
     var isDone: Bool
     var createdAt: Date
     var completedAt: Date?
+    var reminderAt: Date?
 
     init(
         id: UUID = UUID(),
@@ -220,7 +221,8 @@ struct TodoItem: Identifiable, Codable, Equatable {
         detail: String? = nil,
         isDone: Bool = false,
         createdAt: Date = Date(),
-        completedAt: Date? = nil
+        completedAt: Date? = nil,
+        reminderAt: Date? = nil
     ) {
         self.id = id
         self.title = title
@@ -228,6 +230,7 @@ struct TodoItem: Identifiable, Codable, Equatable {
         self.isDone = isDone
         self.createdAt = createdAt
         self.completedAt = completedAt
+        self.reminderAt = reminderAt
     }
 }
 

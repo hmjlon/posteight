@@ -13,6 +13,7 @@ struct TodoItemRow: View {
     @State private var isEditingText = false
     @State private var isRowHovered = false
     @State private var showDetail = false
+    @State private var showReminder = false
     @State private var measuredTitleWidth: CGFloat = 0
     /// Bumped on every strike so a stale timer cannot end a newer flourish early.
     @State private var penGeneration = 0
@@ -82,6 +83,26 @@ struct TodoItemRow: View {
                 .allowsHitTesting(false)
             }
             .frame(height: 28)
+
+            Button {
+                showReminder = true
+            } label: {
+                Image(systemName: item.reminderAt == nil ? "bell" : "bell.fill")
+                    .font(.system(size: 10, weight: .semibold))
+                    .frame(width: 16, height: 20)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color(hex: note.penHex).opacity(0.6))
+            .opacity(item.reminderAt != nil || isRowHovered || isEditingText ? 1 : 0)
+            .disabled(!hasContent || item.isDone)
+            .help(item.reminderAt.map { L("알림 예약") + ": " + $0.formatted(date: .abbreviated, time: .shortened) } ?? L("알림 예약"))
+            .popover(isPresented: $showReminder) {
+                ReminderEditor(noteID: note.id, tabID: tab.id, item: item, onClose: { showReminder = false })
+                    .environmentObject(store)
+                    .presentationBackground(Color(hex: note.paperHex))
+                    .preferredColorScheme(.light)
+            }
 
             Button {
                 showDetail = true

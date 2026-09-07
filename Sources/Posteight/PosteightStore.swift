@@ -354,6 +354,13 @@ final class PosteightStore: ObservableObject {
         }
     }
 
+    func setReminder(noteID: UUID, tabID: UUID, itemID: UUID, date: Date?) {
+        updateItem(noteID: noteID, tabID: tabID, itemID: itemID) { item in
+            item.reminderAt = date
+        }
+        flush()
+    }
+
     func itemTitle(noteID: UUID, tabID: UUID, itemID: UUID) -> String? {
         tab(noteID: noteID, tabID: tabID)?
             .items.first { $0.id == itemID }?.title

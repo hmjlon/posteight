@@ -281,6 +281,7 @@ private struct MenuBarLabel: View {
     @EnvironmentObject private var store: PosteightStore
     @ObservedObject private var settings = AppSettings.shared
     @Environment(\.openWindow) private var openWindow
+    @ObservedObject private var reminders = ReminderService.shared
 
     var body: some View {
         // Keep the brand mark intact and let the count read as status beside it. With no tasks,
@@ -288,6 +289,7 @@ private struct MenuBarLabel: View {
         MenuBarProgressCard(done: store.doneCount, total: store.totalCount, count: displayCount)
             .accessibilityLabel(accessibilityLabel)
         .task {
+            reminders.connect(to: store)
             for note in store.notes {
                 presentNote(note.id)
             }

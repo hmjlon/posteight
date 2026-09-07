@@ -62,7 +62,24 @@ enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
 /// Xcode build paths — two places to drift. Move to `.lproj` when a third language or a
 /// translator shows up.
 private let englishStrings: [String: String] = [
+    "알림을 받으려면 한 번만 허용해 주세요. 아래 버튼에서 Posteight 알림을 켤 수 있어요.": "Allow notifications once to receive reminders. Use the button below to turn on Posteight notifications.",
+    "알림은 설치된 Posteight 앱에서 사용할 수 있어요.": "Reminders are available in the installed Posteight app.",
+    "할 일이 완료되거나 삭제되어 예약하지 못했어요.": "This task was completed or deleted, so it could not be scheduled.",
+    "알림을 등록하지 못했어요. 잠시 후 다시 시도해 주세요.": "Could not register the reminder. Please try again shortly.",
+    "예약 완료": "Reminder scheduled",
+    "알림 설정 열기": "Open Notification Settings",
+    "처음 예약할 때 macOS 알림 허용이 필요해요.": "Allow macOS notifications when scheduling your first reminder.",
+    "예약 중…": "Scheduling…",
+    "닫기": "Close",
+
     "현재 탭 삭제 (⌘⌫) — 휴지통에서 복구할 수 있어요": "Delete current tab (⌘⌫) — recover it from Trash",
+    "알림 예약": "Schedule reminder",
+    "날짜와 시간": "Date and time",
+    "알림 해제": "Remove reminder",
+    "취소": "Cancel",
+    "예약": "Schedule",
+    "현재보다 나중 시간을 선택해 주세요.": "Choose a time in the future.",
+
     // AppSettings
     "남은 일": "Remaining",
     "완료": "Done",
