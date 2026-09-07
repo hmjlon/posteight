@@ -15,6 +15,7 @@ struct StickyNoteWindowView: View {
     @State private var isCardHovered = false
     @State private var editingTabID: UUID?
     @State private var hoveredTabID: UUID?
+    @State private var lastMergeAttempt = Date.distantPast
 
     var body: some View {
         Group {
@@ -47,7 +48,8 @@ struct StickyNoteWindowView: View {
                     onResizeEnded: { translation in
                         finishResizingWindow(translation: translation)
                     },
-                    onDelete: { moveToTrash(note) },
+                    onDelete: { deleteSelectedTab() },
+                    onDeleteNote: { moveToTrash(note) },
                     isPencilCaseOpen: $isPencilCaseOpen
                 )
                 .id(selectedTab.id)
@@ -73,7 +75,13 @@ struct StickyNoteWindowView: View {
             NoteWindowConfigurator(
                 note: note,
                 windowTitle: selectedTab.title,
-                onEscape: closeCard
+                onEscape: closeCard,
+                onDelete: deleteSelectedTab,
+                onMoveEnded: mergeAtDropLocation,
+                onAddTab: {
+                    editingTabID = nil
+                    _ = store.addTab(to: noteID, language: settings.language)
+                }
             ) { configuredWindow in
                 NoteWindowCoordinator.shared.register(configuredWindow, for: noteID)
                 if window !== configuredWindow {
@@ -306,7 +314,7 @@ struct StickyNoteWindowView: View {
                         .font(.system(size: isSelected ? 10 : 9, weight: .semibold))
 
                     if isSelected {
-                        WindowMoveHandle(onDragEnded: saveWindowPosition)
+                        WindowMoveHandle(onDragEnded: saveWindowPosition, onDragCompleted: mergeAtDropLocation)
                     }
                 }
                 .frame(width: 15, height: 18)
@@ -437,6 +445,28 @@ struct StickyNoteWindowView: View {
     }
 
     /// Closing only hides this window; the memo comes back with 메모 보기.
+    private func deleteSelectedTab() {
+        guard let note = store.notes.first(where: { $0.id == noteID }) else { return }
+        editingTabID = nil
+        store.trashSelectedTab(in: noteID)
+        if note.tabs.count == 1 { discardCard() }
+    }
+
+    private func mergeAtDropLocation() {
+        guard store.notes.contains(where: { $0.id == noteID }),
+              Date().timeIntervalSince(lastMergeAttempt) > 0.3 else { return }
+        lastMergeAttempt = Date()
+        saveWindowPosition()
+        guard let targetID = NoteWindowCoordinator.shared.dropTarget(at: NSEvent.mouseLocation, excluding: noteID) else { return }
+        if store.mergeNotes(from: noteID, into: targetID) {
+            discardCard()
+        } else {
+            let alert = NSAlert()
+            alert.messageText = L("탭은 이 메모에 최대 5개까지 둘 수 있어요")
+            if let window { alert.beginSheetModal(for: window) }
+        }
+    }
+
     private func closeCard() {
         NoteWindowCoordinator.shared.hide(noteID)
     }
@@ -474,6 +504,9 @@ private struct NoteWindowConfigurator: NSViewRepresentable {
     let note: StickyNote
     let windowTitle: String
     let onEscape: () -> Void
+    let onDelete: () -> Void
+    let onMoveEnded: () -> Void
+    let onAddTab: () -> Void
     let onWindowAvailable: (NSWindow) -> Void
 
     func makeCoordinator() -> Coordinator {
@@ -494,6 +527,9 @@ private struct NoteWindowConfigurator: NSViewRepresentable {
         DispatchQueue.main.async {
             guard let window = view.window else { return }
             coordinator.onEscape = onEscape
+            coordinator.onAddTab = onAddTab
+            coordinator.onDelete = onDelete
+            coordinator.onMoveEnded = onMoveEnded
             coordinator.window = window
             onWindowAvailable(window)
             window.title = windowTitle
@@ -539,29 +575,58 @@ private struct NoteWindowConfigurator: NSViewRepresentable {
         }
     }
 
+    @MainActor
     final class Coordinator {
         var didConfigure = false
         weak var window: NSWindow?
         var onEscape: (() -> Void)?
-        private var escapeMonitor: Any?
+        var onAddTab: (() -> Void)?
+        var onDelete: (() -> Void)?
+        var onMoveEnded: (() -> Void)?
+        private var dragStartFrame: NSRect?
+        nonisolated(unsafe) private var dragMonitor: Any?
+        nonisolated(unsafe) private var escapeMonitor: Any?
 
         func installEscapeMonitor() {
             guard escapeMonitor == nil else { return }
 
+            dragMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseUp]) { [weak self] event in
+                guard let self else { return event }
+                if event.type == .leftMouseDown {
+                    self.dragStartFrame = event.window === self.window ? self.window?.frame : nil
+                } else if let start = self.dragStartFrame {
+                    self.dragStartFrame = nil
+                    if let frame = self.window?.frame, frame.origin != start.origin, frame.size == start.size {
+                        self.onMoveEnded?()
+                    }
+                }
+                return event
+            }
             escapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
                 guard
                     let self,
-                    event.window === self.window,
-                    event.keyCode == 53,
-                    event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty
+                    event.window === self.window
                 else { return event }
 
-                self.onEscape?()
-                return nil
+                let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
+                if modifiers == [.command], event.charactersIgnoringModifiers?.lowercased() == "t" {
+                    self.onAddTab?()
+                    return nil
+                }
+                if modifiers == [.command], event.keyCode == 51 {
+                    self.onDelete?()
+                    return nil
+                }
+                if event.keyCode == 53, modifiers.isEmpty {
+                    self.onEscape?()
+                    return nil
+                }
+                return event
             }
         }
 
         deinit {
+            if let dragMonitor { NSEvent.removeMonitor(dragMonitor) }
             if let escapeMonitor {
                 NSEvent.removeMonitor(escapeMonitor)
             }

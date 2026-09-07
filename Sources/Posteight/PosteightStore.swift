@@ -179,6 +179,32 @@ final class PosteightStore: ObservableObject {
         return notes.contains { note in note.tabs.contains { $0.id == tabID } } ? tabID : nil
     }
 
+    func trashSelectedTab(in noteID: UUID) {
+        guard let note = notes.first(where: { $0.id == noteID }) else { return }
+        if note.tabs.count > 1 {
+            moveTabToTrash(noteID: noteID, tabID: note.selectedTabID)
+        } else {
+            moveNoteToTrash(noteID)
+        }
+        flush()
+    }
+
+    /// Move all tabs without copying their identities or putting a duplicate into the trash.
+    @discardableResult
+    func mergeNotes(from sourceID: UUID, into targetID: UUID) -> Bool {
+        guard sourceID != targetID,
+              let source = notes.first(where: { $0.id == sourceID }),
+              let targetIndex = notes.firstIndex(where: { $0.id == targetID }),
+              notes[targetIndex].tabs.count + source.tabs.count <= MemoSurfaceMetrics.maximumTabCount else { return false }
+        var merged = notes
+        merged[targetIndex].tabs.append(contentsOf: source.tabs)
+        merged[targetIndex].selectedTabID = source.selectedTabID
+        merged.removeAll { $0.id == sourceID }
+        notes = merged
+        flush()
+        return true
+    }
+
     func selectTab(noteID: UUID, tabID: UUID) {
         updateNote(noteID) { note in
             guard note.tabs.contains(where: { $0.id == tabID }) else { return }

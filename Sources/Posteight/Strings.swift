@@ -62,6 +62,7 @@ enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
 /// Xcode build paths — two places to drift. Move to `.lproj` when a third language or a
 /// translator shows up.
 private let englishStrings: [String: String] = [
+    "현재 탭 삭제 (⌘⌫) — 휴지통에서 복구할 수 있어요": "Delete current tab (⌘⌫) — recover it from Trash",
     // AppSettings
     "남은 일": "Remaining",
     "완료": "Done",

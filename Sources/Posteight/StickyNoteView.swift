@@ -8,6 +8,7 @@ struct StickyNoteView: View {
     let onResizeChanged: (CGSize) -> Void
     let onResizeEnded: (CGSize) -> Void
     let onDelete: () -> Void
+    let onDeleteNote: () -> Void
     @Binding var isPencilCaseOpen: Bool
     @State private var focusedItemID: UUID?
     @State private var resizeAnchor: CGPoint?
@@ -44,7 +45,7 @@ struct StickyNoteView: View {
             ScrollViewReader { proxy in
                 ScrollView(.vertical) {
                     if isPencilCaseOpen {
-                        PencilCaseView(note: note, onDelete: onDelete)
+                        PencilCaseView(note: note, onDelete: onDeleteNote)
                             .transition(.asymmetric(
                                 insertion: .move(edge: .top).combined(with: .opacity),
                                 removal: .move(edge: .top).combined(with: .opacity)
@@ -71,18 +72,31 @@ struct StickyNoteView: View {
                 }
             }
 
-            Button {
-                focusedItemID = store.addItem(to: note.id, tabID: tab.id)
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "plus")
-                    Text(L("할 일 추가"))
+            HStack {
+                Button {
+                    focusedItemID = store.addItem(to: note.id, tabID: tab.id)
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "plus")
+                        Text(L("할 일 추가"))
+                    }
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(.black.opacity(0.58))
                 }
-                .font(.system(size: 12, weight: .medium, design: .rounded))
-                .foregroundStyle(.black.opacity(0.58))
+                .buttonStyle(.plain)
+                .help(L("할 일 추가"))
+                Spacer()
+                Button(action: onDelete) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 11))
+                        .frame(width: 24, height: 22)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.black.opacity(0.38))
+                .help(L("현재 탭 삭제 (⌘⌫) — 휴지통에서 복구할 수 있어요"))
+                .padding(.trailing, 15)
             }
-            .buttonStyle(.plain)
-            .help(L("할 일 추가"))
         }
         .padding(.horizontal, 13)
         .padding(.top, 9)

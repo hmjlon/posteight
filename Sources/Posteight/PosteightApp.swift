@@ -142,6 +142,15 @@ final class NoteWindowCoordinator {
         }
     }
 
+    func dropTarget(at point: NSPoint, excluding sourceID: UUID) -> UUID? {
+        for window in NSApp.orderedWindows where window.isVisible && !window.isMiniaturized && window.frame.contains(point) {
+            if let entry = windows.first(where: { $0.key != sourceID && $0.value.value === window }) {
+                return entry.key
+            }
+        }
+        return nil
+    }
+
     func hideAll() {
         visibility.hideAll(registered: Set(windows.keys), pending: pendingNoteIDs)
 
