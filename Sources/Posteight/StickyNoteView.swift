@@ -8,7 +8,6 @@ struct StickyNoteView: View {
     let onResizeChanged: (CGSize) -> Void
     let onResizeEnded: (CGSize) -> Void
     let onDelete: () -> Void
-    let onDeleteNote: () -> Void
     @Binding var isPencilCaseOpen: Bool
     @State private var focusedItemID: UUID?
     @State private var resizeAnchor: CGPoint?
@@ -45,7 +44,7 @@ struct StickyNoteView: View {
             ScrollViewReader { proxy in
                 ScrollView(.vertical) {
                     if isPencilCaseOpen {
-                        PencilCaseView(note: note, onDelete: onDeleteNote)
+                        PencilCaseView(note: note)
                             .transition(.asymmetric(
                                 insertion: .move(edge: .top).combined(with: .opacity),
                                 removal: .move(edge: .top).combined(with: .opacity)
@@ -88,13 +87,19 @@ struct StickyNoteView: View {
                 Spacer()
                 Button(action: onDelete) {
                     Image(systemName: "trash")
+                        .symbolRenderingMode(.monochrome)
+                        .foregroundStyle(Color.red)
                         .font(.system(size: 11))
-                        .frame(width: 24, height: 22)
+                        .frame(width: 32, height: 28)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.black.opacity(0.38))
-                .help(L("현재 탭 삭제 (⌘⌫) — 휴지통에서 복구할 수 있어요"))
+                .background {
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .help(L("현재 탭 삭제 (⌘⌫) — 휴지통에서 복구할 수 있어요"))
+                }
+                .accessibilityLabel(L("현재 탭 삭제 (⌘⌫) — 휴지통에서 복구할 수 있어요"))
                 .padding(.trailing, 15)
             }
         }

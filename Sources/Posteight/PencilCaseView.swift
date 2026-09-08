@@ -4,8 +4,6 @@ struct PencilCaseView: View {
     @EnvironmentObject private var store: PosteightStore
     @ObservedObject private var settings = AppSettings.shared
     let note: StickyNote
-    /// Deleting lives here, away from the header, because an `✕` next to a memo reads as close.
-    let onDelete: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -117,15 +115,6 @@ struct PencilCaseView: View {
                 }
             }
 
-            Divider()
-
-            Button(role: .destructive, action: onDelete) {
-                Label(L("메모 삭제"), systemImage: "trash")
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.red.opacity(0.74))
-            .help(L("이 메모를 휴지통으로 보냅니다"))
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)

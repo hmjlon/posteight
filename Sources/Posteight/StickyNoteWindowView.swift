@@ -12,6 +12,8 @@ struct StickyNoteWindowView: View {
     @State private var resizeStartFrame: NSRect?
     @State private var isMovingToTrash = false
     @State private var isPencilCaseOpen = false
+    @State private var showsDeleteConfirmation = false
+    @State private var pendingDeleteTabID: UUID?
     @State private var isCardHovered = false
     @State private var editingTabID: UUID?
     @State private var hoveredTabID: UUID?
@@ -48,8 +50,7 @@ struct StickyNoteWindowView: View {
                     onResizeEnded: { translation in
                         finishResizingWindow(translation: translation)
                     },
-                    onDelete: { deleteSelectedTab() },
-                    onDeleteNote: { moveToTrash(note) },
+                    onDelete: requestDeleteSelectedTab,
                     isPencilCaseOpen: $isPencilCaseOpen
                 )
                 .id(selectedTab.id)
@@ -81,7 +82,7 @@ struct StickyNoteWindowView: View {
                 note: note,
                 windowTitle: selectedTab.title,
                 onEscape: closeCard,
-                onDelete: deleteSelectedTab,
+                onDelete: requestDeleteSelectedTab,
                 onMoveEnded: mergeAtDropLocation,
                 onAddTab: {
                     editingTabID = nil
@@ -93,6 +94,12 @@ struct StickyNoteWindowView: View {
                     window = configuredWindow
                 }
             }
+        }
+        .alert(L("현재 탭을 삭제할까요?"), isPresented: $showsDeleteConfirmation) {
+            Button(L("취소"), role: .cancel) { pendingDeleteTabID = nil }
+            Button(L("확인"), role: .destructive) { confirmDeleteTab() }
+        } message: {
+            Text(L("삭제한 탭은 휴지통에서 복구할 수 있어요."))
         }
         .environment(\.editingStore, store)
         .onChange(of: settings.keepsNotesOnTop) { _, _ in
@@ -450,12 +457,24 @@ struct StickyNoteWindowView: View {
         store.moveTabToTrash(noteID: note.id, tabID: tab.id)
     }
 
-    /// Closing only hides this window; the memo comes back with 메모 보기.
-    private func deleteSelectedTab() {
-        guard let note = store.notes.first(where: { $0.id == noteID }) else { return }
+    private func requestDeleteSelectedTab() {
+        guard let note = store.notes.first(where: { $0.id == noteID }),
+              let tab = note.selectedTab else { return }
+        pendingDeleteTabID = tab.id
+        showsDeleteConfirmation = true
+    }
+
+    private func confirmDeleteTab() {
+        defer { pendingDeleteTabID = nil }
+        guard let tabID = pendingDeleteTabID,
+              let note = store.notes.first(where: { $0.id == noteID }),
+              note.tabs.contains(where: { $0.id == tabID }) else { return }
         editingTabID = nil
-        store.trashSelectedTab(in: noteID)
-        if note.tabs.count == 1 { discardCard() }
+        if note.tabs.count == 1 {
+            moveToTrash(note)
+        } else {
+            store.moveTabToTrash(noteID: noteID, tabID: tabID)
+        }
     }
 
     private func mergeAtDropLocation() {

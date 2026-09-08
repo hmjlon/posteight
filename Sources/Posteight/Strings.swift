@@ -77,6 +77,9 @@ private let englishStrings: [String: String] = [
     "날짜와 시간": "Date and time",
     "알림 해제": "Remove reminder",
     "취소": "Cancel",
+    "확인": "Confirm",
+    "현재 탭을 삭제할까요?": "Delete the current tab?",
+    "삭제한 탭은 휴지통에서 복구할 수 있어요.": "You can restore the deleted tab from Trash.",
     "예약": "Schedule",
     "현재보다 나중 시간을 선택해 주세요.": "Choose a time in the future.",
 
