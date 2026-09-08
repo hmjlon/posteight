@@ -134,6 +134,8 @@ struct TodoItemRow: View {
                     },
                     onClose: { showDetail = false }
                 )
+                // Keep the slip open across app switches until the user chooses Done.
+                .interactiveDismissDisabled()
                 // Paints the popover's own chrome, arrow included, so the slip reads as a piece
                 // torn off this card rather than a system panel floating over it.
                 .presentationBackground(Color(hex: note.paperHex))
