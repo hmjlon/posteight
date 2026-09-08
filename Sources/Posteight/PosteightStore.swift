@@ -22,6 +22,102 @@ final class PosteightStore: ObservableObject {
         }
     }
 
+    // Session history belongs to the document, not AppKit's temporary field editor.
+    @Published private(set) var historyRevision = 0
+    @Published private(set) var historyWindowRequest: HistoryWindowRequest?
+    private var undoEntries: [EditingHistoryEntry] = []
+    private var redoEntries: [EditingHistoryEntry] = []
+    private var coalescingKey: String?
+
+    var canUndo: Bool { !undoEntries.isEmpty }
+    var canRedo: Bool { !redoEntries.isEmpty }
+
+    func endTextUndoGroup() { coalescingKey = nil }
+
+    func clearEditingHistory() {
+        undoEntries.removeAll()
+        redoEntries.removeAll()
+        endTextUndoGroup()
+    }
+
+    private var editingSnapshot: EditingSnapshot {
+        EditingSnapshot(notes: notes, trashedNotes: trashedNotes, trashedTabs: trashedTabs)
+    }
+
+    private func recordEdit(from before: EditingSnapshot, key: String? = nil,
+                            noteID: UUID? = nil, tabID: UUID? = nil) {
+        let after = editingSnapshot
+        guard before != after else { return }
+        if let key, coalescingKey == key, let last = undoEntries.last,
+           case let .data(original, _) = last.change {
+            undoEntries[undoEntries.count - 1].change = .data(before: original, after: after)
+        } else {
+            undoEntries.append(EditingHistoryEntry(change: .data(before: before, after: after),
+                                                   key: key, noteID: noteID, tabID: tabID))
+        }
+        if undoEntries.count > 100 { undoEntries.removeFirst(undoEntries.count - 100) }
+        redoEntries.removeAll()
+        coalescingKey = key
+    }
+
+    func recordClosedWindow(_ noteID: UUID) {
+        guard notes.contains(where: { $0.id == noteID }) else { return }
+        undoEntries.append(EditingHistoryEntry(change: .closedWindow(noteID), noteID: noteID))
+        if undoEntries.count > 100 { undoEntries.removeFirst() }
+        redoEntries.removeAll()
+        endTextUndoGroup()
+    }
+
+    @discardableResult
+    func undo() -> Bool {
+        guard let entry = undoEntries.popLast() else { return false }
+        applyHistory(entry, undo: true)
+        redoEntries.append(entry)
+        return true
+    }
+
+    @discardableResult
+    func redo() -> Bool {
+        guard let entry = redoEntries.popLast() else { return false }
+        applyHistory(entry, undo: false)
+        undoEntries.append(entry)
+        return true
+    }
+
+    private func applyHistory(_ entry: EditingHistoryEntry, undo: Bool) {
+        endTextUndoGroup()
+        // Advance before publishing notes so live editors reject pending, stale end-edit writes.
+        historyRevision += 1
+        switch entry.change {
+        case let .closedWindow(noteID):
+            historyWindowRequest = HistoryWindowRequest(noteID: noteID, show: undo)
+        case let .data(before, after):
+            let snapshot = undo ? before : after
+            let current = Dictionary(uniqueKeysWithValues: notes.map { ($0.id, $0) })
+            notes = snapshot.notes.map { saved in
+                var note = saved
+                // Dragging and resizing are not content edits; never rewind a user's layout.
+                if let live = current[note.id] {
+                    note.position = live.position
+                    note.size = live.size
+                }
+                if note.id == entry.noteID, let tabID = entry.tabID,
+                   note.tabs.contains(where: { $0.id == tabID }) { note.selectedTabID = tabID }
+                return note
+            }
+            trashedNotes = snapshot.trashedNotes
+            trashedTabs = snapshot.trashedTabs
+            if let noteID = entry.noteID, notes.contains(where: { $0.id == noteID }) {
+                historyWindowRequest = HistoryWindowRequest(noteID: noteID, show: true)
+            }
+        }
+        flush()
+    }
+
+    private func textHistoryKey(_ field: String, old: String, new: String) -> String {
+        field + (new.count < old.count ? ":delete" : new.count > old.count ? ":insert" : ":replace")
+    }
+
     private let storageKey = "posteight.notes.v1"
     private let trashStorageKey = "posteight.trash.v1"
     private let legacyStorageKey = "posteat.notes.v1"
@@ -108,17 +204,23 @@ final class PosteightStore: ObservableObject {
                 )
             ]
         )
+        let historyBefore = editingSnapshot
         notes.append(note)
+        recordEdit(from: historyBefore, noteID: note.id)
         return note.id
     }
 
     func moveNoteToTrash(_ noteID: UUID) {
+        let historyBefore = editingSnapshot
+        defer { recordEdit(from: historyBefore, noteID: noteID) }
         guard let index = notes.firstIndex(where: { $0.id == noteID }) else { return }
         let note = notes.remove(at: index)
         trashedNotes.insert(TrashedStickyNote(note: note, deletedAt: Date()), at: 0)
     }
 
     func restoreNote(_ noteID: UUID) {
+        let historyBefore = editingSnapshot
+        defer { recordEdit(from: historyBefore, noteID: noteID) }
         guard let index = trashedNotes.firstIndex(where: { $0.id == noteID }) else { return }
         var restoredNote = trashedNotes.remove(at: index).note
         restoredNote.position.x += 22
@@ -127,10 +229,12 @@ final class PosteightStore: ObservableObject {
     }
 
     func permanentlyDeleteNote(_ noteID: UUID) {
+        clearEditingHistory()
         trashedNotes.removeAll { $0.id == noteID }
     }
 
     func emptyTrash() {
+        clearEditingHistory()
         trashedNotes.removeAll()
         trashedTabs.removeAll()
     }
@@ -156,6 +260,8 @@ final class PosteightStore: ObservableObject {
 
     @discardableResult
     func addTab(to noteID: UUID, language: AppLanguage = .korean) -> UUID? {
+        let historyBefore = editingSnapshot
+        defer { recordEdit(from: historyBefore, noteID: noteID) }
         // The tab strip divides a fixed width and never scrolls, so past this count a tab would
         // be clipped out of reach — selectable by nothing, closable by nothing.
         guard let note = notes.first(where: { $0.id == noteID }),
@@ -192,6 +298,8 @@ final class PosteightStore: ObservableObject {
     /// Move all tabs without copying their identities or putting a duplicate into the trash.
     @discardableResult
     func mergeNotes(from sourceID: UUID, into targetID: UUID) -> Bool {
+        let historyBefore = editingSnapshot
+        defer { recordEdit(from: historyBefore, noteID: targetID) }
         guard sourceID != targetID,
               let source = notes.first(where: { $0.id == sourceID }),
               let targetIndex = notes.firstIndex(where: { $0.id == targetID }),
@@ -219,6 +327,8 @@ final class PosteightStore: ObservableObject {
     /// that control when it didn't.
     @discardableResult
     func moveTabToTrash(noteID: UUID, tabID: UUID) -> Bool {
+        let historyBefore = editingSnapshot
+        defer { recordEdit(from: historyBefore, noteID: noteID, tabID: tabID) }
         guard let noteIndex = notes.firstIndex(where: { $0.id == noteID }),
               notes[noteIndex].tabs.count > 1,
               let tabIndex = notes[noteIndex].tabs.firstIndex(where: { $0.id == tabID }) else {
@@ -253,6 +363,8 @@ final class PosteightStore: ObservableObject {
     /// Restores into the note it was closed from when that note still exists, or stands up a
     /// fresh note around it when that note is itself gone — a restore should never just vanish.
     func restoreTab(_ trashedTabID: UUID) {
+        let historyBefore = editingSnapshot
+        defer { recordEdit(from: historyBefore) }
         guard let index = trashedTabs.firstIndex(where: { $0.id == trashedTabID }) else { return }
         let trashed = trashedTabs.remove(at: index)
 
@@ -279,6 +391,7 @@ final class PosteightStore: ObservableObject {
     }
 
     func permanentlyDeleteTab(_ trashedTabID: UUID) {
+        clearEditingHistory()
         trashedTabs.removeAll { $0.id == trashedTabID }
     }
 
@@ -287,6 +400,9 @@ final class PosteightStore: ObservableObject {
     }
 
     func updateTabName(noteID: UUID, tabID: UUID, name: String) {
+        let historyBefore = editingSnapshot
+        let historyKey = textHistoryKey("name:\(tabID)", old: tabName(noteID: noteID, tabID: tabID) ?? "", new: name)
+        defer { recordEdit(from: historyBefore, key: historyKey, noteID: noteID, tabID: tabID) }
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         updateTab(noteID: noteID, tabID: tabID) { tab in
@@ -299,36 +415,49 @@ final class PosteightStore: ObservableObject {
     }
 
     func updateTabTitle(noteID: UUID, tabID: UUID, title: String) {
+        let historyBefore = editingSnapshot
+        let historyKey = textHistoryKey("title:\(tabID)", old: tabTitle(noteID: noteID, tabID: tabID) ?? "", new: title)
+        defer { recordEdit(from: historyBefore, key: historyKey, noteID: noteID, tabID: tabID) }
         updateTab(noteID: noteID, tabID: tabID) { tab in
             tab.title = title
         }
     }
 
     func updatePaperColor(_ noteID: UUID, hex: String) {
+        let historyBefore = editingSnapshot
+        defer { recordEdit(from: historyBefore, noteID: noteID) }
         updateNote(noteID) { note in
             note.paperHex = hex
         }
     }
 
     func updatePenColor(_ noteID: UUID, hex: String) {
+        let historyBefore = editingSnapshot
+        defer { recordEdit(from: historyBefore, noteID: noteID) }
         updateNote(noteID) { note in
             note.penHex = hex
         }
     }
 
     func updatePenStyle(_ noteID: UUID, style: PenStyle) {
+        let historyBefore = editingSnapshot
+        defer { recordEdit(from: historyBefore, noteID: noteID) }
         updateNote(noteID) { note in
             note.penStyle = style
         }
     }
 
     func updateTabSticker(noteID: UUID, tabID: UUID, symbol: String) {
+        let historyBefore = editingSnapshot
+        defer { recordEdit(from: historyBefore, noteID: noteID, tabID: tabID) }
         updateTab(noteID: noteID, tabID: tabID) { tab in
             tab.stickerSymbol = symbol
         }
     }
 
     func updateNotionLog(_ noteID: UUID, include: Bool) {
+        let historyBefore = editingSnapshot
+        defer { recordEdit(from: historyBefore, noteID: noteID) }
         updateNote(noteID) { note in
             note.includeInNotionLog = include
         }
@@ -337,6 +466,8 @@ final class PosteightStore: ObservableObject {
     @discardableResult
     func addItem(to noteID: UUID, tabID: UUID) -> UUID? {
         let itemID = UUID()
+        let historyBefore = editingSnapshot
+        defer { recordEdit(from: historyBefore, key: "item:\(itemID):insert", noteID: noteID, tabID: tabID) }
         let didAdd = updateTab(noteID: noteID, tabID: tabID) { tab in
             tab.items.append(TodoItem(id: itemID, title: ""))
         }
@@ -344,6 +475,9 @@ final class PosteightStore: ObservableObject {
     }
 
     func updateItemTitle(noteID: UUID, tabID: UUID, itemID: UUID, title: String) {
+        let historyBefore = editingSnapshot
+        let historyKey = textHistoryKey("item:\(itemID)", old: itemTitle(noteID: noteID, tabID: tabID, itemID: itemID) ?? "", new: title)
+        defer { recordEdit(from: historyBefore, key: historyKey, noteID: noteID, tabID: tabID) }
         updateItem(noteID: noteID, tabID: tabID, itemID: itemID) { item in
             item.title = title
 
@@ -355,6 +489,8 @@ final class PosteightStore: ObservableObject {
     }
 
     func setReminder(noteID: UUID, tabID: UUID, itemID: UUID, date: Date?) {
+        let historyBefore = editingSnapshot
+        defer { recordEdit(from: historyBefore, noteID: noteID, tabID: tabID) }
         updateItem(noteID: noteID, tabID: tabID, itemID: itemID) { item in
             item.reminderAt = date
         }
@@ -368,6 +504,9 @@ final class PosteightStore: ObservableObject {
 
     /// A detail that is only whitespace is dropped, so "has notes" never lights up for a blank one.
     func updateItemDetail(noteID: UUID, tabID: UUID, itemID: UUID, detail: String) {
+        let historyBefore = editingSnapshot
+        let historyKey = textHistoryKey("detail:\(itemID)", old: itemDetail(noteID: noteID, tabID: tabID, itemID: itemID) ?? "", new: detail)
+        defer { recordEdit(from: historyBefore, key: historyKey, noteID: noteID, tabID: tabID) }
         updateItem(noteID: noteID, tabID: tabID, itemID: itemID) { item in
             item.detail = detail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : detail
         }
@@ -379,6 +518,8 @@ final class PosteightStore: ObservableObject {
     }
 
     func toggleItem(noteID: UUID, tabID: UUID, itemID: UUID) {
+        let historyBefore = editingSnapshot
+        defer { recordEdit(from: historyBefore, noteID: noteID, tabID: tabID) }
         updateItem(noteID: noteID, tabID: tabID, itemID: itemID) { item in
             guard !item.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 item.isDone = false
@@ -392,6 +533,8 @@ final class PosteightStore: ObservableObject {
     }
 
     func deleteItem(noteID: UUID, tabID: UUID, itemID: UUID) {
+        let historyBefore = editingSnapshot
+        defer { recordEdit(from: historyBefore, noteID: noteID, tabID: tabID) }
         updateTab(noteID: noteID, tabID: tabID) { tab in
             tab.items.removeAll { $0.id == itemID }
         }

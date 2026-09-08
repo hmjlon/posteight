@@ -3,6 +3,7 @@ import SwiftUI
 
 struct PlainEditableTextField: NSViewRepresentable {
     @Binding var text: String
+    @Environment(\.editingStore) private var editingStore
     var placeholder: String = ""
     var fontSize: CGFloat = 13
     var fontWeight: NSFont.Weight = .regular
@@ -28,12 +29,23 @@ struct PlainEditableTextField: NSViewRepresentable {
         textField.usesSingleLineMode = true
         textField.lineBreakMode = .byTruncatingTail
         textField.cell?.sendsActionOnEndEditing = true
+        // NSCell configures the shared field editor each time editing starts.
+        textField.cell?.allowsUndo = editingStore == nil
         textField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         return textField
     }
 
     func updateNSView(_ textField: NSTextField, context: Context) {
         context.coordinator.parent = self
+        if let editingStore, context.coordinator.historyRevision != editingStore.historyRevision {
+            context.coordinator.historyRevision = editingStore.historyRevision
+            if let editor = textField.currentEditor() as? NSTextView {
+                let selection = editor.selectedRange()
+                editor.string = text
+                editor.setSelectedRange(NSRange(location: min(selection.location, (text as NSString).length), length: 0))
+            }
+            textField.stringValue = text
+        }
 
         if !context.coordinator.isEditing, textField.stringValue != text {
             textField.stringValue = text
@@ -64,6 +76,7 @@ struct PlainEditableTextField: NSViewRepresentable {
         var parent: PlainEditableTextField
         var isEditing = false
         var didRequestFocus = false
+        var historyRevision = 0
 
         init(parent: PlainEditableTextField) {
             self.parent = parent
@@ -92,7 +105,13 @@ struct PlainEditableTextField: NSViewRepresentable {
 
         func controlTextDidChange(_ notification: Notification) {
             guard let textField = notification.object as? NSTextField else { return }
-            parent.text = textField.stringValue
+            if let editor = textField.currentEditor() as? NSTextView, editor.hasMarkedText() { return }
+            // The live editor is the source of truth during editing.
+            parent.text = textField.currentEditor()?.string ?? textField.stringValue
+            // Keep individual edits undoable without splitting a Korean IME composition.
+            if let editor = textField.currentEditor() as? NSTextView, !editor.hasMarkedText() {
+                editor.breakUndoCoalescing()
+            }
         }
 
         /// Editing can end *because* SwiftUI is updating — presenting a popover hands key window
@@ -108,15 +127,20 @@ struct PlainEditableTextField: NSViewRepresentable {
                 return
             }
 
+            parent.editingStore?.endTextUndoGroup()
+            let revision = parent.editingStore?.historyRevision
             let value = textField.stringValue
             let submitted = (notification.userInfo?["NSTextMovement"] as? Int) == NSReturnTextMovement
 
             DispatchQueue.main.async { [self] in
                 isEditing = false
-                parent.text = value
+                // Undo can run before this deferred callback. Never write a stale value back.
+                if revision == parent.editingStore?.historyRevision {
+                    parent.text = value
+                }
                 parent.onEditingChanged?(false)
 
-                if submitted {
+                if submitted, revision == parent.editingStore?.historyRevision {
                     parent.onSubmit?()
                 }
             }

@@ -94,6 +94,7 @@ struct StickyNoteWindowView: View {
                 }
             }
         }
+        .environment(\.editingStore, store)
         .onChange(of: settings.keepsNotesOnTop) { _, _ in
             window?.level = settings.noteWindowLevel
         }
@@ -473,6 +474,7 @@ struct StickyNoteWindowView: View {
     }
 
     private func closeCard() {
+        store.recordClosedWindow(noteID)
         NoteWindowCoordinator.shared.hide(noteID)
     }
 
@@ -618,18 +620,21 @@ private struct NoteWindowConfigurator: NSViewRepresentable {
                     event.window === self.window
                 else { return event }
 
-                let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
-                if modifiers == [.command], event.charactersIgnoringModifiers?.lowercased() == "t" {
+                switch NoteKeyboardShortcut(event: event) {
+                case .addTab:
                     self.onAddTab?()
                     return nil
-                }
-                if modifiers == [.command], event.keyCode == 51 {
+                case .deleteTab:
                     self.onDelete?()
                     return nil
-                }
-                if event.keyCode == 53, modifiers.isEmpty {
+                case .close:
                     self.onEscape?()
                     return nil
+                case .undo, .redo:
+                    // Document history is routed once at app level, including hidden windows.
+                    return event
+                case nil:
+                    break
                 }
                 return event
             }

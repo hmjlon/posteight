@@ -55,9 +55,28 @@ final class NoteWindowCoordinator {
     private var pendingNoteIDs: Set<UUID> = []
     private var visibility = NoteWindowVisibility()
     private var lockHiddenNoteIDs: Set<UUID> = []
+    private var historyMonitor: Any?
 
     private init() {
         observeScreenLock()
+    }
+
+    func installHistoryShortcuts(store: PosteightStore) {
+        guard historyMonitor == nil else { return }
+        historyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak store] event in
+            guard let store, let shortcut = NoteKeyboardShortcut(event: event),
+                  shortcut == .undo || shortcut == .redo else { return event }
+            if let editor = (event.window ?? NSApp.keyWindow)?.firstResponder as? NSTextView {
+                // Let the IME finish its own composition. Other native editors (e.g. settings)
+                // keep their native history; memo fields explicitly disable it in their cell.
+                if editor.hasMarkedText() { return event }
+                if let field = editor.delegate as? NSTextField, field.cell?.allowsUndo == true {
+                    return event
+                }
+            }
+            let handled = shortcut == .undo ? store.undo() : store.redo()
+            return handled ? nil : event
+        }
     }
 
     /// Locking the screen is the one moment the app can be certain the user walked away, and it
@@ -290,6 +309,7 @@ private struct MenuBarLabel: View {
         MenuBarProgressCard(done: store.doneCount, total: store.totalCount, count: displayCount)
             .accessibilityLabel(accessibilityLabel)
         .task {
+            NoteWindowCoordinator.shared.installHistoryShortcuts(store: store)
             reminders.connect(to: store)
             for note in store.notes {
                 presentNote(note.id)
@@ -298,6 +318,14 @@ private struct MenuBarLabel: View {
         .onChange(of: store.notes.map(\.id)) { previousIDs, currentIDs in
             if let noteID = currentIDs.first(where: { !previousIDs.contains($0) }) {
                 presentNote(noteID)
+            }
+        }
+        .onChange(of: store.historyWindowRequest) { _, request in
+            guard let request else { return }
+            if request.show {
+                NoteWindowCoordinator.shared.present(request.noteID) { openWindow(value: $0) }
+            } else {
+                NoteWindowCoordinator.shared.hide(request.noteID)
             }
         }
         .onChange(of: settings.showAllNotesRequests) { _, _ in

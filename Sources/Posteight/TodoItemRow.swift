@@ -264,6 +264,7 @@ private struct DetailEditor: View {
     let onEdit: (String) -> Void
     let onClose: () -> Void
 
+    private let sourceText: String
     @State private var text: String
     @FocusState private var isWriting: Bool
 
@@ -276,6 +277,7 @@ private struct DetailEditor: View {
         onEdit: @escaping (String) -> Void,
         onClose: @escaping () -> Void
     ) {
+        sourceText = text
         _text = State(initialValue: text)
         self.title = title
         self.symbol = symbol
@@ -299,6 +301,9 @@ private struct DetailEditor: View {
         .background(paperColor)
         .background(PaperGrain())
         .environment(\.colorScheme, .light)
+        .onChange(of: sourceText) { _, restored in
+            if text != restored { text = restored }
+        }
         .onChange(of: text) { _, edited in onEdit(edited) }
         // Opening the slip is always to read or write in it, so the caret is already there.
         // A hop past the presentation is what makes the focus stick in a popover.
