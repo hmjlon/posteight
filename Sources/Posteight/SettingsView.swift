@@ -70,7 +70,7 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
 
                 Toggle(L("화면 공유와 스크린샷에서 노트 감추기"), isOn: $settings.hidesNotesFromScreenCapture)
-                Text(L("켜 두면 화면을 공유하거나 녹화할 때, 스크린샷을 찍을 때 노트가 찍히지 않습니다. 노트를 직접 보여 주려면 끕니다."))
+                Text(L("켜 두면 화면을 공유하거나 녹화할 때, 스크린샷을 찍을 때 노트가 찍히지 않습니다."))
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
