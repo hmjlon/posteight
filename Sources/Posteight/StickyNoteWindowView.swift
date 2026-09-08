@@ -69,6 +69,11 @@ struct StickyNoteWindowView: View {
         .rotationEffect(isMovingToTrash ? .degrees(12) : .zero)
         .opacity(isMovingToTrash ? 0 : 1)
         .allowsHitTesting(!isMovingToTrash)
+        .onAppear {
+            // SwiftUI can retain this scene after dismissal and reuse it on restore.
+            isMovingToTrash = false
+            window?.alphaValue = 1
+        }
         .onHover { isCardHovered = $0 }
         .environment(\.colorScheme, .light)
         .background {
@@ -495,6 +500,11 @@ struct StickyNoteWindowView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.38) {
             store.moveNoteToTrash(note.id)
             discardCard()
+            // Dismissal does not guarantee destruction of the scene or its state.
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) { isMovingToTrash = false }
+            window?.alphaValue = 1
         }
     }
 }
