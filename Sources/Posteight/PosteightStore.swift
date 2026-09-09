@@ -4,6 +4,9 @@ import SwiftUI
 
 @MainActor
 final class PosteightStore: ObservableObject {
+    // Presentation state is shared across note windows and never persisted.
+    @Published var presentedDetailItemID: UUID?
+
     @Published private(set) var notes: [StickyNote] = [] {
         didSet {
             scheduleSave()

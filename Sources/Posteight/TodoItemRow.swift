@@ -12,7 +12,6 @@ struct TodoItemRow: View {
     @State private var showPen = false
     @State private var isEditingText = false
     @State private var isRowHovered = false
-    @State private var showDetail = false
     @State private var showReminder = false
     @State private var measuredTitleWidth: CGFloat = 0
     /// Bumped on every strike so a stale timer cannot end a newer flourish early.
@@ -105,7 +104,7 @@ struct TodoItemRow: View {
             }
 
             Button {
-                showDetail = true
+                store.presentedDetailItemID = item.id
             } label: {
                 Image(systemName: hasDetail ? "bubble.fill" : "plus.bubble")
                     .font(.system(size: 10, weight: .semibold))
@@ -117,7 +116,7 @@ struct TodoItemRow: View {
             .opacity(hasDetail ? 1 : (isRowHovered || isEditingText ? 1 : 0))
             .disabled(!hasContent)
             .help(hasDetail ? L("세부사항 보기") : L("세부사항 추가"))
-            .popover(isPresented: $showDetail, arrowEdge: .trailing) {
+            .popover(isPresented: detailPresentation, arrowEdge: .trailing) {
                 DetailEditor(
                     text: store.itemDetail(noteID: note.id, tabID: tab.id, itemID: item.id) ?? "",
                     title: store.itemTitle(noteID: note.id, tabID: tab.id, itemID: item.id) ?? item.title,
@@ -132,9 +131,9 @@ struct TodoItemRow: View {
                             detail: $0
                         )
                     },
-                    onClose: { showDetail = false }
+                    onClose: { detailPresentation.wrappedValue = false }
                 )
-                // Keep the slip open across app switches until the user chooses Done.
+                // App switches keep this slip open; opening another detail replaces it.
                 .interactiveDismissDisabled()
                 // Paints the popover's own chrome, arrow included, so the slip reads as a piece
                 // torn off this card rather than a system panel floating over it.
@@ -213,6 +212,20 @@ struct TodoItemRow: View {
 
     private static let titleFontSize: CGFloat = 15
     private static let titleFontWeight: NSFont.Weight = .medium
+
+    private var detailPresentation: Binding<Bool> {
+        Binding(
+            get: { store.presentedDetailItemID == item.id },
+            set: { isPresented in
+                if isPresented {
+                    store.presentedDetailItemID = item.id
+                } else if store.presentedDetailItemID == item.id {
+                    // A previous popover may finish closing after the next one opens.
+                    store.presentedDetailItemID = nil
+                }
+            }
+        )
+    }
 
     private var currentTitle: String {
         store.itemTitle(noteID: note.id, tabID: tab.id, itemID: item.id) ?? item.title
