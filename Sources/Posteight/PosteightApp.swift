@@ -341,8 +341,12 @@ private struct MenuBarLabel: View {
         }
     }
 
-    private var displayCount: Int {
-        settings.menuBarCountStyle == .done ? store.doneCount : store.remainingCount
+    private var displayCount: Int? {
+        switch settings.menuBarCountStyle {
+        case .remaining: store.remainingCount
+        case .done: store.doneCount
+        case .hidden: nil
+        }
     }
 
     private var accessibilityLabel: String {

@@ -79,7 +79,7 @@ struct MenuBarPanelView: View {
         }
 
         switch settings.menuBarCountStyle {
-        case .remaining:
+        case .remaining, .hidden:
             return store.remainingCount > 0
                 ? Lf("남은 일 %ld개", store.remainingCount)
                 : L("모두 완료")

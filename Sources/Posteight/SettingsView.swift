@@ -95,8 +95,12 @@ struct SettingsView: View {
         .formStyle(.grouped)
     }
 
-    private var previewCount: Int {
-        settings.menuBarCountStyle == .done ? store.doneCount : store.remainingCount
+    private var previewCount: Int? {
+        switch settings.menuBarCountStyle {
+        case .remaining: store.remainingCount
+        case .done: store.doneCount
+        case .hidden: nil
+        }
     }
 
     private var versionLabel: String {

@@ -1,10 +1,11 @@
 import AppKit
 import SwiftUI
 
-/// What the menu bar icon counts. Both forms show progress against the day's total.
+/// Controls the optional count beside the menu bar progress icon.
 enum MenuBarCountStyle: String, CaseIterable, Identifiable {
     case remaining
     case done
+    case hidden
 
     var id: String { rawValue }
 
@@ -12,6 +13,7 @@ enum MenuBarCountStyle: String, CaseIterable, Identifiable {
         switch self {
         case .remaining: L("남은 일", language: language)
         case .done: L("완료", language: language)
+        case .hidden: L("표시 없음", language: language)
         }
     }
 }

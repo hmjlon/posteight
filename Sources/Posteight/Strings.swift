@@ -85,6 +85,7 @@ private let englishStrings: [String: String] = [
 
     // AppSettings
     "남은 일": "Remaining",
+    "표시 없음": "None",
     "완료": "Done",
 
     // DailyLogPreviewView

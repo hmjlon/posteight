@@ -198,7 +198,7 @@ struct MenuBarProgressCard: View {
     let done: Int
     let total: Int
     /// The number beside the loop — whichever of remaining or done the user picked.
-    let count: Int
+    let count: Int?
 
     /// The fraction actually drawn. It changes only for the brief completion response.
     @State private var shown: Double
@@ -209,7 +209,7 @@ struct MenuBarProgressCard: View {
         let total: Int
     }
 
-    init(done: Int, total: Int, count: Int) {
+    init(done: Int, total: Int, count: Int?) {
         self.done = done
         self.total = total
         self.count = count
@@ -222,7 +222,7 @@ struct MenuBarProgressCard: View {
             Image(nsImage: Self.render(fill: shown, hasTasks: total > 0, isCleared: isCleared))
                 .renderingMode(.template)
 
-            if total > 0 && !isCleared {
+            if total > 0 && !isCleared, let count {
                 Text(String(count))
                     .font(.system(size: 11, weight: .semibold, design: .rounded))
                     .monospacedDigit()
