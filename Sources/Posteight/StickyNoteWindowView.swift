@@ -115,10 +115,15 @@ struct StickyNoteWindowView: View {
             let controlsWidth = MemoSurfaceMetrics.trailingControlsWidth
             let addButtonWidth = MemoSurfaceMetrics.addTabButtonWidth
             let availableTabWidth = max(0, geometry.size.width - controlsWidth - addButtonWidth)
+            // Once tabs reach their maximum width, spare space belongs after the add button.
+            let occupiedTabWidth = min(
+                availableTabWidth,
+                CGFloat(note.tabs.count) * MemoSurfaceMetrics.maximumTabWidth
+            )
 
             HStack(alignment: .bottom, spacing: 0) {
-                memoTabs(note: note, selectedTab: selectedTab, availableWidth: availableTabWidth)
-                    .frame(width: availableTabWidth)
+                memoTabs(note: note, selectedTab: selectedTab, availableWidth: occupiedTabWidth)
+                    .frame(width: occupiedTabWidth)
 
                 let canAddTab = note.tabs.count < MemoSurfaceMetrics.maximumTabCount
 
@@ -136,6 +141,8 @@ struct StickyNoteWindowView: View {
                 .foregroundStyle(Color.black.opacity(canAddTab ? 0.48 : 0.18))
                 .help(canAddTab ? L("이 메모에 새 탭 추가") : L("탭은 이 메모에 최대 5개까지 둘 수 있어요"))
                 .padding(.bottom, 3)
+
+                Spacer(minLength: 0)
 
                 tabBarControls
                     .frame(width: controlsWidth)
