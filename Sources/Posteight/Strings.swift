@@ -200,6 +200,7 @@ private let englishStrings: [String: String] = [
     "세부사항 보기": "Show details",
     "세부사항 추가": "Add details",
     "삭제": "Delete",
+    "내용이 없어요": "No content",
     "무엇을, 어떻게 하는지 적어두세요": "Jot down what it is and how to do it",
     "자동 저장": "Saved automatically",
     "⌘↩ 완료": "⌘↩ Done",

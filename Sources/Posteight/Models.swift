@@ -215,6 +215,15 @@ struct TodoItem: Identifiable, Codable, Equatable {
     var completedAt: Date?
     var reminderAt: Date?
 
+    var hasTitle: Bool {
+        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Keep details readable in Trash even if the item's title was cleared before deletion.
+    var hasContent: Bool {
+        hasTitle || !(detail ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     init(
         id: UUID = UUID(),
         title: String,
