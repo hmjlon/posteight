@@ -442,6 +442,18 @@ final class PosteightStore: ObservableObject {
         }
     }
 
+    func updateFontSize(_ noteID: UUID, size: NoteFontSize?) {
+        let historyBefore = editingSnapshot
+        defer { recordEdit(from: historyBefore, noteID: noteID) }
+        updateNote(noteID) { $0.fontSize = size }
+    }
+
+    func updateFont(_ noteID: UUID, fontID: String?) {
+        let historyBefore = editingSnapshot
+        defer { recordEdit(from: historyBefore, noteID: noteID) }
+        updateNote(noteID) { $0.fontID = fontID }
+    }
+
     func updatePenStyle(_ noteID: UUID, style: PenStyle) {
         let historyBefore = editingSnapshot
         defer { recordEdit(from: historyBefore, noteID: noteID) }

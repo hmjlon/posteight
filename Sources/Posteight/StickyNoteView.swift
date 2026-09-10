@@ -3,7 +3,10 @@ import SwiftUI
 
 struct StickyNoteView: View {
     @EnvironmentObject private var store: PosteightStore
+    @ObservedObject private var fonts = NoteFontLibrary.shared
+    @ObservedObject private var settings = AppSettings.shared
     let note: StickyNote
+    private var fontSizeAdjustment: CGFloat { (note.fontSize ?? settings.defaultFontSize).adjustment }
     let tab: MemoTab
     let onResizeChanged: (CGSize) -> Void
     let onResizeEnded: (CGSize) -> Void
@@ -33,11 +36,12 @@ struct StickyNoteView: View {
                     get: { store.tabTitle(noteID: note.id, tabID: tab.id) ?? tab.title },
                     set: { store.updateTabTitle(noteID: note.id, tabID: tab.id, title: $0) }
                 ),
-                fontSize: 13,
+                fontSize: 13 + fontSizeAdjustment,
                 fontWeight: .medium,
+                fontName: fonts.fontName(for: note.fontID, defaultID: settings.defaultFontID),
                 textOpacity: 0.72
             )
-            .frame(height: 22)
+            .frame(height: 22 + max(0, fontSizeAdjustment))
 
             // Without a scroll area a long list overflows the card in both directions and
             // collides with the header, so the list gets the leftover height and nothing else.

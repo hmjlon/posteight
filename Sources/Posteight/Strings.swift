@@ -62,6 +62,26 @@ enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
 /// Xcode build paths — two places to drift. Move to `.lproj` when a third language or a
 /// translator shows up.
 private let englishStrings: [String: String] = [
+    "손글씨": "Handwriting",
+    "색상": "Color",
+    "글자 크기: %@": "Text size: %@",
+    "크게": "Large",
+    "보통": "Medium",
+    "작게": "Small",
+    "글자 크기": "Text size",
+    "폰트": "Font",
+    "기본체": "System",
+    "하나손글씨": "Hana Handwriting",
+    "기본값 사용": "Use default",
+    "기본 메모 폰트": "Default memo font",
+    "오늘 할 일을 적어보세요": "Write down your plans for today",
+    "각 포스트잇의 필통에서 다른 폰트를 선택할 수 있어요.": "Choose a different font in each note’s pencil case.",
+    "내 폰트 추가…": "Add my font…",
+    "TTF·OTF 파일을 보관합니다. 삭제하면 해당 메모는 기본 폰트로 돌아갑니다.": "TTF and OTF files are stored in the app. Removing a font returns its notes to the default font.",
+    "폰트를 삭제하지 못했어요. 다시 시도해 주세요.": "Could not remove the font. Please try again.",
+    "이미 추가된 폰트입니다.": "This font has already been added.",
+    "폰트를 추가하지 못했어요. 올바른 TTF·OTF 파일인지 확인해 주세요.": "Could not add the font. Please choose a valid TTF or OTF file.",
+
     "알림을 받으려면 한 번만 허용해 주세요. 아래 버튼에서 Posteight 알림을 켤 수 있어요.": "Allow notifications once to receive reminders. Use the button below to turn on Posteight notifications.",
     "알림은 설치된 Posteight 앱에서 사용할 수 있어요.": "Reminders are available in the installed Posteight app.",
     "할 일이 완료되거나 삭제되어 예약하지 못했어요.": "This task was completed or deleted, so it could not be scheduled.",

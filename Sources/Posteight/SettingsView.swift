@@ -75,6 +75,8 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            FontSettingsSection()
+
             Section(L("앱")) {
                 Toggle(L("Dock 아이콘 표시"), isOn: $settings.showsDockIcon)
                 Text(L("끄면 메뉴 막대에서만 실행됩니다. Dock 아이콘을 누르면 모든 노트가 다시 열립니다."))

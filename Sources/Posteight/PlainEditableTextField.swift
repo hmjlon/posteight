@@ -7,6 +7,7 @@ struct PlainEditableTextField: NSViewRepresentable {
     var placeholder: String = ""
     var fontSize: CGFloat = 13
     var fontWeight: NSFont.Weight = .regular
+    var fontName: String? = nil
     var textOpacity: CGFloat = 0.78
     /// SwiftUI's `.focused()` does not reach an `NSTextField`, so focus is requested here and
     /// handed to AppKit directly.
@@ -52,7 +53,12 @@ struct PlainEditableTextField: NSViewRepresentable {
         }
 
         textField.placeholderString = placeholder
-        textField.font = .systemFont(ofSize: fontSize, weight: fontWeight)
+        let font = fontName.flatMap { NSFont(name: $0, size: fontSize) }
+            ?? .systemFont(ofSize: fontSize, weight: fontWeight)
+        textField.font = font
+        if let editor = textField.currentEditor() as? NSTextView, editor.font != font {
+            editor.font = font
+        }
         textField.textColor = NSColor.black.withAlphaComponent(textOpacity)
 
         // Only the rising edge moves focus, so a redraw never steals the caret back.

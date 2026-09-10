@@ -3,6 +3,11 @@ import SwiftUI
 
 struct TodoItemRow: View {
     @EnvironmentObject private var store: PosteightStore
+    @ObservedObject private var fonts = NoteFontLibrary.shared
+    @ObservedObject private var settings = AppSettings.shared
+    private var fontName: String? { fonts.fontName(for: note.fontID, defaultID: settings.defaultFontID) }
+    private var fontSizeAdjustment: CGFloat { (note.fontSize ?? settings.defaultFontSize).adjustment }
+    private var titleFontSize: CGFloat { 15 + fontSizeAdjustment }
     let note: StickyNote
     let tab: MemoTab
     let item: TodoItem
@@ -59,8 +64,9 @@ struct TodoItemRow: View {
                         }
                     ),
                     placeholder: L("할 일 입력"),
-                    fontSize: Self.titleFontSize,
+                    fontSize: titleFontSize,
                     fontWeight: Self.titleFontWeight,
+                    fontName: fontName,
                     textOpacity: item.isDone ? 0.38 : 0.76,
                     isFocused: focusedItemID == item.id,
                     onEditingChanged: { isEditingText = $0 },
@@ -70,7 +76,7 @@ struct TodoItemRow: View {
                     onMoveUp: { moveFocus(by: -1) },
                     onMoveDown: { moveFocus(by: 1) }
                 )
-                .frame(height: 26)
+                .frame(height: 26 + max(0, fontSizeAdjustment))
 
                 StrikeLine(
                     color: Color(hex: note.penHex),
@@ -81,7 +87,7 @@ struct TodoItemRow: View {
                 )
                 .allowsHitTesting(false)
             }
-            .frame(height: 28)
+            .frame(height: 28 + max(0, fontSizeAdjustment))
 
             Button {
                 showReminder = true
@@ -123,6 +129,8 @@ struct TodoItemRow: View {
                     symbol: tab.stickerSymbol,
                     paperColor: Color(hex: note.paperHex),
                     inkColor: Color(hex: note.penHex),
+                    fontName: fontName,
+                    fontSizeAdjustment: fontSizeAdjustment,
                     onEdit: {
                         store.updateItemDetail(
                             noteID: note.id,
@@ -170,8 +178,10 @@ struct TodoItemRow: View {
         .onHover { isRowHovered = $0 }
         .animation(.easeOut(duration: 0.12), value: isRowHovered)
         .onChange(of: currentTitle, initial: true) { _, title in
-            measuredTitleWidth = Self.width(of: title)
+            measuredTitleWidth = width(of: title)
         }
+        .onChange(of: titleFontSize) { _, _ in measuredTitleWidth = width(of: currentTitle) }
+        .onChange(of: fontName) { _, _ in measuredTitleWidth = width(of: currentTitle) }
         .onAppear {
             // Persisted completions open already struck without replaying the flourish.
             strikeProgress = isStruck ? 1 : 0
@@ -212,7 +222,6 @@ struct TodoItemRow: View {
         }
     }
 
-    private static let titleFontSize: CGFloat = 15
     private static let titleFontWeight: NSFont.Weight = .medium
 
     private var detailPresentation: Binding<Bool> {
@@ -236,8 +245,9 @@ struct TodoItemRow: View {
     /// The strike stops where the text does, so it is measured in the field's own font. Measured
     /// on change rather than per render: hovering a row mutates `isRowHovered`, which re-runs the
     /// body, and laying out a string is not free at one call per row per pointer move.
-    private static func width(of title: String) -> CGFloat {
-        let font = NSFont.systemFont(ofSize: titleFontSize, weight: titleFontWeight)
+    private func width(of title: String) -> CGFloat {
+        let font = fontName.flatMap { NSFont(name: $0, size: titleFontSize) }
+            ?? NSFont.systemFont(ofSize: titleFontSize, weight: Self.titleFontWeight)
         return (title as NSString).size(withAttributes: [.font: font]).width
     }
 
@@ -278,6 +288,8 @@ private struct DetailEditor: View {
     let symbol: String
     let paperColor: Color
     let inkColor: Color
+    let fontName: String?
+    let fontSizeAdjustment: CGFloat
     let onEdit: (String) -> Void
     let onClose: () -> Void
 
@@ -292,6 +304,8 @@ private struct DetailEditor: View {
         symbol: String,
         paperColor: Color,
         inkColor: Color,
+        fontName: String?,
+        fontSizeAdjustment: CGFloat,
         onEdit: @escaping (String) -> Void,
         onClose: @escaping () -> Void
     ) {
@@ -301,6 +315,8 @@ private struct DetailEditor: View {
         self.symbol = symbol
         self.paperColor = paperColor
         self.inkColor = inkColor
+        self.fontName = fontName
+        self.fontSizeAdjustment = fontSizeAdjustment
         self.onEdit = onEdit
         self.onClose = onClose
     }
@@ -342,7 +358,7 @@ private struct DetailEditor: View {
                 .foregroundStyle(inkColor.opacity(0.82))
 
             Text(title)
-                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .font(fontName.map { .custom($0, size: 12 + fontSizeAdjustment) } ?? .system(size: 12 + fontSizeAdjustment, weight: .bold, design: .rounded))
                 .foregroundStyle(.black.opacity(0.62))
                 .lineLimit(1)
                 .truncationMode(.tail)
@@ -376,7 +392,7 @@ private struct DetailEditor: View {
             ZStack(alignment: .topLeading) {
                 if text.isEmpty {
                     Text(L("무엇을, 어떻게 하는지 적어두세요"))
-                        .font(.system(size: 13))
+                        .font(fontName.map { .custom($0, size: 13 + fontSizeAdjustment) } ?? .system(size: 13 + fontSizeAdjustment))
                         .foregroundStyle(inkColor.opacity(0.3))
                         .padding(.top, 1)
                         .allowsHitTesting(false)
@@ -384,7 +400,7 @@ private struct DetailEditor: View {
 
                 TextEditor(text: $text)
                     .focused($isWriting)
-                    .font(.system(size: 13))
+                    .font(fontName.map { .custom($0, size: 13 + fontSizeAdjustment) } ?? .system(size: 13 + fontSizeAdjustment))
                     .lineSpacing(3)
                     .foregroundStyle(inkColor.opacity(0.78))
                     .tint(inkColor)

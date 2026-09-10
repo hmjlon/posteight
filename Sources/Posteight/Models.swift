@@ -1,11 +1,34 @@
 import Foundation
 import SwiftUI
 
+enum NoteFontSize: String, Codable, CaseIterable, Identifiable {
+    case small, medium, large
+    var id: String { rawValue }
+
+    var adjustment: CGFloat {
+        switch self {
+        case .small: -2
+        case .medium: 0
+        case .large: 3
+        }
+    }
+
+    func title(in language: AppLanguage) -> String {
+        switch self {
+        case .small: L("작게", language: language)
+        case .medium: L("보통", language: language)
+        case .large: L("크게", language: language)
+        }
+    }
+}
+
 struct StickyNote: Identifiable, Codable, Equatable {
     var id: UUID
     var paperHex: String
     var penHex: String
     var penStyle: PenStyle
+    var fontID: String? = nil
+    var fontSize: NoteFontSize? = nil
     var includeInNotionLog: Bool
     var position: NotePoint
     var size: NoteSize
@@ -64,6 +87,8 @@ struct StickyNote: Identifiable, Codable, Equatable {
         case paperHex
         case penHex
         case penStyle
+        case fontID
+        case fontSize
         case includeInNotionLog
         case position
         case size
@@ -81,6 +106,8 @@ struct StickyNote: Identifiable, Codable, Equatable {
         let legacyStickerSymbol = try container.decodeIfPresent(String.self, forKey: .stickerSymbol) ?? "tag"
         paperHex = try container.decode(String.self, forKey: .paperHex)
         penHex = try container.decode(String.self, forKey: .penHex)
+        fontSize = try container.decodeIfPresent(NoteFontSize.self, forKey: .fontSize)
+        fontID = try container.decodeIfPresent(String.self, forKey: .fontID)
         penStyle = try container.decodeIfPresent(PenStyle.self, forKey: .penStyle) ?? .ballpoint
         includeInNotionLog = try container.decode(Bool.self, forKey: .includeInNotionLog)
         position = try container.decode(NotePoint.self, forKey: .position)
@@ -134,6 +161,8 @@ struct StickyNote: Identifiable, Codable, Equatable {
         try container.encode(selectedTab?.stickerSymbol ?? "tag", forKey: .stickerSymbol)
         try container.encode(paperHex, forKey: .paperHex)
         try container.encode(penHex, forKey: .penHex)
+        try container.encodeIfPresent(fontID, forKey: .fontID)
+        try container.encodeIfPresent(fontSize, forKey: .fontSize)
         try container.encode(penStyle, forKey: .penStyle)
         try container.encode(includeInNotionLog, forKey: .includeInNotionLog)
         try container.encode(position, forKey: .position)

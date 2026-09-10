@@ -3,6 +3,7 @@ import SwiftUI
 struct PencilCaseView: View {
     @EnvironmentObject private var store: PosteightStore
     @ObservedObject private var settings = AppSettings.shared
+    @ObservedObject private var fonts = NoteFontLibrary.shared
     let note: StickyNote
 
     var body: some View {
@@ -25,6 +26,30 @@ struct PencilCaseView: View {
                 .font(.system(size: 10, weight: .medium, design: .rounded))
             }
 
+            toolRow(title: L("폰트")) {
+                Picker(L("폰트"), selection: Binding(
+                    get: { fonts.resolvedID(for: note.fontID, defaultID: settings.defaultFontID) },
+                    set: { store.updateFont(note.id, fontID: $0) }
+                )) {
+                    ForEach(fonts.entries) { entry in
+                        Text(entry.title(language: settings.language)).tag(entry.id)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .controlSize(.regular)
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .fixedSize()
+
+                FontImportButton()
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .controlSize(.regular)
+                    .fixedSize()
+
+                fontSizeButtons
+                Spacer(minLength: 0)
+            }
+
             toolRow(title: L("종이")) {
                 ColorSwatchRow(
                     options: DesignTokens.paperColors,
@@ -45,7 +70,7 @@ struct PencilCaseView: View {
 
             // The colour wells are wide enough to squeeze the swatches off a narrow card, so
             // they share a row of their own.
-            toolRow(title: L("직접")) {
+            toolRow(title: L("색상")) {
                 customColorWell(systemImage: "doc", help: L("종이 색 직접 선택")) {
                     Binding(
                         get: { Color(hex: note.paperHex) },
@@ -63,26 +88,28 @@ struct PencilCaseView: View {
                 Spacer(minLength: 0)
             }
 
-            Picker(
-                L("펜촉"),
-                selection: Binding(
-                    get: { note.penStyle },
-                    set: { store.updatePenStyle(note.id, style: $0) }
-                )
-            ) {
-                ForEach(PenStyle.allCases) { style in
-                    Label(style.title(in: settings.language), systemImage: style.systemImage)
-                        .tag(style)
+            toolRow(title: L("펜촉")) {
+                Picker(
+                    L("펜촉"),
+                    selection: Binding(
+                        get: { note.penStyle },
+                        set: { store.updatePenStyle(note.id, style: $0) }
+                    )
+                ) {
+                    ForEach(PenStyle.allCases) { style in
+                        Label(style.title(in: settings.language), systemImage: style.systemImage)
+                            .tag(style)
+                    }
                 }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
+
             }
-            .pickerStyle(.segmented)
-            .font(.system(size: 11, weight: .semibold, design: .rounded))
 
             if let selectedTab = note.selectedTab {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(L("탭 아이콘"))
-                        .font(.system(size: 11, weight: .bold, design: .rounded))
-                        .foregroundStyle(.black.opacity(0.48))
+                    toolLabel(L("탭 아이콘"))
 
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 26, maximum: 34), spacing: 5)], spacing: 5) {
                         ForEach(DesignTokens.stickers) { sticker in
@@ -124,6 +151,38 @@ struct PencilCaseView: View {
         }
     }
 
+    private var fontSizeButtons: some View {
+        HStack(spacing: 0) {
+            ForEach(NoteFontSize.allCases) { size in
+                let selected = (note.fontSize ?? settings.defaultFontSize) == size
+                let diameter: CGFloat = size == .small ? 6 : (size == .medium ? 9 : 12)
+                Button {
+                    store.updateFontSize(note.id, size: size)
+                } label: {
+                    Circle()
+                        .fill(selected ? Color(hex: note.penHex) : .black.opacity(0.25))
+                        .frame(width: diameter, height: diameter)
+                        .frame(width: 24, height: 24)
+                        .background {
+                            RoundedRectangle(cornerRadius: 5)
+                                .fill(selected ? Color(hex: note.penHex).opacity(0.1) : .clear)
+                        }
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(Lf("글자 크기: %@", size.title(in: settings.language)))
+                .accessibilityLabel(Lf("글자 크기: %@", size.title(in: settings.language)))
+                .accessibilityAddTraits(selected ? .isSelected : [])
+                .contextMenu {
+                    Button(L("기본값 사용")) {
+                        store.updateFontSize(note.id, size: nil)
+                    }
+                }
+            }
+        }
+        .fixedSize()
+    }
+
     private func customColorWell(
         systemImage: String,
         help: String,
@@ -142,12 +201,17 @@ struct PencilCaseView: View {
         .help(help)
     }
 
+    private func toolLabel(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 10, weight: .bold, design: .rounded))
+            .foregroundStyle(.black.opacity(0.48))
+            .fixedSize(horizontal: true, vertical: false)
+    }
+
     private func toolRow<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
         HStack(spacing: 6) {
-            Text(title)
-                .font(.system(size: 10, weight: .bold, design: .rounded))
-                .foregroundStyle(.black.opacity(0.48))
-                .frame(width: 24, alignment: .leading)
+            toolLabel(title)
+                .frame(width: settings.language.resolved == .korean ? 24 : 32, alignment: .leading)
 
             content()
         }

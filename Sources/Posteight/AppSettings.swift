@@ -24,6 +24,14 @@ enum MenuBarCountStyle: String, CaseIterable, Identifiable {
 final class AppSettings: ObservableObject {
     static let shared = AppSettings()
 
+    @Published var defaultFontSize: NoteFontSize {
+        didSet { UserDefaults.standard.set(defaultFontSize.rawValue, forKey: "posteight.defaultFontSize") }
+    }
+
+    @Published var defaultFontID: String {
+        didSet { UserDefaults.standard.set(defaultFontID, forKey: "posteight.defaultFontID") }
+    }
+
     private enum Key {
         static let dockIcon = "posteight.showsDockIcon"
         static let countStyle = "posteight.menuBarCountStyle"
@@ -88,6 +96,8 @@ final class AppSettings: ObservableObject {
 
     private init() {
         let defaults = UserDefaults.standard
+        defaultFontSize = defaults.string(forKey: "posteight.defaultFontSize").flatMap(NoteFontSize.init(rawValue:)) ?? .medium
+        defaultFontID = defaults.string(forKey: "posteight.defaultFontID") ?? "system"
         showsDockIcon = defaults.object(forKey: Key.dockIcon) as? Bool ?? true
         keepsNotesOnTop = defaults.object(forKey: Key.notesOnTop) as? Bool ?? true
         hidesNotesFromScreenCapture = defaults.object(forKey: Key.hidesFromCapture) as? Bool ?? true
