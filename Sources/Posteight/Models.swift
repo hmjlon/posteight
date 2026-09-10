@@ -321,6 +321,8 @@ struct StickerOption: Identifiable {
 }
 
 enum DesignTokens {
+    static let rowDeleteButtonSize: CGFloat = 28
+
     /// A row spends 102pt on chrome — 26 padding, a 20 checkbox, two 16 buttons, three 8 gaps —
     /// so the title only gets `width - 102`. Measured at 15pt medium, a typical Korean title
     /// needs about 230pt of note and an English one up to 304pt: 244 was picked when the app

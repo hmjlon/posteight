@@ -66,6 +66,44 @@ struct EditingHistoryTests {
         }
     }
 
+    @Test func deletedItemBypassesTrashButUndoRestoresItsContentsAndPosition() throws {
+        try withStore { store, note, tab, item in
+            store.updateItemTitle(noteID: note, tabID: tab, itemID: item, title: "할 일")
+            store.updateItemDetail(noteID: note, tabID: tab, itemID: item, detail: "댓글 내용")
+            store.toggleItem(noteID: note, tabID: tab, itemID: item)
+            _ = store.addItem(to: note, tabID: tab)
+            let before = try #require(store.notes.first { $0.id == note }?.selectedTab?.items)
+            store.clearEditingHistory()
+
+            store.deleteItem(noteID: note, tabID: tab, itemID: item)
+            #expect(store.itemTitle(noteID: note, tabID: tab, itemID: item) == nil)
+            #expect(store.trashedNotes.isEmpty)
+            #expect(store.trashedTabs.isEmpty)
+            #expect(store.undo())
+            #expect(store.notes.first { $0.id == note }?.selectedTab?.items == before)
+            #expect(store.redo())
+            #expect(store.itemTitle(noteID: note, tabID: tab, itemID: item) == nil)
+        }
+    }
+
+    @Test func clearingDetailsPreservesItemAndCanBeUndoneSeparatelyFromTyping() throws {
+        try withStore { store, note, tab, item in
+            store.updateItemTitle(noteID: note, tabID: tab, itemID: item, title: "할 일")
+            store.toggleItem(noteID: note, tabID: tab, itemID: item)
+            store.clearEditingHistory()
+            store.updateItemDetail(noteID: note, tabID: tab, itemID: item, detail: "첫 줄\n둘째 줄")
+            store.updateItemDetail(noteID: note, tabID: tab, itemID: item, detail: "")
+
+            #expect(store.itemDetail(noteID: note, tabID: tab, itemID: item) == nil)
+            #expect(store.itemTitle(noteID: note, tabID: tab, itemID: item) == "할 일")
+            #expect(store.notes.first { $0.id == note }?.selectedTab?.items.first?.isDone == true)
+            #expect(store.undo())
+            #expect(store.itemDetail(noteID: note, tabID: tab, itemID: item) == "첫 줄\n둘째 줄")
+            #expect(store.redo())
+            #expect(store.itemDetail(noteID: note, tabID: tab, itemID: item) == nil)
+        }
+    }
+
     @Test func closingLastWindowSharesTheSameHistory() throws {
         try withStore { store, note, tab, item in
             store.updateItemTitle(noteID: note, tabID: tab, itemID: item, title: "1")

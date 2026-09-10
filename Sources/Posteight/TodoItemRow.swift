@@ -145,12 +145,14 @@ struct TodoItemRow: View {
             } label: {
                 Image(systemName: "minus")
                     .font(.system(size: 9, weight: .bold))
-                    .frame(width: 16, height: 16)
+                    .frame(width: DesignTokens.rowDeleteButtonSize, height: DesignTokens.rowDeleteButtonSize)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .foregroundStyle(.black.opacity(0.24))
             .opacity(isRowHovered || isEditingText ? 1 : 0.12)
-            .help(L("삭제"))
+            .accessibilityLabel(L("삭제"))
+            .help(L("항목 삭제 — ⌘Z로 실행 취소"))
         }
         .contentShape(Rectangle())
         .overlay(alignment: .bottomLeading) {
@@ -281,6 +283,7 @@ private struct DetailEditor: View {
 
     private let sourceText: String
     @State private var text: String
+    @State private var showsClearConfirmation = false
     @FocusState private var isWriting: Bool
 
     init(
@@ -323,6 +326,13 @@ private struct DetailEditor: View {
         // Opening the slip is always to read or write in it, so the caret is already there.
         // A hop past the presentation is what makes the focus stick in a popover.
         .task { isWriting = true }
+        .alert(L("세부사항을 모두 지울까요?"), isPresented: $showsClearConfirmation) {
+            Button(L("취소"), role: .cancel) { isWriting = true }
+            Button(L("확인"), role: .destructive) {
+                text = ""
+                isWriting = true
+            }
+        }
     }
 
     private var header: some View {
@@ -338,6 +348,20 @@ private struct DetailEditor: View {
                 .truncationMode(.tail)
 
             Spacer(minLength: 0)
+
+            Button {
+                showsClearConfirmation = true
+            } label: {
+                Image(systemName: "eraser")
+                    .font(.system(size: 11, weight: .semibold))
+                    .frame(width: 24, height: 24)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.red.opacity(0.65))
+            .disabled(text.isEmpty)
+            .accessibilityLabel(L("세부사항 모두 지우기"))
+            .help(L("세부사항 모두 지우기"))
         }
         .padding(.bottom, 8)
     }
