@@ -250,6 +250,7 @@ type(scope): 무엇을 바꿨는지 한 줄
 왜 그랬는지, 무엇이 어긋나 있었는지, 어떻게 확인했는지.
 ```
 
+
 - 제목: `type(scope):` 뒤에 한국어 요약. 타입은 `feat`, `fix`, `docs`, `test`, `chore`,
   `refactor`, `ci`. scope 는 선택이고 소문자로 쓴다(`fix(menubar):`). 한 줄, 마침표 없음.
   `~한다` 보다 명사형(`... 수정`, `... 추가`) 을 쓰고, 두 가지 변경은 뭉뚱그리지 말고 `+` 나 `—`
@@ -260,4 +261,9 @@ type(scope): 무엇을 바꿨는지 한 줄
   해시와 날짜.
 - 본문은 파일별 diff 요약이 아니라 이유를 적는 자리다. 함정과 가지 않은 길(SwiftUI 렌더링 한계,
   순서 제약)을 남겨서 다음 변경이 같은 자리로 되돌아가지 않게 한다.
-- 에이전트가 작성한 변경이면 `Co-Authored-By:` 트레일러를 남긴다.
+- 에이전트가 작성한 변경이면 본문 맨 끝에 `Co-Authored-By: {서비스} {모델명} {Effort수준} <{noreply@도메인}>` 형식으로 트레일러를 남긴다.
+  - Effort 수준은 `Low`, `Medium`, `High`, `Extra-High` 등으로 표기한다.
+  - 예시:
+    - `Co-Authored-By: Claude Opus 5 High <noreply@anthropic.com>`
+    - `Co-Authored-By: Claude Opus 5 extra-High <noreply@anthropic.com>`
+    - `Co-Authored-By: Codex GPT 6 Astra High <noreply@openai.com>`
