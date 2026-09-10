@@ -139,7 +139,7 @@ struct StickyNoteWindowView: View {
                 .buttonStyle(.plain)
                 .disabled(!canAddTab)
                 .foregroundStyle(Color.black.opacity(canAddTab ? 0.48 : 0.18))
-                .help(canAddTab ? L("이 메모에 새 탭 추가") : L("탭은 이 메모에 최대 5개까지 둘 수 있어요"))
+                .help(canAddTab ? L("이 메모에 새 탭 추가") : Lf("탭은 이 메모에 최대 %d개까지 둘 수 있어요", MemoSurfaceMetrics.maximumTabCount))
                 .padding(.bottom, 3)
 
                 Spacer(minLength: 0)
@@ -164,15 +164,27 @@ struct StickyNoteWindowView: View {
         let dividedWidth = availableWidth / CGFloat(tabCount)
         let tabWidth = min(MemoSurfaceMetrics.maximumTabWidth, max(MemoSurfaceMetrics.minimumTabWidth, dividedWidth))
 
-        return HStack(alignment: .bottom, spacing: 0) {
-            ForEach(note.tabs) { tab in
-                memoTab(
-                    note,
-                    tab: tab,
-                    isSelected: tab.id == selectedTab.id,
-                    width: tabWidth
-                )
-                .id(tab.id)
+        return ScrollViewReader { proxy in
+            ScrollView(.horizontal) {
+                HStack(alignment: .bottom, spacing: 0) {
+                    ForEach(note.tabs) { tab in
+                        memoTab(
+                            note,
+                            tab: tab,
+                            isSelected: tab.id == selectedTab.id,
+                            width: tabWidth
+                        )
+                        .id(tab.id)
+                    }
+                }
+                .frame(height: MemoSurfaceMetrics.tabBarHeight, alignment: .bottom)
+            }
+            .scrollIndicators(.hidden)
+            .onChange(of: selectedTab.id, initial: true) { _, id in
+                proxy.scrollTo(id)
+            }
+            .onChange(of: availableWidth) { _, _ in
+                proxy.scrollTo(selectedTab.id)
             }
         }
         .frame(width: availableWidth, height: MemoSurfaceMetrics.tabBarHeight, alignment: .bottomLeading)
@@ -494,7 +506,7 @@ struct StickyNoteWindowView: View {
             discardCard()
         } else {
             let alert = NSAlert()
-            alert.messageText = L("탭은 이 메모에 최대 5개까지 둘 수 있어요")
+            alert.messageText = Lf("탭은 이 메모에 최대 %d개까지 둘 수 있어요", MemoSurfaceMetrics.maximumTabCount)
             if let window { alert.beginSheetModal(for: window) }
         }
     }

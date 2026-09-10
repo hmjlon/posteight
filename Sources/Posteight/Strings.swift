@@ -186,7 +186,7 @@ private let englishStrings: [String: String] = [
 
     // StickyNoteWindowView
     "이 메모에 새 탭 추가": "Add a tab to this memo",
-    "탭은 이 메모에 최대 5개까지 둘 수 있어요": "A memo holds at most 5 tabs",
+    "탭은 이 메모에 최대 %d개까지 둘 수 있어요": "A memo holds at most %d tabs",
     "현재 탭 — 다시 클릭하면 이름을 수정할 수 있어요": "Current tab — click it again to rename",
     "%@ 탭으로 이동": "Switch to %@",
     "이 탭 닫기 — 휴지통에서 복구할 수 있어요": "Close this tab — you can restore it from the trash",
