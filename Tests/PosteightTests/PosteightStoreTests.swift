@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 
@@ -281,5 +282,26 @@ struct DailyLogTests {
             date: date
         )
         #expect(markdown.contains("Notion 기록에 포함된 메모가 없습니다."))
+    }
+
+    /// Copying is the only path memo text takes out of the app, and the general pasteboard is
+    /// read by every process and by clipboard managers that keep a permanent history.
+    @MainActor
+    @Test("Copying marks the entry concealed without changing what is pasted")
+    func copyMarksConcealed() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("posteight-tests-\(UUID().uuidString)", isDirectory: true)
+        let pasteboard = NSPasteboard(name: .init("posteight-tests-\(UUID().uuidString)"))
+        defer {
+            pasteboard.releaseGlobally()
+            try? FileManager.default.removeItem(at: directory)
+        }
+
+        let store = PosteightStore(directory: directory)
+        store.copyDailyLogToClipboard(to: pasteboard)
+
+        let pasted = try #require(pasteboard.string(forType: .string))
+        #expect(pasted == store.dailyLogMarkdown())
+        #expect(pasteboard.string(forType: PosteightStore.concealedPasteboardType) != nil)
     }
 }

@@ -596,10 +596,21 @@ final class PosteightStore: ObservableObject {
         return lines.joined(separator: "\n")
     }
 
-    func copyDailyLogToClipboard(language: AppLanguage = .korean) {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(dailyLogMarkdown(language: language), forType: .string)
+    /// The one path memo text takes out of the app. The general pasteboard is readable by every
+    /// process and syncs through Universal Clipboard, and a clipboard manager (Maccy, Raycast)
+    /// files whatever passes through it into a permanent plain-text history.
+    /// `pasteboard` is only overridden by tests, so running them never disturbs what the user
+    /// has on their clipboard.
+    func copyDailyLogToClipboard(language: AppLanguage = .korean, to pasteboard: NSPasteboard = .general) {
+        pasteboard.clearContents()
+        pasteboard.setString(dailyLogMarkdown(language: language), forType: .string)
+        // The community convention clipboard managers honour to keep an entry out of their
+        // history. It is an extra type on the same item, so pasting is unaffected.
+        pasteboard.setString("", forType: Self.concealedPasteboardType)
     }
+
+    nonisolated static let concealedPasteboardType =
+        NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType")
 
     private func updateNote(_ noteID: UUID, mutate: (inout StickyNote) -> Void) {
         guard let index = notes.firstIndex(where: { $0.id == noteID }) else { return }
