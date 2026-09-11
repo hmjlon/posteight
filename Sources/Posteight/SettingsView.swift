@@ -83,9 +83,12 @@ struct SettingsView: View {
             }
             // Already-scheduled notifications keep the body they were created with, so the
             // setting only takes effect on the next memo edit unless the queue is rebuilt here.
-            .onChange(of: settings.showsReminderPreview) {
-                Task { _ = await ReminderService.shared.retrySynchronization(for: store.notes) }
-            }
+            .onChange(of: settings.showsReminderPreview) { rebuildScheduledReminders() }
+            // The hidden body is a translated string, so the language picker moves it too. The
+            // reminder list the service subscribes to is language-independent and deduplicated,
+            // so nothing else would ever notice — an alarm set before the switch would fire in
+            // the old language until the memo happened to be edited.
+            .onChange(of: settings.language) { rebuildScheduledReminders() }
 
             FontSettingsSection()
 
@@ -107,6 +110,10 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    private func rebuildScheduledReminders() {
+        Task { _ = await ReminderService.shared.retrySynchronization(for: store.notes) }
     }
 
     private var previewCount: Int? {
