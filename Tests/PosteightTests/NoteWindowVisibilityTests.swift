@@ -110,6 +110,37 @@ struct ScreenCaptureExclusionTests {
         #expect(second.sharingType == .none)
     }
 
+    /// The whole point of `0ad726a` is that a popover gets its own NSWindow, so the exclusion has
+    /// to travel into it. SwiftUI's `.popover` is backed by `NSPopover`, so this drives the real
+    /// AppKit machinery: put the view the modifier installs inside popover content, show it, and
+    /// check the window the popover actually ended up in.
+    @Test("A popover's own window picks up the exclusion from its content")
+    func exclusionReachesAPopoverWindow() throws {
+        let host = window()
+        host.orderFront(nil)
+
+        let content = NSViewController()
+        content.view = NSView(frame: NSRect(x: 0, y: 0, width: 80, height: 60))
+        let marker = SharingTypeView()
+        marker.sharingType = .none
+        content.view.addSubview(marker)
+
+        let popover = NSPopover()
+        popover.contentViewController = content
+        popover.behavior = .applicationDefined
+        defer { popover.close(); host.orderOut(nil) }
+
+        popover.show(relativeTo: host.contentView!.bounds, of: host.contentView!, preferredEdge: .maxY)
+
+        // The popover is in a window of its own, not the one it is anchored to.
+        let popoverWindow = try #require(marker.window)
+        #expect(popoverWindow !== host)
+        #expect(popoverWindow.sharingType == .none)
+
+        marker.sharingType = .readOnly
+        #expect(popoverWindow.sharingType == .readOnly)
+    }
+
     /// The setting drives both windows and popovers from one place.
     @Test("The setting maps to the two sharing types")
     func settingMapsToSharingType() {
