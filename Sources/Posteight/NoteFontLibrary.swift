@@ -156,16 +156,23 @@ final class NoteFontLibrary: ObservableObject {
 
         for url in files.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
             let fileName = url.lastPathComponent
+            let id = url.deletingPathExtension().lastPathComponent
             guard Self.fontExtensions.contains(url.pathExtension.lowercased()),
-                  UUID(uuidString: url.deletingPathExtension().lastPathComponent) != nil,
+                  UUID(uuidString: id) != nil,
+                  !manifest.contains(where: { $0.id == id }),
                   let url = verifiedURL(fileName: fileName),
                   let descriptor = Self.descriptor(at: url),
                   let digest = try? Self.digest(of: url) else { continue }
 
-            // A fresh id rather than the file name. The old scheme took the id from the file
-            // name, so a restored backup holding `system.ttf` produced a second entry with the
-            // built-in's id and broke the picker.
-            let entry = FontManifestEntry(id: UUID().uuidString, fileName: fileName,
+            // The id the old build handed out, kept. It took the entry id from the file name, and
+            // that exact string is what `AppSettings.defaultFontID` and every note's `fontID`
+            // still hold — minting a new one here would leave the font in the picker while
+            // silently resetting every note that had chosen it back to the system face.
+            //
+            // Reusing it cannot recreate the collision this scan exists to avoid: the guard above
+            // requires the name to parse as a UUID, and no built-in id does. That is also what
+            // keeps a hand-placed `system.ttf` out — it is refused before it can reach here.
+            let entry = FontManifestEntry(id: id, fileName: fileName,
                                           sha256: digest, postScriptName: descriptor.postScriptName,
                                           displayName: descriptor.name)
             manifest.append(entry)

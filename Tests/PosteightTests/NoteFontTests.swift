@@ -230,8 +230,15 @@ struct NoteFontTests {
         let upgraded = NoteFontLibrary(directory: fonts, bundledURL: nil)
         let adopted = upgraded.entries.filter { $0.fileURL != nil }
         #expect(adopted.map(\.fileURL) == [legacy])
-        // Migrated entries get a fresh UUID id rather than the file name they came from.
-        #expect(UUID(uuidString: try #require(adopted.first).id) != nil)
+
+        // The id has to be the one the old build handed out — it took the entry id from the file
+        // name, and that string is what `AppSettings.defaultFontID` and every note's `fontID`
+        // still hold. Minting a new one leaves the font in the picker but silently resets every
+        // note that had chosen it back to the system face.
+        let legacyID = legacy.deletingPathExtension().lastPathComponent
+        #expect(try #require(adopted.first).id == legacyID)
+        #expect(upgraded.resolvedID(for: legacyID, defaultID: "system") == legacyID)
+        #expect(upgraded.fontName(for: legacyID, defaultID: "system") != nil)
 
         // The scan runs once. A font dropped in afterwards has no way back into the manifest.
         let later = fonts.appendingPathComponent("\(UUID().uuidString).ttf")
