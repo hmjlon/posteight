@@ -71,7 +71,7 @@ several lists side by side.
 - Checklists with an animated pen strike-through on completion
 - Paper colors, pen colors, pen styles, and per-tab icons, all set from the pen case
 - Closing a memo window — the close button or Esc — only hides it; the memo stays
-- Trash with restore and permanent-delete actions
+- Trash with restore and permanent-delete actions, emptying itself after 30 days
 - Daily work log preview and clipboard export as Markdown
 
 ### Menu bar
@@ -104,9 +104,15 @@ The menus macOS draws itself — File, Edit, Window — still follow the system 
 
 ### Where your notes live
 
-Notes are stored locally in `~/Library/Application Support/Posteight/`. There is no
-account, no sync, and no telemetry. Export is explicit: the daily log copies to the
-clipboard as Markdown. Notion synchronization is not implemented yet.
+Posteight runs in the App Sandbox, so your notes live inside its own container —
+`~/Library/Containers/com.younjiyoung.posteight/Data/Library/Application Support/Posteight/`.
+Nothing else on the Mac can reach in, and the files are written readable by you alone.
+Settings → App → Open folder takes you there. Notes from versions before the sandbox are
+copied over once, on first launch, and the old folder is left untouched.
+
+There is no account, no sync, and no telemetry. Export is explicit: the daily log copies to
+the clipboard as Markdown, marked so clipboard managers keep it out of their history.
+Notion synchronization is not implemented yet.
 
 Locking the screen puts the visible memos away, and unlocking brings them back where they
 were; memos you hid yourself stay hidden either way. Memo windows are also left out of
