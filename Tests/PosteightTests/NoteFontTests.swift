@@ -193,6 +193,25 @@ struct NoteFontTests {
         #expect(!reloaded.entries.contains { $0.id == entry.id })
     }
 
+    /// Deleting an imported font used to match on id alone, so a folder that produced a
+    /// colliding id took the built-in entries with it and left the picker broken until restart.
+    @Test func removingAnImportedFontLeavesTheBuiltInsAlone() throws {
+        let (root, fonts, _, _) = try imported()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let library = NoteFontLibrary(directory: fonts)
+        let imported = try #require(library.entries.first { $0.fileURL != nil })
+        try library.remove(imported)
+        #expect(library.entries.map(\.id) == ["system", "hana"])
+
+        // Built-ins refuse removal outright, file or no file.
+        try library.remove(NoteFontEntry(id: "hana", name: "", postScriptName: nil,
+                                         fileURL: NoteFontLibrary.bundledFontURL))
+        #expect(library.entries.map(\.id) == ["system", "hana"])
+        let bundled = try #require(NoteFontLibrary.bundledFontURL)
+        #expect(FileManager.default.fileExists(atPath: bundled.path))
+    }
+
     /// Installs made before the manifest existed have fonts the user did import. Losing them on
     /// upgrade would read as the app throwing their fonts away.
     @Test func fontsImportedBeforeTheManifestSurviveTheUpgrade() throws {

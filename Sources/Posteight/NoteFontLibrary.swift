@@ -248,10 +248,12 @@ final class NoteFontLibrary: ObservableObject {
     }
 
     func remove(_ entry: NoteFontEntry) throws {
-        guard let url = entry.fileURL else { return }
+        guard let url = entry.fileURL, !Self.reservedIDs.contains(entry.id) else { return }
         try FileManager.default.removeItem(at: url)
         CTFontManagerUnregisterFontsForURL(url as CFURL, .process, nil)
-        entries.removeAll { $0.id == entry.id }
+        // Matched on the file too. Removing by id alone once swept the built-in entries away
+        // with it, because a font folder holding `system.ttf` produced a second `system` id.
+        entries.removeAll { $0.id == entry.id && $0.fileURL == entry.fileURL }
         try saveManifest(loadManifest().filter { $0.id != entry.id })
     }
 }
