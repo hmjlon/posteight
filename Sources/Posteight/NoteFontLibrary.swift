@@ -1,7 +1,20 @@
 import AppKit
 import CoreText
+import CryptoKit
 import SwiftUI
 import UniformTypeIdentifiers
+
+/// What the app wrote down when the user imported a font, and the only thing it will register
+/// later. Without a record of its own, the app re-parses whatever happens to be in the folder.
+private struct FontManifestEntry: Codable {
+    /// Always a UUID, so it can never collide with a built-in entry id.
+    let id: String
+    /// A bare file name. Never a path.
+    let fileName: String
+    let sha256: String
+    let postScriptName: String
+    let displayName: String
+}
 
 struct NoteFontEntry: Identifiable {
     let id: String
@@ -43,14 +56,125 @@ final class NoteFontLibrary: ObservableObject {
             CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
             entries.append(NoteFontEntry(id: "hana", name: "", postScriptName: descriptor.postScriptName))
         }
-        let files = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
-        for url in files.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
-            guard ["ttf", "otf"].contains(url.pathExtension.lowercased()),
-                  let descriptor = Self.descriptor(at: url) else { continue }
-            CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
-            entries.append(NoteFontEntry(id: url.deletingPathExtension().lastPathComponent,
-                name: descriptor.name, postScriptName: descriptor.postScriptName, fileURL: url))
+        loadImportedFonts()
+    }
+
+    // MARK: - Imported fonts
+
+    /// Ids the built-in entries own. An imported font can never claim one.
+    static let reservedIDs: Set<String> = ["system", "hana"]
+    static let fontExtensions = ["ttf", "otf"]
+    /// The bundled font is 6.3MB. Anything approaching this is not something a user picked.
+    static let maximumFontBytes = 64 * 1024 * 1024
+    private var manifestURL: URL { directory.appendingPathComponent("manifest.json") }
+
+    private func loadManifest() -> [FontManifestEntry] {
+        guard let data = try? Data(contentsOf: manifestURL),
+              let entries = try? JSONDecoder().decode([FontManifestEntry].self, from: data)
+        else { return [] }
+        return entries
+    }
+
+    private func saveManifest(_ manifest: [FontManifestEntry]) throws {
+        let manager = FileManager.default
+        try manager.createDirectory(at: directory, withIntermediateDirectories: true,
+                                    attributes: [.posixPermissions: 0o700])
+        try? manager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
+        try JSONEncoder().encode(manifest).write(to: manifestURL, options: .atomic)
+        try? manager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: manifestURL.path)
+    }
+
+    /// Streamed, so a font never has to sit in memory whole just to be identified.
+    nonisolated static func digest(of url: URL) throws -> String {
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        var hasher = SHA256()
+        while let chunk = try handle.read(upToCount: 1 << 20), !chunk.isEmpty {
+            hasher.update(data: chunk)
         }
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// Resolves a bare file name inside the font folder and nowhere else. `../` cannot climb out
+    /// and a symlink cannot point out, because `attributesOfItem` reports the link itself rather
+    /// than following it, so anything but a regular file is refused here.
+    func verifiedURL(fileName: String) -> URL? {
+        guard !fileName.contains("/"), fileName != ".", fileName != ".." else { return nil }
+        let url = directory.appendingPathComponent(fileName)
+        guard url.deletingLastPathComponent().resolvingSymlinksInPath()
+                == directory.resolvingSymlinksInPath() else { return nil }
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+              (attributes[.type] as? FileAttributeType) == .typeRegular,
+              (attributes[.size] as? NSNumber)?.intValue ?? .max <= Self.maximumFontBytes
+        else { return nil }
+        return url
+    }
+
+    /// The font folder sits outside any sandbox container and carries no TCC protection, so any
+    /// process running as this user can drop a file into it. CoreText's font parser has a long
+    /// history of memory-corruption CVEs, and handing it every file in that folder on every
+    /// launch turns one write into a parser attack that repeats forever in this app's context.
+    /// Only fonts this app recorded at import, still byte-for-byte what it recorded, are loaded.
+    private func loadImportedFonts() {
+        guard FileManager.default.fileExists(atPath: manifestURL.path) else {
+            migrateToManifest()
+            return
+        }
+        for entry in loadManifest() {
+            guard let url = verified(entry) else { continue }
+            CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
+            entries.append(NoteFontEntry(id: entry.id, name: entry.displayName,
+                                         postScriptName: entry.postScriptName, fileURL: url))
+        }
+    }
+
+    private func verified(_ entry: FontManifestEntry) -> URL? {
+        guard !Self.reservedIDs.contains(entry.id),
+              let url = verifiedURL(fileName: entry.fileName),
+              let digest = try? Self.digest(of: url),
+              digest == entry.sha256.lowercased(),
+              let descriptor = Self.descriptor(at: url),
+              descriptor.postScriptName == entry.postScriptName
+        else {
+            NSLog("Posteight: skipped unverified font \(entry.fileName)")
+            return nil
+        }
+        return url
+    }
+
+    /// Runs once, on the first launch after this app learned to keep a manifest. Installs made
+    /// before then have fonts the user did import, with no record to check them against, and
+    /// dropping them silently would read as the app losing their fonts.
+    ///
+    /// The scan is deliberately narrow: only files named the way the old importer named them —
+    /// `<UUID>.ttf` — are adopted. A manifest is written even when nothing is found, so this
+    /// path never runs again and a file dropped in later has no way back into it.
+    private func migrateToManifest() {
+        let files = (try? FileManager.default.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: nil)) ?? []
+        var manifest: [FontManifestEntry] = []
+
+        for url in files.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
+            let fileName = url.lastPathComponent
+            guard Self.fontExtensions.contains(url.pathExtension.lowercased()),
+                  UUID(uuidString: url.deletingPathExtension().lastPathComponent) != nil,
+                  let url = verifiedURL(fileName: fileName),
+                  let descriptor = Self.descriptor(at: url),
+                  let digest = try? Self.digest(of: url) else { continue }
+
+            // A fresh id rather than the file name. The old scheme took the id from the file
+            // name, so a restored backup holding `system.ttf` produced a second entry with the
+            // built-in's id and broke the picker.
+            let entry = FontManifestEntry(id: UUID().uuidString, fileName: fileName,
+                                          sha256: digest, postScriptName: descriptor.postScriptName,
+                                          displayName: descriptor.name)
+            manifest.append(entry)
+            CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
+            entries.append(NoteFontEntry(id: entry.id, name: entry.displayName,
+                                         postScriptName: entry.postScriptName, fileURL: url))
+        }
+
+        try? saveManifest(manifest)
     }
 
     func contains(_ id: String?) -> Bool {
@@ -76,22 +200,49 @@ final class NoteFontLibrary: ObservableObject {
     enum ImportError: Error { case invalidFont, duplicate, registration }
 
     func add(_ source: URL) throws {
-        guard ["ttf", "otf"].contains(source.pathExtension.lowercased()),
-              let descriptor = Self.descriptor(at: source) else { throw ImportError.invalidFont }
+        guard Self.fontExtensions.contains(source.pathExtension.lowercased()) else {
+            throw ImportError.invalidFont
+        }
+        let size = (try? source.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? .max
+        guard size <= Self.maximumFontBytes else { throw ImportError.invalidFont }
+        guard let descriptor = Self.descriptor(at: source) else { throw ImportError.invalidFont }
         guard !entries.contains(where: { $0.postScriptName == descriptor.postScriptName }) else {
             throw ImportError.duplicate
         }
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        let manager = FileManager.default
+        try manager.createDirectory(at: directory, withIntermediateDirectories: true,
+                                    attributes: [.posixPermissions: 0o700])
         let id = UUID().uuidString
-        let destination = directory.appendingPathComponent(id).appendingPathExtension(source.pathExtension.lowercased())
-        try FileManager.default.copyItem(at: source, to: destination)
+        let fileName = id + "." + source.pathExtension.lowercased()
+        let destination = directory.appendingPathComponent(fileName)
+        guard !manager.fileExists(atPath: destination.path) else { throw ImportError.invalidFont }
+
+        // The bytes are written out rather than copied, so the stored font inherits none of the
+        // source file's ACLs or extended attributes.
+        try Data(contentsOf: source, options: [.mappedIfSafe]).write(to: destination, options: .atomic)
+        try? manager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: destination.path)
+
         var error: Unmanaged<CFError>?
         let registered = CTFontManagerRegisterFontsForURL(destination as CFURL, .process, &error)
         // A font already installed on the Mac can still be kept in the app's collection.
         guard registered || NSFont(name: descriptor.postScriptName, size: 13) != nil else {
-            try? FileManager.default.removeItem(at: destination)
+            try? manager.removeItem(at: destination)
             throw ImportError.registration
         }
+
+        do {
+            try saveManifest(loadManifest() + [FontManifestEntry(
+                id: id, fileName: fileName, sha256: try Self.digest(of: destination),
+                postScriptName: descriptor.postScriptName, displayName: descriptor.name)])
+        } catch {
+            // An unrecorded font would not come back on the next launch, so fail the import
+            // outright rather than leave a file the app will refuse to load.
+            CTFontManagerUnregisterFontsForURL(destination as CFURL, .process, nil)
+            try? manager.removeItem(at: destination)
+            throw error
+        }
+
         entries.append(NoteFontEntry(id: id, name: descriptor.name,
             postScriptName: descriptor.postScriptName, fileURL: destination))
     }
@@ -101,6 +252,7 @@ final class NoteFontLibrary: ObservableObject {
         try FileManager.default.removeItem(at: url)
         CTFontManagerUnregisterFontsForURL(url as CFURL, .process, nil)
         entries.removeAll { $0.id == entry.id }
+        try saveManifest(loadManifest().filter { $0.id != entry.id })
     }
 }
 
