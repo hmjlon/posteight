@@ -373,6 +373,60 @@ struct PersistenceTests {
         #expect(reloaded.notes.contains { $0.id == freshNote })
     }
 
+    /// One item failing used to leave the rest behind permanently: the run-once guard only asks
+    /// whether *any* item is already in the container, so the next launch skipped everything and
+    /// the data that never made it was invisible to the app for good.
+    @Test("A migration that cannot finish rolls back and retries next launch")
+    func partialMigrationRollsBack() throws {
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let legacy = root.appendingPathComponent("legacy")
+        let container = root.appendingPathComponent("container")
+
+        let old = PosteightStore(directory: legacy)
+        let noteID = old.addNote()
+        old.moveNoteToTrash(old.addNote())
+        old.flush()
+
+        // Unreadable, the way a locked or damaged file would be.
+        let trash = legacy.appendingPathComponent("trash.json")
+        try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: trash.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o600],
+                                                       ofItemAtPath: trash.path) }
+
+        #expect(!PosteightStore.migrateStore(from: legacy, to: container))
+        // Nothing half-copied is left to make the next launch think it is done.
+        for item in PosteightStore.migratedItems {
+            #expect(!FileManager.default.fileExists(
+                atPath: container.appendingPathComponent(item).path), "\(item)")
+        }
+
+        // With the cause gone, the retry completes.
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: trash.path)
+        #expect(PosteightStore.migrateStore(from: legacy, to: container))
+        let migrated = PosteightStore(directory: container)
+        #expect(migrated.notes.contains { $0.id == noteID })
+        #expect(migrated.trashedNotes.count == 1)
+    }
+
+    /// A file written by a build older than the permission change kept its 0644 forever, because
+    /// the mode was only ever stamped at creation.
+    @Test("A save narrows a file that was already too wide")
+    func saveNarrowsAnExistingWideFile() throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = PosteightStore(directory: directory)
+        store.flush()
+
+        let notes = directory.appendingPathComponent("notes.json")
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: notes.path)
+        #expect(try mode(notes) == 0o644)
+
+        store.addNote()
+        store.flush()
+        #expect(try mode(notes) == 0o600)
+    }
+
     @Test("Nothing to migrate leaves the container untouched")
     func migrationWithoutALegacyStore() throws {
         let root = temporaryDirectory()

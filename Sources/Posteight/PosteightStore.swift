@@ -179,19 +179,27 @@ final class PosteightStore: ObservableObject {
                                             attributes: [.posixPermissions: 0o700])) != nil
         else { return false }
 
-        var migrated = false
+        // All or nothing. A partial copy is worse than none: the guard above only asks whether
+        // *any* item is already in the container, so one item landing would make every later
+        // launch skip the rest, and whatever failed — a locked `trash.json`, a full disk — would
+        // stay invisible to the app forever with only an NSLog to say why. Undoing our own
+        // copies leaves the container empty so the next launch tries again. The source is never
+        // touched, so there is nothing to lose by retrying.
+        var copied: [URL] = []
         for item in migratedItems where manager.fileExists(atPath: path(source, item)) {
+            let target = destination.appendingPathComponent(item)
             do {
-                try manager.copyItem(at: source.appendingPathComponent(item),
-                                     to: destination.appendingPathComponent(item))
-                migrated = true
+                try manager.copyItem(at: source.appendingPathComponent(item), to: target)
+                copied.append(target)
             } catch {
-                NSLog("Posteight: failed to migrate \(item): \(error)")
+                NSLog("Posteight: failed to migrate \(item), rolling back: \(error)")
+                for done in copied { try? manager.removeItem(at: done) }
+                return false
             }
         }
         // A copy carries the old 0644 over, and `write(_:to:)` only stamps a mode on creation.
         narrowPermissions(of: destination)
-        return migrated
+        return !copied.isEmpty
     }
 
     /// `0700` for directories, `0600` for files, all the way down.
@@ -824,13 +832,15 @@ final class PosteightStore: ObservableObject {
             // installs that predate this narrow the mode on their next save instead.
             try? manager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
 
-            // Only on first creation. An atomic replacement preserves the existing file's mode,
-            // so later saves cannot widen what was stamped here.
             if !manager.fileExists(atPath: url.path) {
                 manager.createFile(atPath: url.path, contents: nil,
                                    attributes: [.posixPermissions: 0o600])
             }
             try data.write(to: url, options: .atomic)
+            // Stamped on every save, not just creation. An atomic replacement carries the old
+            // file's mode across, which is what keeps 0600 once it is set — but it is also what
+            // left a file written by a build older than this one at 0644 for good.
+            try? manager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
         } catch {
             NSLog("Posteight: failed to save \(url.lastPathComponent): \(error)")
         }
