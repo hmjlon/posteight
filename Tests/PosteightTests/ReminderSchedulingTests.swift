@@ -149,6 +149,45 @@ struct ReminderSchedulingTests {
         #expect(client.authorizationRequests == 0)
     }
 
+    /// A trigger built from bare `DateComponents` has a nil `timeZone`, and macOS reads those
+    /// wall-clock fields in whichever zone the Mac is in at fire time. The moment the user picked
+    /// has to survive a flight.
+    @Test("A trigger keeps its absolute instant across time zones")
+    func triggerPinsTimeZone() throws {
+        let seoul = try #require(TimeZone(identifier: "Asia/Seoul"))
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = seoul
+
+        // `nextTriggerDate()` only answers for a moment still ahead, so this is anchored to now
+        // rather than to a fixed date that would quietly stop testing anything once it passed.
+        let instant = try #require(calendar.date(
+            byAdding: .day, value: 30, to: ReminderService.minuteDate(Date())))
+        let components = ReminderService.triggerComponents(for: instant, calendar: calendar)
+        #expect(components.timeZone == seoul)
+
+        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+        #expect(trigger.nextTriggerDate() == instant)
+
+        // The same components read from a different zone still name the same instant.
+        var elsewhere = Calendar(identifier: .gregorian)
+        elsewhere.timeZone = try #require(TimeZone(identifier: "America/Los_Angeles"))
+        #expect(elsewhere.date(from: components) == instant)
+    }
+
+    @Test("Scheduling through the service carries the time zone into the trigger")
+    func scheduledTriggerCarriesTimeZone() async throws {
+        let (directory, store, n, t, i) = try fixture()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let client = FakeReminderClient()
+        let service = ReminderService(client: client)
+        let saved = try await service.saveReminder(
+            store: store, noteID: n, tabID: t, itemID: i, date: Date().addingTimeInterval(600))
+
+        let trigger = try #require(client.requests[i.uuidString]?.trigger as? UNCalendarNotificationTrigger)
+        #expect(trigger.dateComponents.timeZone == TimeZone.current)
+        #expect(trigger.nextTriggerDate() == saved)
+    }
+
     /// The body macOS keeps on the lock screen and in its notification database. Pure, so the
     /// preview setting is exercised in both positions without writing to the real defaults.
     @Test("The notification body only carries the task's own words when the preview is on")

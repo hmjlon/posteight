@@ -87,6 +87,20 @@ final class ReminderService: NSObject, ObservableObject, UNUserNotificationCente
         showsPreview ? reminder.title : L("예약해 둔 할 일이 있어요", language: language)
     }
 
+    /// `Calendar.dateComponents(_:from:)` leaves `timeZone` nil, and `UNCalendarNotificationTrigger`
+    /// then reads the wall-clock fields in whatever zone the Mac is in when it decides to fire.
+    /// Pinning the zone the reminder was set in keeps the absolute instant the user picked: without
+    /// it, a 09:00 reminder made in Seoul fires at 09:00 PDT after the user flies to San Francisco
+    /// while the UI still shows 17:00 the previous day. `connect(to:)` dedupes on the reminder
+    /// list, so nothing re-synchronises until the memo itself changes and it never self-corrects.
+    nonisolated static func triggerComponents(for date: Date, calendar: Calendar = .current) -> DateComponents {
+        var components = calendar.dateComponents(
+            [.year, .month, .day, .hour, .minute, .second], from: date)
+        components.calendar = calendar
+        components.timeZone = calendar.timeZone
+        return components
+    }
+
     /// The picker edits minutes. Never carry its invisible seconds into the actual trigger.
     nonisolated static func minuteDate(_ date: Date) -> Date {
         Date(timeIntervalSinceReferenceDate: floor(date.timeIntervalSinceReferenceDate / 60) * 60)
@@ -149,7 +163,7 @@ final class ReminderService: NSObject, ObservableObject, UNUserNotificationCente
             content.title = "Posteight"
             content.body = desiredBody
             content.sound = .default
-            let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: reminder.date)
+            let components = Self.triggerComponents(for: reminder.date)
             do {
                 try await client.add(UNNotificationRequest(
                     identifier: reminder.id.uuidString, content: content,
