@@ -263,6 +263,63 @@ struct NoteFontTests {
         #expect(NoteFontLibrary(directory: fonts, bundledURL: nil).entries.allSatisfy { $0.fileURL == nil })
     }
 
+    /// `lstat` cannot tell a hard link from a regular file, but the bytes also live under a
+    /// second name outside the folder, where they can be rewritten after the digest was taken.
+    @Test func hardLinkedFontIsRefused() throws {
+        let (root, fonts, _, _) = try imported()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let library = NoteFontLibrary(directory: fonts, bundledURL: nil)
+
+        let outside = root.appendingPathComponent("outside.ttf")
+        try FileManager.default.copyItem(at: #require(NoteFontLibrary.bundledFontURL), to: outside)
+        let linked = fonts.appendingPathComponent("linked.ttf")
+        try FileManager.default.linkItem(at: outside, to: linked)
+
+        // Same bytes, same size, reports as a regular file — refused on the link count alone.
+        #expect(FileManager.default.contentsEqual(atPath: outside.path, andPath: linked.path))
+        #expect(library.verifiedURL(fileName: "linked.ttf") == nil)
+    }
+
+    /// `entries` goes into a `ForEach` as an `Identifiable` array, so two rows sharing an id is
+    /// the same defect a colliding file name once caused.
+    @Test func duplicateIDsInTheManifestLoadOnlyOnce() throws {
+        let (root, fonts, manifest, entry) = try imported()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        var rows = try #require(JSONSerialization.jsonObject(
+            with: try Data(contentsOf: manifest)) as? [[String: Any]])
+        rows.append(rows[0])
+        try JSONSerialization.data(withJSONObject: rows).write(to: manifest, options: .atomic)
+
+        let reloaded = NoteFontLibrary(directory: fonts, bundledURL: nil)
+        #expect(reloaded.entries.filter { $0.id == entry.id }.count == 1)
+        #expect(Set(reloaded.entries.map(\.id)).count == reloaded.entries.count)
+    }
+
+    /// A manifest that is present but unreadable is not the same as an empty one. Treating them
+    /// alike let the next import replace every row with a single one, stranding the fonts those
+    /// rows named — the one-time scan does not run again while the file exists.
+    @Test func anUnreadableManifestIsNotOverwritten() throws {
+        let (root, fonts, manifest, _) = try imported()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let before = try Data(contentsOf: manifest)
+
+        try Data("{ this is not a manifest".utf8).write(to: manifest, options: .atomic)
+        let library = NoteFontLibrary(directory: fonts, bundledURL: nil)
+        // Nothing is registered from a manifest that cannot be read.
+        #expect(library.entries.allSatisfy { $0.fileURL == nil })
+
+        let source = root.appendingPathComponent("second.ttf")
+        try FileManager.default.copyItem(at: #require(NoteFontLibrary.bundledFontURL), to: source)
+        #expect(throws: NoteFontLibrary.ImportError.unreadableManifest) { try library.add(source) }
+
+        // Still the corrupt bytes, not a fresh one-row manifest written over them.
+        #expect(try Data(contentsOf: manifest) != before)
+        #expect((try? JSONDecoder().decode([String].self, from: Data(contentsOf: manifest))) == nil)
+        #expect(FileManager.default.fileExists(atPath: fonts.appendingPathComponent(
+            "\(try #require(JSONSerialization.jsonObject(with: before) as? [[String: Any]])[0]["fileName"] as! String)").path))
+    }
+
     @Test func importedFontsAreStoredPrivateToTheUser() throws {
         let (root, fonts, manifest, entry) = try imported()
         defer { try? FileManager.default.removeItem(at: root) }

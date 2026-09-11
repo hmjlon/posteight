@@ -68,10 +68,15 @@ final class NoteFontLibrary: ObservableObject {
     static let maximumFontBytes = 64 * 1024 * 1024
     private var manifestURL: URL { directory.appendingPathComponent("manifest.json") }
 
-    private func loadManifest() -> [FontManifestEntry] {
+    /// `nil` means the file is there but could not be read. That is not the same as "no fonts":
+    /// treating the two alike let one corrupt manifest be silently replaced by the next import,
+    /// stranding every font already on disk with no row pointing at it and no way back, since
+    /// the one-time scan does not run again while the file exists.
+    private func loadManifest() -> [FontManifestEntry]? {
+        guard FileManager.default.fileExists(atPath: manifestURL.path) else { return [] }
         guard let data = try? Data(contentsOf: manifestURL),
               let entries = try? JSONDecoder().decode([FontManifestEntry].self, from: data)
-        else { return [] }
+        else { return nil }
         return entries
     }
 
@@ -98,6 +103,10 @@ final class NoteFontLibrary: ObservableObject {
     /// Resolves a bare file name inside the font folder and nowhere else. `../` cannot climb out
     /// and a symlink cannot point out, because `attributesOfItem` reports the link itself rather
     /// than following it, so anything but a regular file is refused here.
+    ///
+    /// A hard link is refused too. `lstat` cannot tell one from a regular file, but its bytes
+    /// also live under a second name outside this folder, where they can be rewritten after the
+    /// digest was taken. Fonts this app writes always have exactly one link.
     func verifiedURL(fileName: String) -> URL? {
         guard !fileName.contains("/"), fileName != ".", fileName != ".." else { return nil }
         let url = directory.appendingPathComponent(fileName)
@@ -105,23 +114,42 @@ final class NoteFontLibrary: ObservableObject {
                 == directory.resolvingSymlinksInPath() else { return nil }
         guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
               (attributes[.type] as? FileAttributeType) == .typeRegular,
+              (attributes[.referenceCount] as? NSNumber)?.intValue == 1,
               (attributes[.size] as? NSNumber)?.intValue ?? .max <= Self.maximumFontBytes
         else { return nil }
         return url
     }
 
-    /// The font folder sits outside any sandbox container and carries no TCC protection, so any
-    /// process running as this user can drop a file into it. CoreText's font parser has a long
-    /// history of memory-corruption CVEs, and handing it every file in that folder on every
-    /// launch turns one write into a parser attack that repeats forever in this app's context.
     /// Only fonts this app recorded at import, still byte-for-byte what it recorded, are loaded.
+    /// CoreText's font parser has a long history of memory-corruption CVEs, and handing it every
+    /// file in the folder on every launch turned a single stray file into a parser attack that
+    /// repeated for as long as it sat there.
+    ///
+    /// What this does and does not buy, plainly: it stops files that merely *arrive* in the
+    /// folder — a restored backup, a hand-copied file, anything dropped by something that does
+    /// not know this app — from ever being parsed. It is **not** a trust anchor against an
+    /// attacker who is deliberately targeting Posteight, because `manifest.json` sits in the same
+    /// folder under the same uid: whoever can plant a font there can write a matching row, or
+    /// delete the manifest to re-arm the one-time scan. Closing that needs the record kept
+    /// somewhere the folder's writer cannot reach — a Keychain-held key to sign it with — and the
+    /// sandbox container (WP-4) is what actually narrowed who can write there at all.
     private func loadImportedFonts() {
+        guard let manifest = loadManifest() else {
+            // Unreadable rather than absent. Registering nothing is the safe side, and `add()`
+            // refuses to overwrite it, so the rows already on disk are not lost.
+            NSLog("Posteight: font manifest is unreadable; no imported fonts loaded")
+            return
+        }
         guard FileManager.default.fileExists(atPath: manifestURL.path) else {
             migrateToManifest()
             return
         }
-        for entry in loadManifest() {
-            guard let url = verified(entry) else { continue }
+        var seen = Set<String>()
+        for entry in manifest {
+            // `entries` goes straight into a `ForEach` as an `Identifiable` array, so a manifest
+            // carrying the same id twice would break the picker the way a colliding file name
+            // once did.
+            guard seen.insert(entry.id).inserted, let url = verified(entry) else { continue }
             CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
             entries.append(NoteFontEntry(id: entry.id, name: entry.displayName,
                                          postScriptName: entry.postScriptName, fileURL: url))
@@ -204,7 +232,7 @@ final class NoteFontLibrary: ObservableObject {
         return (CTFontCopyFullName(font) as String, CTFontCopyPostScriptName(font) as String)
     }
 
-    enum ImportError: Error { case invalidFont, duplicate, registration }
+    enum ImportError: Error { case invalidFont, duplicate, registration, unreadableManifest }
 
     func add(_ source: URL) throws {
         guard Self.fontExtensions.contains(source.pathExtension.lowercased()) else {
@@ -239,7 +267,11 @@ final class NoteFontLibrary: ObservableObject {
         }
 
         do {
-            try saveManifest(loadManifest() + [FontManifestEntry(
+            // Never write over a manifest that could not be read. Doing so would replace every
+            // row already on disk with this single one, and the fonts those rows named would be
+            // left in the folder with nothing pointing at them.
+            guard let existing = loadManifest() else { throw ImportError.unreadableManifest }
+            try saveManifest(existing + [FontManifestEntry(
                 id: id, fileName: fileName, sha256: try Self.digest(of: destination),
                 postScriptName: descriptor.postScriptName, displayName: descriptor.name)])
         } catch {
@@ -261,7 +293,8 @@ final class NoteFontLibrary: ObservableObject {
         // Matched on the file too. Removing by id alone once swept the built-in entries away
         // with it, because a font folder holding `system.ttf` produced a second `system` id.
         entries.removeAll { $0.id == entry.id && $0.fileURL == entry.fileURL }
-        try saveManifest(loadManifest().filter { $0.id != entry.id })
+        guard let manifest = loadManifest() else { throw ImportError.unreadableManifest }
+        try saveManifest(manifest.filter { $0.id != entry.id })
     }
 }
 
