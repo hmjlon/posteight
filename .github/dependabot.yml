@@ -9,5 +9,10 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    # 액션마다 PR 을 따로 열면 고정의 대가가 소음으로 돌아온다. 한 달에 하나로 묶는다.
+    groups:
+      github-actions:
+        patterns: ["*"]
+    open-pull-requests-limit: 1
     commit-message:
       prefix: ci
