@@ -206,7 +206,16 @@ jobs:
             exit 0
           fi
 
-          git clone --depth 1 "https://x-access-token:$TAP_TOKEN@github.com/hmjlon/homebrew-tap.git" tap
+          echo "::add-mask::$TAP_TOKEN"
+
+          # 토큰을 remote URL 에 넣으면 tap/.git/config 에 평문으로 기록되고 clone
+          # 프로세스의 인자로도 드러난다. 지금은 upload-artifact 가 dist/*.dmg* 만
+          # 올려서 새지 않지만, 그 경로가 한 번 넓어지는 순간 homebrew-tap 쓰기 권한
+          # PAT 가 그대로 유출된다. 이 명령에만 붙는 헤더로 넘긴다.
+          AUTH_HEADER="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$TAP_TOKEN" | base64 | tr -d '\n')"
+
+          git -c http.extraheader="$AUTH_HEADER" clone --depth 1 \
+            https://github.com/hmjlon/homebrew-tap.git tap
           cd tap
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -215,7 +224,7 @@ jobs:
           # --dry-run 으로 밀어 보면 인증까지 돌지만 원격은 바뀌지 않는다.
           if [ "$GITHUB_EVENT_NAME" != "push" ]; then
             git commit -q --allow-empty -m "TAP_TOKEN 확인"
-            git push --dry-run origin main
+            git -c http.extraheader="$AUTH_HEADER" push --dry-run origin main
             echo "TAP_TOKEN 으로 homebrew-tap 에 쓸 수 있다."
             exit 0
           fi
@@ -237,7 +246,7 @@ jobs:
             exit 0
           fi
           git commit -qam "posteight $V"
-          git push -q
+          git -c http.extraheader="$AUTH_HEADER" push -q origin main
 
       # cask 를 손으로 고칠 때 쓸 값을 요약에 남긴다.
       - name: Cask summary
