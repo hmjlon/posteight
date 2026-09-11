@@ -194,7 +194,7 @@ final class NoteWindowCoordinator {
 /// Lets AppKit report the moment the view lands in a window. Leaning on a single `async` hop
 /// instead loses the exclusion whenever `window` is still nil at that point: optional chaining
 /// swallows it, nothing logs, and it never applies again unless `updateNSView` happens to run.
-private final class SharingTypeView: NSView {
+final class SharingTypeView: NSView {
     var sharingType: NSWindow.SharingType = .none {
         didSet { window?.sharingType = sharingType }
     }
