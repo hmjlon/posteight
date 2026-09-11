@@ -9,6 +9,12 @@ struct TrashView: View {
         VStack(alignment: .leading, spacing: 16) {
             header
 
+            // Items leave on their own, so say so. A trash that quietly empties itself is worse
+            // than one that never does.
+            Text(Lf("삭제한 항목은 %d일이 지나면 자동으로 사라집니다", PosteightStore.trashRetentionDays))
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+
             if store.trashedNotes.isEmpty && store.trashedTabs.isEmpty {
                 emptyState
             } else {

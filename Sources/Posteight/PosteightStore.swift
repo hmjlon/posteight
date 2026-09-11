@@ -640,6 +640,22 @@ final class PosteightStore: ObservableObject {
         loadNotes()
         loadTrashedNotes()
         loadTrashedTabs()
+        purgeExpiredTrash()
+    }
+
+    /// The trash is a way back from a mistake, not an archive. Without this, everything a user
+    /// ever deleted stays readable in `trash.json` until they happen to press 비우기 — they
+    /// believe it is gone and the words are still on disk. The window is announced in the trash
+    /// window so nothing disappears unannounced.
+    nonisolated static let trashRetentionDays = 30
+    private nonisolated static let trashRetention = TimeInterval(trashRetentionDays) * 24 * 60 * 60
+
+    /// Not private: the boundary is what the tests check, and going through a real 30-day-old
+    /// file to reach it would only test `Date` arithmetic twice.
+    func purgeExpiredTrash(now: Date = Date()) {
+        let cutoff = now.addingTimeInterval(-Self.trashRetention)
+        trashedNotes.removeAll { $0.deletedAt < cutoff }
+        trashedTabs.removeAll { $0.deletedAt < cutoff }
     }
 
     /// Application Support first, then the two `UserDefaults` domains notes used to live in
@@ -715,10 +731,25 @@ final class PosteightStore: ObservableObject {
         write(trashedTabs, to: trashedTabsURL)
     }
 
+    /// Notes live as plain JSON at a fixed path, so the file mode is the only thing standing
+    /// between them and every other process running as this user. Default creation is `0755`
+    /// for the directory and `0644` for the files; both are narrowed here.
     private func write(_ value: some Encodable, to url: URL) {
         do {
             let data = try JSONEncoder().encode(value)
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let manager = FileManager.default
+            try manager.createDirectory(at: directory, withIntermediateDirectories: true,
+                                        attributes: [.posixPermissions: 0o700])
+            // `createDirectory` ignores its attributes for a directory that already exists, so
+            // installs that predate this narrow the mode on their next save instead.
+            try? manager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
+
+            // Only on first creation. An atomic replacement preserves the existing file's mode,
+            // so later saves cannot widen what was stamped here.
+            if !manager.fileExists(atPath: url.path) {
+                manager.createFile(atPath: url.path, contents: nil,
+                                   attributes: [.posixPermissions: 0o600])
+            }
             try data.write(to: url, options: .atomic)
         } catch {
             NSLog("Posteight: failed to save \(url.lastPathComponent): \(error)")

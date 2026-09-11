@@ -272,4 +272,56 @@ struct PersistenceTests {
         #expect(note.tabs.map(\.name) == ["메모 1", "개인"])
         #expect(note.selectedTabID == tabID)
     }
+
+    private func mode(_ url: URL) throws -> Int {
+        let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+        return try #require(attributes[.posixPermissions] as? NSNumber).intValue
+    }
+
+    /// Notes are plain JSON at a fixed path. The default `0755`/`0644` leaves them readable by
+    /// anything else running as this user.
+    @Test("A fresh store is created private to the user")
+    func fileModes() throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = PosteightStore(directory: directory)
+        store.flush()
+
+        #expect(try mode(directory) == 0o700)
+        for name in ["notes.json", "trash.json", "trashed-tabs.json"] {
+            #expect(try mode(directory.appendingPathComponent(name)) == 0o600, "\(name)")
+        }
+    }
+
+    /// An install that predates this already has a `0755` directory, and `createDirectory`
+    /// ignores its attributes once the directory exists.
+    @Test("An already wide store is narrowed on the next save")
+    func existingStoreIsNarrowed() throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let manager = FileManager.default
+        try manager.createDirectory(at: directory, withIntermediateDirectories: true,
+                                    attributes: [.posixPermissions: 0o755])
+
+        let store = PosteightStore(directory: directory)
+        store.flush()
+        #expect(try mode(directory) == 0o700)
+    }
+
+    /// `Data.write(options: .atomic)` replaces the file rather than writing through it, so this
+    /// pins down that the replacement keeps the mode stamped at creation.
+    @Test("Later saves do not widen the files again")
+    func modeSurvivesRewrite() throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = PosteightStore(directory: directory)
+        store.flush()
+
+        let noteID = store.addNote()
+        store.updateTabTitle(noteID: noteID, tabID: try memo(store, id: noteID).selectedTabID,
+                             title: "두 번째 저장")
+        store.flush()
+
+        #expect(try mode(directory.appendingPathComponent("notes.json")) == 0o600)
+    }
 }
