@@ -22,7 +22,7 @@ jobs:
     name: Build and publish dmg
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false
 
@@ -120,7 +120,7 @@ jobs:
       # 시험 실행은 dmg 를 아티팩트로만 남긴다. 90 일 뒤 자동 삭제된다.
       - name: Upload dmg (시험 실행)
         if: github.event_name != 'push'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: Posteight-${{ steps.version.outputs.version }}-dmg
           path: dist/*.dmg*
