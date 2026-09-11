@@ -134,9 +134,78 @@ final class PosteightStore: ObservableObject {
         return UserDefaults(suiteName: "com.younjiyoung.posteight") ?? .standard
     }()
 
-    static let storeDirectory: URL = FileManager.default
-        .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("Posteight", isDirectory: true)
+    static let storeDirectory: URL = {
+        let directory = FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Posteight", isDirectory: true)
+        // Both this store and NoteFontLibrary derive their paths from here, and either can be
+        // built first. Migrating inside this one-time initialiser is what guarantees neither
+        // reaches the container before an older install's files have been copied into it — a
+        // font library that got there first would write an empty manifest and the notes
+        // migration would then see a populated container and skip.
+        if let legacy = legacyStoreDirectory, legacy != directory {
+            migrateStore(from: legacy, to: directory)
+        }
+        return directory
+    }()
+
+    /// Where the store lived before the app was sandboxed. Under the sandbox `NSHomeDirectory()`
+    /// is the container, so the real home has to come from the password database.
+    nonisolated static var legacyStoreDirectory: URL? {
+        guard let entry = getpwuid(getuid()), let home = entry.pointee.pw_dir else { return nil }
+        return URL(fileURLWithPath: String(cString: home), isDirectory: true)
+            .appendingPathComponent("Library/Application Support/Posteight", isDirectory: true)
+    }
+
+    nonisolated static let migratedItems = ["notes.json", "trash.json", "trashed-tabs.json", "Fonts"]
+
+    /// Turning on the sandbox moves Application Support into the container. macOS migrates the
+    /// old location automatically only when it is named after the bundle id, and this app's
+    /// folder is `Posteight` rather than `com.younjiyoung.posteight`, so nothing is moved for us
+    /// and an upgrade would look exactly like every note being thrown away.
+    ///
+    /// Copies, never moves: leaving the originals in place keeps a way back if this release has
+    /// to be rolled back. Runs once — anything already in the container means this has either
+    /// run before or the install started life there, and in both cases the container wins.
+    @discardableResult
+    nonisolated static func migrateStore(from source: URL, to destination: URL) -> Bool {
+        let manager = FileManager.default
+        func path(_ directory: URL, _ item: String) -> String {
+            directory.appendingPathComponent(item).path
+        }
+        guard manager.fileExists(atPath: source.path),
+              !migratedItems.contains(where: { manager.fileExists(atPath: path(destination, $0)) }),
+              (try? manager.createDirectory(at: destination, withIntermediateDirectories: true,
+                                            attributes: [.posixPermissions: 0o700])) != nil
+        else { return false }
+
+        var migrated = false
+        for item in migratedItems where manager.fileExists(atPath: path(source, item)) {
+            do {
+                try manager.copyItem(at: source.appendingPathComponent(item),
+                                     to: destination.appendingPathComponent(item))
+                migrated = true
+            } catch {
+                NSLog("Posteight: failed to migrate \(item): \(error)")
+            }
+        }
+        // A copy carries the old 0644 over, and `write(_:to:)` only stamps a mode on creation.
+        narrowPermissions(of: destination)
+        return migrated
+    }
+
+    /// `0700` for directories, `0600` for files, all the way down.
+    private nonisolated static func narrowPermissions(of directory: URL) {
+        let manager = FileManager.default
+        try? manager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
+        guard let walker = manager.enumerator(at: directory, includingPropertiesForKeys: [.isDirectoryKey])
+        else { return }
+        for case let url as URL in walker {
+            let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+            try? manager.setAttributes([.posixPermissions: isDirectory ? 0o700 : 0o600],
+                                       ofItemAtPath: url.path)
+        }
+    }
 
     private let directory: URL
     private let loadLanguage: AppLanguage

@@ -308,6 +308,98 @@ struct PersistenceTests {
         #expect(try mode(directory) == 0o700)
     }
 
+    /// Turning on the sandbox moves Application Support into the container, and macOS does not
+    /// migrate this app's folder for us. Getting this wrong looks to the user exactly like the
+    /// upgrade having thrown every note away.
+    @Test("An install from before the sandbox is copied into the container")
+    func legacyStoreIsMigrated() throws {
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let legacy = root.appendingPathComponent("legacy")
+        let container = root.appendingPathComponent("container")
+
+        let old = PosteightStore(directory: legacy)
+        let noteID = old.addNote()
+        old.updateTabTitle(noteID: noteID, tabID: try memo(old, id: noteID).selectedTabID,
+                           title: "샌드박스 이전 메모")
+        old.moveNoteToTrash(old.addNote())
+        old.flush()
+        // The font library keeps its own folder under the store, and it travels too.
+        let fonts = legacy.appendingPathComponent("Fonts")
+        try FileManager.default.createDirectory(at: fonts, withIntermediateDirectories: true)
+        try Data("[]".utf8).write(to: fonts.appendingPathComponent("manifest.json"))
+
+        #expect(PosteightStore.migrateStore(from: legacy, to: container))
+
+        let migrated = PosteightStore(directory: container)
+        #expect(try memo(migrated, id: noteID).tabs.first?.title == "샌드박스 이전 메모")
+        #expect(migrated.trashedNotes.count == 1)
+        #expect(FileManager.default.fileExists(
+            atPath: container.appendingPathComponent("Fonts/manifest.json").path))
+
+        // Copied, not moved: rolling this release back has to leave the old install usable.
+        #expect(FileManager.default.fileExists(atPath: legacy.appendingPathComponent("notes.json").path))
+
+        // And the copy does not carry the old 0644 into the container.
+        #expect(try mode(container.appendingPathComponent("notes.json")) == 0o600)
+        #expect(try mode(container.appendingPathComponent("Fonts")) == 0o700)
+        #expect(try mode(container.appendingPathComponent("Fonts/manifest.json")) == 0o600)
+    }
+
+    /// Running twice would overwrite whatever the user has done since the upgrade.
+    @Test("Migration does not run a second time")
+    func migrationRunsOnce() throws {
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let legacy = root.appendingPathComponent("legacy")
+        let container = root.appendingPathComponent("container")
+
+        let old = PosteightStore(directory: legacy)
+        let legacyNote = old.addNote()
+        old.flush()
+        #expect(PosteightStore.migrateStore(from: legacy, to: container))
+
+        // What the user did after the upgrade.
+        let migrated = PosteightStore(directory: container)
+        migrated.moveNoteToTrash(legacyNote)
+        let freshNote = migrated.addNote()
+        migrated.flush()
+
+        #expect(!PosteightStore.migrateStore(from: legacy, to: container))
+        let reloaded = PosteightStore(directory: container)
+        // A second run would put the deleted note back and lose the new one.
+        #expect(!reloaded.notes.contains { $0.id == legacyNote })
+        #expect(reloaded.trashedNotes.map(\.id) == [legacyNote])
+        #expect(reloaded.notes.contains { $0.id == freshNote })
+    }
+
+    @Test("Nothing to migrate leaves the container untouched")
+    func migrationWithoutALegacyStore() throws {
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let container = root.appendingPathComponent("container")
+
+        #expect(!PosteightStore.migrateStore(from: root.appendingPathComponent("missing"), to: container))
+        #expect(!FileManager.default.fileExists(atPath: container.path))
+
+        // An empty but existing folder is not a store either.
+        let empty = root.appendingPathComponent("empty")
+        try FileManager.default.createDirectory(at: empty, withIntermediateDirectories: true)
+        #expect(!PosteightStore.migrateStore(from: empty, to: container))
+    }
+
+    /// An unsandboxed build resolves both paths to the same folder, and copying a store onto
+    /// itself would be a very bad way to find that out.
+    @Test("The legacy path is the real home, not the container")
+    func legacyPathPointsAtTheRealHome() throws {
+        let legacy = try #require(PosteightStore.legacyStoreDirectory)
+        #expect(legacy.path.hasSuffix("/Library/Application Support/Posteight"))
+        #expect(!legacy.path.contains("/Library/Containers/"))
+        // `swift test` is unbundled, so there is no container and the two coincide — which is
+        // exactly the condition `storeDirectory` uses to skip the migration entirely.
+        #expect(legacy == PosteightStore.storeDirectory)
+    }
+
     /// `Data.write(options: .atomic)` replaces the file rather than writing through it, so this
     /// pins down that the replacement keeps the mode stamped at creation.
     @Test("Later saves do not widen the files again")

@@ -128,12 +128,23 @@ README 이미지를 다시 찍을 때는 **설정 → 노트** 의 "화면 공�
 
 ## 데이터와 환경
 
-- 노트는 `~/Library/Application Support/Posteight/` 에 `notes.json`, `trash.json`,
-  `trashed-tabs.json` 으로 저장된다(`PosteightStore.storeDirectory`). 테스트는 자기 `directory` 를
-  넘기기 때문에 실제 노트를 건드리지 않는다.
-- 설정은 `UserDefaults` 의 `posteight.*` 키에 있다.
-- 네트워크 호출도, 계정도, API 키도, entitlement 가 필요한 권한도 없다. 밖으로 나가는 경로는
-  오늘 기록을 Markdown 으로 클립보드에 복사하는 것 하나뿐이고, 그것도 명시적인 동작이다.
+- 노트는 샌드박스 컨테이너의 Application Support 아래 `Posteight/` 에 `notes.json`,
+  `trash.json`, `trashed-tabs.json` 으로 저장된다(`PosteightStore.storeDirectory`). 임포트한
+  폰트와 그 매니페스트는 같은 자리의 `Fonts/` 다. 파일은 `0600`, 디렉터리는 `0700` 으로 만든다.
+  테스트는 자기 `directory` 를 넘기기 때문에 실제 노트를 건드리지 않는다.
+- 샌드박스 이전 설치는 `~/Library/Application Support/Posteight/` 에 저장했다.
+  `PosteightStore.migrateStore(from:to:)` 가 첫 실행에 한 번 컨테이너로 복사하고 원본은
+  남긴다. 호출 지점이 `storeDirectory` 의 1회성 초기화 안에 있는 것은 의도다 — 스토어와
+  `NoteFontLibrary` 중 어느 쪽이 먼저 만들어질지 정해져 있지 않아서, 그 바깥에서 부르면
+  폰트 라이브러리가 먼저 컨테이너에 닿아 마이그레이션이 통째로 건너뛰어진다.
+- 설정은 `UserDefaults` 의 `posteight.*` 키에 있다. 컨테이너로는 macOS 가 알아서 옮긴다.
+- entitlements 는 `Packaging/Posteight.entitlements` 에 있고 App Sandbox, 파일 선택 패널용
+  `files.user-selected.read-only`, 그리고 위 마이그레이션을 위한 예전 경로 읽기 임시 예외
+  셋뿐이다. **임시 예외는 한 릴리스용이다. 마이그레이션이 한 바퀴 돌고 나면 지운다.**
+  Release 는 `CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO` 다 — 빼면 Xcode 가 ad-hoc 서명을
+  배포 신원으로 보지 않아 `get-task-allow` 를 배포 빌드에까지 주입한다.
+- 네트워크 호출도, 계정도, API 키도 없다. 밖으로 나가는 경로는 오늘 기록을 Markdown 으로
+  클립보드에 복사하는 것 하나뿐이고, 그것도 명시적인 동작이다.
 - 환경변수는 `POSTEIGHT_SYSTEM_LANGUAGE` 하나뿐이고 테스트 전용이다.
 
 ## 작업 시 주의할 점
