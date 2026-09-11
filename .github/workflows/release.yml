@@ -45,7 +45,18 @@ jobs:
           else
             LAST=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" -q .tag_name 2>/dev/null || echo v0.0.0)
             LAST="${LAST#v}"
-            VERSION="$(echo "$LAST" | cut -d. -f1).$(( $(echo "$LAST" | cut -d. -f2) + 1 )).0"
+            # 산술식에 넣기 전에 형식을 확인한다. $(( )) 는 배열 첨자 자리에서 명령
+            # 치환을 수행하므로, 검증하지 않은 태그 이름은 그대로 실행 가능한 코드가
+            # 된다. 이 값은 릴리스 API 에서 오지 이 저장소의 소스에서 오지 않는다.
+            if ! printf '%s' "$LAST" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "::warning::직전 릴리스 태그($LAST)가 형식에 맞지 않는다. 0.0.0 으로 간주한다."
+              LAST="0.0.0"
+            fi
+            MAJOR="${LAST%%.*}"
+            REST="${LAST#*.}"
+            MINOR="${REST%%.*}"
+            # 10# 을 붙여 08, 09 가 8진수로 해석되는 것도 막는다.
+            VERSION="$MAJOR.$((10#$MINOR + 1)).0"
             echo "직전 릴리스 v$LAST -> v$VERSION"
           fi
           if ! printf '%s' "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
