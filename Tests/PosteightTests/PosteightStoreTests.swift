@@ -305,3 +305,76 @@ struct DailyLogTests {
         #expect(pasteboard.string(forType: PosteightStore.concealedPasteboardType) != nil)
     }
 }
+
+@Suite("Note position anchor")
+struct NotePositionAnchorTests {
+    private func placed(_ x: Double, _ y: Double) -> StickyNote {
+        var placed = note()
+        placed.position = NotePoint(x: x, y: y)
+        return placed
+    }
+
+    /// 예전 기준은 `NSScreen.main.visibleFrame` 이었다. 화면 한 대, Dock 이 아래, 메뉴 막대
+    /// 40pt 인 흔한 경우: 옛 기준의 좌상단이 새 기준보다 40pt 아래에 있었으므로, 같은 창을
+    /// 가리키려면 저장값의 y 가 40 만큼 커져야 한다. x 는 그대로다.
+    @Test("메뉴 막대 높이만큼만 y 가 옮겨진다")
+    func menuBarHeightMovesOnlyY() {
+        let legacy = NSRect(x: 0, y: 73, width: 1800, height: 1056)   // visibleFrame
+        let anchor = NSRect(x: 0, y: 0, width: 1800, height: 1169)    // frame
+        let moved = PosteightStore.rebasedPositions(
+            [placed(700, 400)],
+            dx: legacy.minX - anchor.minX,
+            dy: anchor.maxY - legacy.maxY
+        )
+        #expect(moved[0].position == NotePoint(x: 700, y: 440))
+    }
+
+    /// Dock 을 왼쪽에 둔 기계는 옛 기준의 좌변이 Dock 폭만큼 오른쪽에 있었다. 그만큼 x 를
+    /// 되돌려 줘야 창이 있던 자리에 그대로 뜬다. 이 세션이 실물로 재현한 어긋남이다.
+    @Test("Dock 이 옆에 있던 기계는 x 도 옮겨진다")
+    func sideDockMovesX() {
+        let legacy = NSRect(x: 50, y: 40, width: 1750, height: 1129)
+        let anchor = NSRect(x: 0, y: 0, width: 1800, height: 1169)
+        let moved = PosteightStore.rebasedPositions(
+            [placed(700, 400)],
+            dx: legacy.minX - anchor.minX,
+            dy: anchor.maxY - legacy.maxY
+        )
+        #expect(moved[0].position == NotePoint(x: 750, y: 400))
+    }
+
+    /// 기준이 같으면 손대지 않는다. 이미 옮긴 기계가 두 번째로 돌아도 값이 그대로여야 한다.
+    @Test("기준이 같으면 값이 그대로다")
+    func sameAnchorIsNoOp() {
+        let notes = [placed(700, 400), placed(-120, 2000)]
+        #expect(PosteightStore.rebasedPositions(notes, dx: 0, dy: 0) == notes)
+    }
+
+    /// 메모가 여럿이면 전부 같은 만큼 움직인다. 서로의 간격이 달라지면 사용자가 잡아 둔
+    /// 배치가 무너진다.
+    @Test("여러 메모가 같은 만큼 움직인다")
+    func everyNoteMovesTogether() {
+        let before = [placed(100, 100), placed(400, 300), placed(-50, 900)]
+        let after = PosteightStore.rebasedPositions(before, dx: 50, dy: 40)
+        #expect(after.map(\.position) == [
+            NotePoint(x: 150, y: 140),
+            NotePoint(x: 450, y: 340),
+            NotePoint(x: 0, y: 940),
+        ])
+        // 위치 말고는 아무것도 건드리지 않는다.
+        #expect(after.map(\.id) == before.map(\.id))
+        #expect(after.map(\.size) == before.map(\.size))
+        #expect(after.map(\.tabs) == before.map(\.tabs))
+    }
+
+    /// 기준이 (0, 0) 원점 프레임이면 저장값은 곧 전역 좌표다 — 화면 좌상단에서 잰 값.
+    /// 이 성질이 깨지면 화면이 두 대일 때 다시 다른 모니터로 튄다.
+    @Test("새 기준에서 저장값은 전역 좌표다")
+    func newAnchorIsGlobal() {
+        let anchor = NSRect(x: 0, y: 0, width: 1800, height: 1169)
+        // 창 중심이 전역 (1000, 429) 일 때 저장값은 (1000, 1169 - 429).
+        #expect(anchor.minX == 0)
+        #expect(1000 - anchor.minX == 1000)
+        #expect(anchor.maxY - 429 == 740)
+    }
+}

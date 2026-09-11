@@ -125,6 +125,8 @@ final class PosteightStore: ObservableObject {
     private let trashStorageKey = "posteight.trash.v1"
     private let legacyStorageKey = "posteat.notes.v1"
     private let legacyTrashStorageKey = "posteat.trash.v1"
+    /// 위치 기준 이전이 끝났다는 표시. 한 번만 돌아야 한다.
+    private static let positionsRebasedKey = "posteight.notePositionsRebased"
 
     // Notes now live in Application Support. These two domains are read-only fallbacks for
     // data written before that move: `swift run` launches an unbundled binary whose standard
@@ -212,6 +214,42 @@ final class PosteightStore: ObservableObject {
             let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
             try? manager.setAttributes([.posixPermissions: isDirectory ? 0o700 : 0o600],
                                        ofItemAtPath: url.path)
+        }
+    }
+
+    /// 예전 빌드는 메모 위치를 `NSScreen.main.visibleFrame` 기준으로 적었다. 그 기준은 포커스와
+    /// Dock 을 따라 움직여서, 저장할 때와 복원할 때 값이 달라지면 메모가 그만큼 밀렸다. 기준이
+    /// `NSScreen.noteAnchorFrame` 으로 바뀌었으므로 이미 저장된 값을 한 번 옮긴다.
+    ///
+    /// 옛 기준을 정확히 되살릴 방법은 없다 — 마지막으로 저장한 순간 어느 화면이 포커스를 쥐고
+    /// 있었는지가 어디에도 남지 않는다. 그래서 호출하는 쪽이 지금의 `NSScreen.main.visibleFrame`
+    /// 을 그 자리에 놓는다. 화면이 한 대고 Dock 과 메뉴 막대가 그때 그대로면 이 값이 정확히
+    /// 맞고, 어긋나더라도 `moveOnScreenIfNeeded()` 가 창을 화면 안에 붙잡는다. 한 번 옮기고 나면
+    /// 다시는 흔들리지 않는다.
+    ///
+    /// **창이 하나라도 만들어지기 전에 불러야 한다.** 창 배치가 이 값을 읽고, 한 번 배치한 창은
+    /// 다시 배치하지 않는다.
+    func rebaseNotePositions(from legacy: NSRect, to anchor: NSRect) {
+        guard !defaults.bool(forKey: Self.positionsRebasedKey) else { return }
+        defaults.set(true, forKey: Self.positionsRebasedKey)
+        notes = Self.rebasedPositions(
+            notes,
+            dx: legacy.minX - anchor.minX,
+            dy: anchor.maxY - legacy.maxY
+        )
+    }
+
+    /// 기준 두 개의 차이만 받는다. 화면을 읽지 않으므로 테스트가 그대로 부를 수 있다.
+    nonisolated static func rebasedPositions(
+        _ notes: [StickyNote],
+        dx: Double,
+        dy: Double
+    ) -> [StickyNote] {
+        guard dx != 0 || dy != 0 else { return notes }
+        return notes.map { note in
+            var note = note
+            note.position = NotePoint(x: note.position.x + dx, y: note.position.y + dy)
+            return note
         }
     }
 

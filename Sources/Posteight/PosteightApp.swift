@@ -318,6 +318,12 @@ private struct MenuBarLabel: View {
         MenuBarProgressCard(done: store.doneCount, total: store.totalCount, count: displayCount)
             .accessibilityLabel(accessibilityLabel)
         .task {
+            // 창을 하나라도 열기 전에 끝나야 한다. 아래 presentNote 가 만드는 창이 이 값을
+            // 읽어 자리를 잡고, 한 번 자리를 잡은 창은 다시 잡지 않는다.
+            store.rebaseNotePositions(
+                from: NSScreen.main?.visibleFrame ?? NSScreen.noteAnchorFrame,
+                to: NSScreen.noteAnchorFrame
+            )
             NoteWindowCoordinator.shared.installHistoryShortcuts(store: store)
             reminders.connect(to: store)
             for note in store.notes {

@@ -453,7 +453,7 @@ struct StickyNoteWindowView: View {
 
     private func saveWindowPosition() {
         guard let window else { return }
-        let referenceFrame = NSScreen.main?.visibleFrame ?? NSScreen.screens.first?.visibleFrame ?? .zero
+        let referenceFrame = NSScreen.noteAnchorFrame
         store.updateNotePosition(
             noteID,
             position: NotePoint(
@@ -618,7 +618,7 @@ private struct NoteWindowConfigurator: NSViewRepresentable {
             window.standardWindowButton(.zoomButton)?.isHidden = true
             window.setContentSize(NSSize(width: note.size.width, height: note.size.height))
 
-            let referenceFrame = NSScreen.main?.visibleFrame ?? NSScreen.screens.first?.visibleFrame ?? .zero
+            let referenceFrame = NSScreen.noteAnchorFrame
             window.setFrameOrigin(
                 NSPoint(
                     x: referenceFrame.minX + note.position.x - window.frame.width * 0.5,
@@ -688,6 +688,22 @@ private struct NoteWindowConfigurator: NSViewRepresentable {
                 NSEvent.removeMonitor(escapeMonitor)
             }
         }
+    }
+}
+
+extension NSScreen {
+    /// 메모 위치를 재는 기준. `note.position` 은 이 프레임의 좌상단에서 잰 값이다.
+    ///
+    /// 여기에 `NSScreen.main` 이나 `visibleFrame` 을 쓰면 안 된다. `NSScreen.main` 은 주
+    /// 디스플레이가 아니라 **키보드 포커스를 가진 창이 있는 화면**이고, `visibleFrame` 은 Dock 과
+    /// 메뉴 막대를 따라 움직인다. 둘 중 하나라도 기준이 되면 저장한 좌표가 절대 위치가 아니라
+    /// "그때 그 화면의 여백 기준 오프셋" 이 되어, 기준이 달라진 다음 실행에 메모가 그 차이만큼
+    /// 밀린다 — Dock 을 옆으로 옮기면 Dock 폭만큼, 화면이 두 대면 아예 다른 모니터로.
+    ///
+    /// 메뉴 막대가 있는 화면의 `frame` 은 원점이 늘 (0, 0) 이고 여백을 타지 않는다.
+    static var noteAnchorFrame: NSRect {
+        // 디스플레이가 전부 떨어진 순간에는 `screens` 가 비어 있을 수 있다.
+        screens.first?.frame ?? main?.frame ?? .zero
     }
 }
 
