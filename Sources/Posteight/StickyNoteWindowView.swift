@@ -507,7 +507,11 @@ struct StickyNoteWindowView: View {
         } else {
             let alert = NSAlert()
             alert.messageText = Lf("탭은 이 메모에 최대 %d개까지 둘 수 있어요", MemoSurfaceMetrics.maximumTabCount)
-            if let window { alert.beginSheetModal(for: window) }
+            if let window {
+                // The sheet is its own AppKit window, so the card's exclusion does not cover it.
+                alert.window.sharingType = AppSettings.shared.noteWindowSharingType
+                alert.beginSheetModal(for: window)
+            }
         }
     }
 

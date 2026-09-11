@@ -107,6 +107,7 @@ struct TodoItemRow: View {
                     .environmentObject(store)
                     .presentationBackground(Color(hex: note.paperHex))
                     .preferredColorScheme(.light)
+                    .excludedFromScreenCapture()
             }
 
             Button {
@@ -146,6 +147,7 @@ struct TodoItemRow: View {
                 // Paints the popover's own chrome, arrow included, so the slip reads as a piece
                 // torn off this card rather than a system panel floating over it.
                 .presentationBackground(Color(hex: note.paperHex))
+                .excludedFromScreenCapture()
             }
 
             Button {

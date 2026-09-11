@@ -205,6 +205,7 @@ private struct TrashHoverPreview: ViewModifier {
                 TrashContentsPreview(tabs: tabs)
                     .onHover { isPreviewHovered = $0 }
                     .onDisappear { isPreviewHovered = false }
+                    .excludedFromScreenCapture()
             }
             .task(id: isHovered) {
                 let shouldPresent = isHovered

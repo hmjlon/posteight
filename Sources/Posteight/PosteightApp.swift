@@ -191,27 +191,36 @@ final class NoteWindowCoordinator {
     }
 }
 
+/// Lets AppKit report the moment the view lands in a window. Leaning on a single `async` hop
+/// instead loses the exclusion whenever `window` is still nil at that point: optional chaining
+/// swallows it, nothing logs, and it never applies again unless `updateNSView` happens to run.
+private final class SharingTypeView: NSView {
+    var sharingType: NSWindow.SharingType = .none {
+        didSet { window?.sharingType = sharingType }
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        window?.sharingType = sharingType
+    }
+}
+
 /// Memo contents are the whole promise of the app, so every window that shows them stays out of
 /// screen shares, recordings and screenshots. One flag, no permission, nothing to configure.
+///
+/// `sharingType` is per-NSWindow and is not inherited, so popovers and sheets — which get their
+/// own windows — each need this too, not just the card underneath them.
 struct ScreenCaptureExclusion: NSViewRepresentable {
     @ObservedObject private var settings = AppSettings.shared
 
     func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        exclude(view)
+        let view = SharingTypeView()
+        view.sharingType = settings.noteWindowSharingType
         return view
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        exclude(nsView)
-    }
-
-    private func exclude(_ view: NSView) {
-        let sharingType = settings.noteWindowSharingType
-        // The view has no window yet while SwiftUI is still building the scene.
-        DispatchQueue.main.async {
-            view.window?.sharingType = sharingType
-        }
+        (nsView as? SharingTypeView)?.sharingType = settings.noteWindowSharingType
     }
 }
 
