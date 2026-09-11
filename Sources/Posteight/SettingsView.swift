@@ -75,6 +75,18 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section(L("알림")) {
+                Toggle(L("알림 본문에 할 일 내용 표시"), isOn: $settings.showsReminderPreview)
+                Text(L("끄면 알림에 할 일 내용 대신 짧은 안내만 표시됩니다. 알림은 잠긴 화면에도 뜨고 macOS 알림 기록에 남습니다."))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+            // Already-scheduled notifications keep the body they were created with, so the
+            // setting only takes effect on the next memo edit unless the queue is rebuilt here.
+            .onChange(of: settings.showsReminderPreview) {
+                Task { _ = await ReminderService.shared.retrySynchronization(for: store.notes) }
+            }
+
             FontSettingsSection()
 
             Section(L("앱")) {

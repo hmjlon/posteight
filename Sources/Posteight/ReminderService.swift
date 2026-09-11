@@ -78,6 +78,15 @@ final class ReminderService: NSObject, ObservableObject, UNUserNotificationCente
         }
     }
 
+    /// A notification body outlives the banner: macOS draws it on the lock screen under the
+    /// default preview policy and keeps it in the notification database. Pure and parameterised
+    /// so both branches are testable without reaching for the settings singleton.
+    nonisolated static func notificationBody(
+        for reminder: Reminder, showsPreview: Bool, language: AppLanguage = .korean
+    ) -> String {
+        showsPreview ? reminder.title : L("예약해 둔 할 일이 있어요", language: language)
+    }
+
     /// The picker edits minutes. Never carry its invisible seconds into the actual trigger.
     nonisolated static func minuteDate(_ date: Date) -> Date {
         Date(timeIntervalSinceReferenceDate: floor(date.timeIntervalSinceReferenceDate / 60) * 60)
@@ -123,16 +132,22 @@ final class ReminderService: NSObject, ObservableObject, UNUserNotificationCente
                 return errorMessage
             }
         }
+        let settings = AppSettings.shared
         for reminder in reminders {
-            // Do not reset unchanged requests on every keystroke elsewhere in the app.
+            let desiredBody = Self.notificationBody(
+                for: reminder, showsPreview: settings.showsReminderPreview, language: settings.language
+            )
+            // Do not reset unchanged requests on every keystroke elsewhere in the app. The
+            // comparison has to use the body actually about to be sent, or flipping the preview
+            // setting would leave every already-scheduled notification showing the old one.
             if let request = pending.first(where: { $0.identifier == reminder.id.uuidString }),
-               request.content.body == reminder.title,
+               request.content.body == desiredBody,
                let trigger = request.trigger as? UNCalendarNotificationTrigger,
                let date = trigger.nextTriggerDate(), abs(date.timeIntervalSince(reminder.date)) < 1 { continue }
             guard reminder.date > Date() else { continue }
             let content = UNMutableNotificationContent()
             content.title = "Posteight"
-            content.body = reminder.title
+            content.body = desiredBody
             content.sound = .default
             let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: reminder.date)
             do {

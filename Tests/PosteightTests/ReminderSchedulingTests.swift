@@ -81,7 +81,14 @@ struct ReminderSchedulingTests {
     @Test("Successful scheduling registers a minute-exact trigger and persists the same date")
     func successful() async throws {
         let (directory, store, n, t, i) = try fixture()
-        defer { try? FileManager.default.removeItem(at: directory) }
+        // Pinned rather than assumed: the setting lives in the real defaults, so a developer who
+        // turned the preview on in the app would otherwise see this test fail on their machine.
+        let previous = AppSettings.shared.showsReminderPreview
+        defer {
+            AppSettings.shared.showsReminderPreview = previous
+            try? FileManager.default.removeItem(at: directory)
+        }
+        AppSettings.shared.showsReminderPreview = false
         let client = FakeReminderClient()
         client.status = .notDetermined
         let service = ReminderService(client: client)
@@ -91,7 +98,8 @@ struct ReminderSchedulingTests {
         let trigger = try #require(request.trigger as? UNCalendarNotificationTrigger)
         #expect(trigger.dateComponents.second == 0)
         #expect(!trigger.repeats)
-        #expect(request.content.body == "예약 테스트")
+        #expect(request.content.body == L("예약해 둔 할 일이 있어요"))
+        #expect(request.content.body != "예약 테스트")
         #expect(saved == ReminderService.minuteDate(chosen))
         let reloaded = PosteightStore(directory: directory)
         #expect(reloaded.notes.flatMap(\.allItems).first { $0.id == i }?.reminderAt == saved)
@@ -139,5 +147,52 @@ struct ReminderSchedulingTests {
             try await service.saveReminder(store: store, noteID: n, tabID: t, itemID: i, date: Date())
         }
         #expect(client.authorizationRequests == 0)
+    }
+
+    /// The body macOS keeps on the lock screen and in its notification database. Pure, so the
+    /// preview setting is exercised in both positions without writing to the real defaults.
+    @Test("The notification body only carries the task's own words when the preview is on")
+    func bodyFollowsPreviewSetting() {
+        let reminder = ReminderService.Reminder(id: UUID(), title: "치과 예약 확인", date: Date())
+        for language in [AppLanguage.korean, .english] {
+            #expect(ReminderService.notificationBody(
+                for: reminder, showsPreview: true, language: language) == "치과 예약 확인")
+
+            let hidden = ReminderService.notificationBody(
+                for: reminder, showsPreview: false, language: language)
+            #expect(hidden == L("예약해 둔 할 일이 있어요", language: language))
+            #expect(!hidden.contains("치과"))
+        }
+    }
+
+    /// Flipping the setting has to rewrite requests that are already queued. The duplicate check
+    /// used to compare against the task title, so an existing notification kept its old body
+    /// until the memo happened to change.
+    @Test("Turning the preview on rewrites an already scheduled notification")
+    func previewSettingRewritesPendingRequest() async throws {
+        let (directory, store, n, t, i) = try fixture()
+        let settings = AppSettings.shared
+        let previous = settings.showsReminderPreview
+        defer {
+            settings.showsReminderPreview = previous
+            try? FileManager.default.removeItem(at: directory)
+        }
+
+        settings.showsReminderPreview = false
+        let client = FakeReminderClient()
+        let service = ReminderService(client: client)
+        let date = try await service.saveReminder(
+            store: store, noteID: n, tabID: t, itemID: i, date: Date().addingTimeInterval(600))
+        #expect(client.requests[i.uuidString]?.content.body == L("예약해 둔 할 일이 있어요"))
+
+        settings.showsReminderPreview = true
+        #expect(await service.retrySynchronization(for: store.notes) == nil)
+        #expect(client.requests[i.uuidString]?.content.body == "예약 테스트")
+
+        // Same identifier, so the queue is replaced rather than duplicated, and the fire time
+        // survives the rewrite.
+        #expect(client.requests.count == 1)
+        let trigger = try #require(client.requests[i.uuidString]?.trigger as? UNCalendarNotificationTrigger)
+        #expect(trigger.nextTriggerDate() == date)
     }
 }

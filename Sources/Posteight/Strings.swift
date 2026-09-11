@@ -185,6 +185,11 @@ private let englishStrings: [String: String] = [
     "화면 공유와 스크린샷에서 노트 감추기": "Hide notes from screen sharing and screenshots",
     "켜 두면 화면을 공유하거나 녹화할 때, 스크린샷을 찍을 때 노트가 찍히지 않습니다.":
         "With this on, notes stay out of screen shares, recordings and screenshots.",
+    "알림": "Reminders",
+    "알림 본문에 할 일 내용 표시": "Show task text in notifications",
+    "끄면 알림에 할 일 내용 대신 짧은 안내만 표시됩니다. 알림은 잠긴 화면에도 뜨고 macOS 알림 기록에 남습니다.":
+        "With this off, notifications show a short note instead of the task text. Notifications also appear on the lock screen and stay in the macOS notification history.",
+    "예약해 둔 할 일이 있어요": "You have a task scheduled",
     "앱": "App",
     "언어": "Language",
     "시스템 설정에 따름": "Follow system setting",

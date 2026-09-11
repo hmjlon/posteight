@@ -37,6 +37,7 @@ final class AppSettings: ObservableObject {
         static let countStyle = "posteight.menuBarCountStyle"
         static let notesOnTop = "posteight.keepsNotesOnTop"
         static let hidesFromCapture = "posteight.hidesNotesFromScreenCapture"
+        static let reminderPreview = "posteight.showsReminderPreview"
         static let language = "posteight.language"
     }
 
@@ -83,6 +84,18 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    /// Off by default, on the same reasoning as the screen capture exclusion: a notification is
+    /// drawn on the lock screen and kept in the system notification database, both outside this
+    /// app's reach. No API lets an app force the preview policy, so the only control left is to
+    /// keep the task's own words out of the body. Turning it on is for people who would rather
+    /// read the task than unlock the Mac.
+    @Published var showsReminderPreview: Bool {
+        didSet {
+            guard showsReminderPreview != oldValue else { return }
+            UserDefaults.standard.set(showsReminderPreview, forKey: Key.reminderPreview)
+        }
+    }
+
     /// Bumped when the Dock icon is clicked, so the menu bar label can bring the card back.
     @Published private(set) var showAllNotesRequests = 0
 
@@ -101,6 +114,7 @@ final class AppSettings: ObservableObject {
         showsDockIcon = defaults.object(forKey: Key.dockIcon) as? Bool ?? true
         keepsNotesOnTop = defaults.object(forKey: Key.notesOnTop) as? Bool ?? true
         hidesNotesFromScreenCapture = defaults.object(forKey: Key.hidesFromCapture) as? Bool ?? true
+        showsReminderPreview = defaults.object(forKey: Key.reminderPreview) as? Bool ?? false
         menuBarCountStyle = (defaults.string(forKey: Key.countStyle)
             .flatMap(MenuBarCountStyle.init(rawValue:))) ?? .remaining
         language = (defaults.string(forKey: Key.language)
