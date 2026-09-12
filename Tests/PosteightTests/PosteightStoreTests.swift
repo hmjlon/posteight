@@ -188,6 +188,36 @@ struct ClampTests {
         #expect(PosteightStore.clamped(NoteSize(width: 9_999, height: 9_999)) == DesignTokens.maximumNoteSize)
     }
 
+    /// 소수 크기는 창 원점까지 소수로 만들고(자리는 중심으로 저장한다) 1x 외장 모니터에서 글자를
+    /// 번지게 한다. 크기가 지나는 길은 이 함수 하나뿐이라 여기서 끊는다.
+    @Test("크기는 정수로 떨어진다")
+    func sizeIsIntegral() {
+        let dragged = PosteightStore.clamped(NoteSize(width: 310.5, height: 292.5))
+        #expect(dragged == NoteSize(width: 311, height: 293))
+        #expect(dragged.width.truncatingRemainder(dividingBy: 1) == 0)
+        #expect(dragged.height.truncatingRemainder(dividingBy: 1) == 0)
+    }
+
+    /// MacBook Air 13" 를 "더 크게" 최대(1024×640pt)로 두면 Dock 과 메뉴 막대를 뺀 높이가 532 다.
+    /// 최대 메모 높이 560 이 그보다 크고, 화면보다 큰 메모는 크기 조절 손잡이가 오른쪽 아래
+    /// 모서리라 화면 밖으로 나가 줄일 수 없게 된다.
+    @Test("화면보다 큰 메모는 화면에 맞춰 줄어든다")
+    func sizeFitsTheScreen() {
+        let small = NSRect(x: 0, y: 70, width: 1024, height: 532)
+        #expect(PosteightStore.clamped(DesignTokens.maximumNoteSize, within: small)
+                == NoteSize(width: DesignTokens.maximumNoteSize.width, height: 532))
+        // 화면을 주지 않으면 예전 그대로다.
+        #expect(PosteightStore.clamped(DesignTokens.maximumNoteSize) == DesignTokens.maximumNoteSize)
+    }
+
+    /// 화면이 아무리 작아도 읽을 수 없는 메모를 만들지는 않는다. 최소 크기가 마지막에 이긴다.
+    @Test("최소 크기는 화면보다 우선한다")
+    func minimumWinsOverTheScreen() {
+        let sliver = NSRect(x: 0, y: 0, width: 80, height: 60)
+        #expect(PosteightStore.clamped(DesignTokens.defaultNoteSize, within: sliver)
+                == DesignTokens.minimumNoteSize)
+    }
+
     @Test("Loading a note with an out-of-range size fixes it")
     func clampsOnLoad() {
         let loaded = PosteightStore.compacted([note(size: NoteSize(width: 10, height: 9_999))])

@@ -438,16 +438,13 @@ struct StickyNoteWindowView: View {
         resizeStartFrame = nil
     }
 
+    /// 저장하는 쪽과 같은 식을 쓴다. 끄는 동안의 창 크기와 저장되는 크기가 갈리면 놓는 순간
+    /// 창이 한 번 튄다.
     private func clampedSize(startFrame: NSRect, translation: CGSize) -> NoteSize {
-        NoteSize(
-            width: min(
-                max(startFrame.width + translation.width, DesignTokens.minimumNoteSize.width),
-                DesignTokens.maximumNoteSize.width
-            ),
-            height: min(
-                max(startFrame.height + translation.height, DesignTokens.minimumNoteSize.height),
-                DesignTokens.maximumNoteSize.height
-            )
+        PosteightStore.clamped(
+            NoteSize(width: startFrame.width + translation.width,
+                     height: startFrame.height + translation.height),
+            within: window?.screen?.visibleFrame
         )
     }
 
@@ -609,7 +606,11 @@ private struct NoteWindowConfigurator: NSViewRepresentable {
             window.standardWindowButton(.closeButton)?.isHidden = true
             window.standardWindowButton(.miniaturizeButton)?.isHidden = true
             window.standardWindowButton(.zoomButton)?.isHidden = true
-            window.setContentSize(NSSize(width: note.size.width, height: note.size.height))
+            // 화면에 안 들어가는 크기로 열면 손잡이가 화면 밖이라 줄일 수 없다. 저장값은 건드리지
+            // 않는다 — 큰 화면으로 돌아가면 사용자가 고른 크기가 그대로 살아난다.
+            let fitted = PosteightStore.clamped(
+                note.size, within: NSScreen.holding(note.position)?.visibleFrame)
+            window.setContentSize(NSSize(width: fitted.width, height: fitted.height))
 
             window.placeNote(at: note.position)
             window.moveOnScreenIfNeeded()
@@ -710,6 +711,13 @@ extension NSScreen {
         return NotePoint(x: frame.minX - anchor.minX, y: anchor.maxY - frame.maxY)
     }
 
+    /// 이 자리의 메모가 놓일 화면. 중심이 들어가는 디스플레이가 없으면 주 디스플레이다.
+    static func holding(_ position: NotePoint) -> NSScreen? {
+        guard let anchor = noteAnchor else { return nil }
+        let center = NSPoint(x: anchor.minX + position.x, y: anchor.maxY - position.y)
+        return screens.first { $0.frame.contains(center) } ?? screens.first
+    }
+
     /// 메모가 아직 손에 닿는가. 창 중심이 어느 디스플레이 안에 있으면 닿는다.
     ///
     /// 예전 판정은 "어느 한 화면의 `visibleFrame` 이 창을 통째로 품는가" 였고 두 가지가 걸렸다.
@@ -736,10 +744,12 @@ extension NSWindow {
     /// `notePosition` 의 역. 저장하는 식과 복원하는 식이 갈리지 않게 나란히 둔다.
     func placeNote(at position: NotePoint) {
         guard let anchor = NSScreen.noteAnchor else { return }
+        // 정수로 떨어뜨린다. 자리를 중심으로 저장하므로 폭이 홀수면 원점이 .5 로 남고, 배율이
+        // 1x 인 외장 모니터에서 그 반 픽셀만큼 글자가 번진다.
         setFrameOrigin(
             NSPoint(
-                x: anchor.minX + position.x - frame.width * 0.5,
-                y: anchor.maxY - position.y - frame.height * 0.5
+                x: (anchor.minX + position.x - frame.width * 0.5).rounded(),
+                y: (anchor.maxY - position.y - frame.height * 0.5).rounded()
             )
         )
     }

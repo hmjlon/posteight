@@ -951,10 +951,27 @@ final class PosteightStore: ObservableObject {
         return notes
     }
 
-    nonisolated static func clamped(_ size: NoteSize) -> NoteSize {
-        NoteSize(
-            width: min(max(size.width, DesignTokens.minimumNoteSize.width), DesignTokens.maximumNoteSize.width),
-            height: min(max(size.height, DesignTokens.minimumNoteSize.height), DesignTokens.maximumNoteSize.height)
+    /// 정수로 맞춘다. 크기 조절은 마우스 좌표 차이를 그대로 받고 그 값은 Retina 에서 0.5 단위로
+    /// 들어온다. 폭이 소수로 남으면 창 원점도 소수가 되고(자리는 중심으로 저장한다), 배율이 1x 인
+    /// 외장 모니터에서 글자가 반 픽셀에 걸려 번진다. 불러올 때도 이 식을 지나므로 예전 빌드가
+    /// 적어 둔 소수 크기까지 여기서 정리된다.
+    ///
+    /// `visible` 은 이 메모가 놓일 화면의 `visibleFrame` 이다. 주면 그 안에 들어가게 줄인다.
+    /// 화면보다 큰 메모는 **줄일 수 없는** 메모가 되기 때문이다 — 크기 조절 손잡이가 오른쪽 아래
+    /// 모서리에 있어서, 아래가 화면 밖으로 나가면 손잡이도 같이 나간다. MacBook Air 13" 를 "더
+    /// 크게" 최대(1024×640pt)로 두면 Dock 과 메뉴 막대를 뺀 높이가 545 언저리라, 최대 메모 높이
+    /// 560 이 이미 그보다 크다.
+    ///
+    /// 최소 크기가 마지막에 이긴다. 화면이 그보다 작아도 메모를 읽을 수 없게 만들지는 않는다.
+    nonisolated static func clamped(_ size: NoteSize, within visible: NSRect? = nil) -> NoteSize {
+        func fit(_ value: Double, _ lower: Double, _ upper: Double, _ screen: Double?) -> Double {
+            max(lower, min(value, upper, screen ?? .infinity)).rounded()
+        }
+        return NoteSize(
+            width: fit(size.width, DesignTokens.minimumNoteSize.width,
+                       DesignTokens.maximumNoteSize.width, visible.map { Double($0.width) }),
+            height: fit(size.height, DesignTokens.minimumNoteSize.height,
+                        DesignTokens.maximumNoteSize.height, visible.map { Double($0.height) })
         )
     }
 
