@@ -62,7 +62,6 @@ enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
 /// Xcode build paths — two places to drift. Move to `.lproj` when a third language or a
 /// translator shows up.
 private let englishStrings: [String: String] = [
-    "손글씨": "Handwriting",
     "색상": "Color",
     "글자 크기: %@": "Text size: %@",
     "크게": "Large",

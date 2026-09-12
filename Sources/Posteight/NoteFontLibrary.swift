@@ -25,7 +25,7 @@ struct NoteFontEntry: Identifiable {
     func title(language: AppLanguage) -> String {
         switch id {
         case "system": L("기본체", language: language)
-        case "hana": L("손글씨", language: language)
+        case "hana": L("하나손글씨", language: language)
         default: name
         }
     }
@@ -298,6 +298,55 @@ final class NoteFontLibrary: ObservableObject {
     }
 }
 
+/// Native menu items retain their typeface in both the menu and the selected title.
+struct NoteFontPicker: NSViewRepresentable {
+    let entries: [NoteFontEntry]
+    let language: AppLanguage
+    @Binding var selection: String
+    var fontSize: CGFloat = 13
+
+    func makeCoordinator() -> Coordinator { Coordinator(selection: $selection) }
+
+    func makeNSView(context: Context) -> NSPopUpButton {
+        let button = NSPopUpButton(frame: .zero, pullsDown: false)
+        button.target = context.coordinator
+        button.action = #selector(Coordinator.selectFont(_:))
+        return button
+    }
+
+    func updateNSView(_ button: NSPopUpButton, context: Context) {
+        context.coordinator.selection = $selection
+        button.removeAllItems()
+        for entry in entries {
+            let title = entry.title(language: language)
+            let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+            item.representedObject = entry.id
+            let font = entry.postScriptName.flatMap { NSFont(name: $0, size: fontSize) }
+                ?? NSFont.systemFont(ofSize: fontSize)
+            item.attributedTitle = NSAttributedString(string: title, attributes: [.font: font])
+            button.menu?.addItem(item)
+        }
+        if let index = entries.firstIndex(where: { $0.id == selection }) {
+            button.selectItem(at: index)
+            button.font = entries[index].postScriptName.flatMap { NSFont(name: $0, size: fontSize) }
+                ?? NSFont.systemFont(ofSize: fontSize)
+        }
+        button.setAccessibilityLabel(L("폰트", language: language))
+        button.invalidateIntrinsicContentSize()
+    }
+
+    final class Coordinator: NSObject {
+        var selection: Binding<String>
+
+        init(selection: Binding<String>) { self.selection = selection }
+
+        @MainActor @objc func selectFont(_ sender: NSPopUpButton) {
+            guard let id = sender.selectedItem?.representedObject as? String else { return }
+            selection.wrappedValue = id
+        }
+    }
+}
+
 struct FontSettingsSection: View {
     @ObservedObject private var fonts = NoteFontLibrary.shared
     @ObservedObject private var settings = AppSettings.shared
@@ -305,13 +354,11 @@ struct FontSettingsSection: View {
 
     var body: some View {
         Section(L("폰트")) {
-            Picker(L("기본 메모 폰트"), selection: Binding(
-                get: { fonts.contains(settings.defaultFontID) ? settings.defaultFontID : "system" },
-                set: { settings.defaultFontID = $0 }
-            )) {
-                ForEach(fonts.entries) { entry in
-                    Text(entry.title(language: settings.language)).tag(entry.id)
-                }
+            LabeledContent(L("기본 메모 폰트")) {
+                NoteFontPicker(entries: fonts.entries, language: settings.language, selection: Binding(
+                    get: { fonts.contains(settings.defaultFontID) ? settings.defaultFontID : "system" },
+                    set: { settings.defaultFontID = $0 }
+                ))
             }
             Picker(L("글자 크기"), selection: $settings.defaultFontSize) {
                 ForEach(NoteFontSize.allCases) { size in

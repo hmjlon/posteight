@@ -16,18 +16,10 @@ struct PencilCaseView: View {
             }
 
             toolRow(title: L("폰트")) {
-                Picker(L("폰트"), selection: Binding(
+                NoteFontPicker(entries: fonts.entries, language: settings.language, selection: Binding(
                     get: { fonts.resolvedID(for: note.fontID, defaultID: settings.defaultFontID) },
                     set: { store.updateFont(note.id, fontID: $0) }
-                )) {
-                    ForEach(fonts.entries) { entry in
-                        Text(entry.title(language: settings.language)).tag(entry.id)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.menu)
-                .controlSize(.regular)
-                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                ), fontSize: 13)
                 .fixedSize()
 
                 FontImportButton()
