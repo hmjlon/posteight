@@ -13,17 +13,6 @@ struct PencilCaseView: View {
                 Text(L("필통"))
                     .font(.system(size: 12, weight: .bold, design: .rounded))
                 Spacer(minLength: 4)
-                Toggle(
-                    L("Notion 기록"),
-                    isOn: Binding(
-                        get: { note.includeInNotionLog },
-                        set: { store.updateNotionLog(note.id, include: $0) }
-                    )
-                )
-                .toggleStyle(.switch)
-                .controlSize(.mini)
-                .fixedSize()
-                .font(.system(size: 10, weight: .medium, design: .rounded))
             }
 
             toolRow(title: L("폰트")) {

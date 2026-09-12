@@ -145,7 +145,6 @@ private let englishStrings: [String: String] = [
 
     // PencilCaseView
     "필통": "Pencil Case",
-    "Notion 기록": "Notion log",
     "종이": "Paper",
     "펜": "Pen",
     "직접": "Custom",
