@@ -193,6 +193,21 @@ Posteight 는 자기가 그리는 UI 를 한국어나 영어로 보여 주고, �
 - macOS 가 직접 그리는 메뉴(File, Edit, Window) 는 AppKit 것이다. `Packaging/Info.plist` 의
   `CFBundleLocalizations`(`en`, `ko`) 를 기준으로 시스템 언어를 따른다. AppKit 이 실행 시점에 한 번
   정하기 때문에 앱 안의 설정을 따를 수 없다.
+- **번들로 띄운 앱이 한국어 맥에서 영어로 나오면, 코드를 뒤지기 전에 앱별 언어 설정을 본다.**
+  `AppLanguage.resolved` 는 `Locale.preferredLanguages` 를 읽는데, 그 값은 시스템 언어가 아니라
+  **이 앱에 대한** 언어다. 앱 도메인에 `AppleLanguages` 가 있으면 그것이 이긴다 — 샌드박스에서는
+  `~/Library/Containers/<번들id>/Data/Library/Preferences/<번들id>.plist` 다. 시스템 설정 →
+  일반 → 언어 및 지역 → 응용 프로그램 이 쓰는 그 키이고, **Posteight 는 이 키를 쓰지 않는다**
+  (앱이 쓰는 키는 전부 `posteight.` 로 시작한다). 그래서 이 상태는 앱의 결함이 아니라 기계의
+  설정이며, 앱이 영어로 그리는 것이 맞는 동작이다.
+
+  ```bash
+  plutil -p ~/Library/Containers/com.younjiyoung.posteight/Data/Library/Preferences/com.younjiyoung.posteight.plist | grep -i applelanguages
+  ```
+
+  헷갈리는 이유는 AppKit 이 그리는 메뉴(`닫기`, `모두 닫기`)는 그대로 한국어로 남아서, 한 화면에
+  두 언어가 섞여 보이기 때문이다. 그 둘은 서로 다른 경로로 언어를 정한다. 새로 만들어진 컨테이너는
+  `ko-KR` 로 정상 해석된다 — 확인해 봤다.
 
 #### 로컬에서 초록불이 났다고 통과가 아니다
 
@@ -214,11 +229,30 @@ POSTEIGHT_SYSTEM_LANGUAGE=en swift test
 - 커밋 전마다 `swift test` 를 돌린다.
 - 텍스트 편집, 체크리스트 완료, 노트 이동, 크기 조절, 휴지통, 저장을 건드렸다면 그 영역을 테스트한다.
 - 여러 디스플레이·Space·절전 복귀에서의 창 배치는 테스트로 덮이지 않는다. 릴리스 전에 손으로 확인한다.
+- 메모 창은 하나마다 전역 이벤트 모니터를 두 개 단다(`Coordinator` 의 드래그·키보드 모니터).
+  창 N 개면 클릭과 키 입력 한 번에 N 쌍이 돌고, 각자 `event.window === self.window` 만 보고
+  빠진다. 지금 규모에서는 재지 않아도 되는 비용이다. 메모가 수십 개인 사용자가 입력이 늦다고
+  하면, 그때 앱 수준 모니터 하나로 모으고 창은 id 로 찾는다 — 그 전에 옮기면 IME·실행 취소
+  라우팅만 건드리고 얻는 것이 없다.
 - 테스트가 만든 스토어에는 **샘플 메모 두 개가 이미 들어 있다**. 빈 디렉터리에서는 `loadNotes`
   가 `sampleNotes` 로 떨어지고 `addNote` 는 그 뒤에 붙는다. 그래서 `store.notes.first` 는 방금
   만든 메모가 아니다. 항상 `store.notes.first { $0.id == noteID }` 로 집는다.
 
 ## 릴리스
+
+### 머지 전에 확인할 것
+
+- [ ] **`Packaging/Posteight.entitlements` 의 임시 예외를 지웠는가.**
+      `com.apple.security.temporary-exception.files.home-relative-path.read-only` 는 샌드박스
+      이전에 만들어진 설치의 노트를 컨테이너로 한 번 복사해 오기 위한 것이다. 그 이전은
+      **샌드박스가 처음 나가는 릴리스 한 번**에 끝난다. 그 다음 릴리스부터는 지운다. 남겨 두면
+      앱이 사용자 홈의 `Library/Application Support/Posteight/` 를 계속 읽을 수 있고, 샌드박스가
+      막으라고 있는 자리에 구멍이 하나 열린 채로 배포된다. App Store 심사도 임시 예외를 받지
+      않는다. 지울 때 `PosteightStore.migrateStore` 와 `legacyStoreDirectory` 도 같이 걷는다
+      — 읽을 수 없는 경로를 읽으려 드는 코드만 남는다.
+
+      샌드박스는 a6b8f71 에서 들어왔고 아직 `release` 에 없다. 즉 **다음 릴리스가 그 한 번**이고,
+      지우는 것은 그 다음 릴리스다.
 
 릴리스는 손이 아니라 CI 가 만든다. `dev` 를 `release` 로 머지하면
 [`release.yml`](.github/workflows/release.yml) 이 돌면서 직전 릴리스에서 마이너를 하나 올린
