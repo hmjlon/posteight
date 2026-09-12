@@ -280,7 +280,12 @@ struct MenuBarProgressCard: View {
         let renderer = ImageRenderer(
             content: CardGlyph(fill: fill, hasTasks: hasTasks, isCleared: isCleared)
         )
-        renderer.scale = NSScreen.main?.backingScaleFactor ?? 2
+        // 붙어 있는 화면 중 가장 촘촘한 배율로 그린다. `NSScreen.main` 은 주 디스플레이가 아니라
+        // 포커스를 가진 창이 있는 화면이라(c416341 이 메모 위치에서 걷어낸 그 함정이다) 1x 외장
+        // 모니터를 쓰는 동안 아이콘이 1x 로 그려져 Retina 메뉴 막대에서 흐려졌다. 게다가 "디스플레이
+        // 별도 Space" 를 켜면 메뉴 막대는 화면마다 있어서, 어느 한 화면을 고르는 것 자체가 답이
+        // 아니다. 촘촘하게 그려 두면 덜 촘촘한 막대에서는 macOS 가 줄여 그린다.
+        renderer.scale = NSScreen.screens.map(\.backingScaleFactor).max() ?? 2
 
         guard let image = renderer.nsImage else {
             return NSImage(size: CardGlyph.size(isCleared: isCleared))
