@@ -107,11 +107,18 @@ final class NoteWindowCoordinator {
 
     /// 숨긴 창도 함께 적는다. 지금 보이지 않을 뿐 다음에 `present` 가 부를 때 같은 판정을 거치고,
     /// 저장값만 옛 모니터에 남겨 두면 그때 가서 똑같이 어긋난다.
+    ///
+    /// 자리가 그대로면 적지 않는다. 이 알림은 모니터를 꽂고 빼는 순간에만 오는 것이 아니라 Dock
+    /// 크기를 끄는 동안에도 연달아 온다. 그때마다 `notes` 를 건드리면 값은 그대로인 채로 저장이
+    /// 예약되고, `@Published` 가 발행돼 열려 있는 메모 창과 메뉴 막대가 전부 다시 그려진다.
     private func resaveWindowPositions(into store: PosteightStore) {
         for (noteID, weakWindow) in windows {
             guard let window = weakWindow.value else { continue }
             window.moveOnScreenIfNeeded()
-            guard let position = window.notePosition else { continue }
+            guard let position = window.notePosition,
+                  let current = store.notes.first(where: { $0.id == noteID })?.position,
+                  current != position
+            else { continue }
             store.updateNotePosition(noteID, position: position)
         }
     }

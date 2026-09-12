@@ -959,8 +959,8 @@ final class PosteightStore: ObservableObject {
     /// `visible` 은 이 메모가 놓일 화면의 `visibleFrame` 이다. 주면 그 안에 들어가게 줄인다.
     /// 화면보다 큰 메모는 **줄일 수 없는** 메모가 되기 때문이다 — 크기 조절 손잡이가 오른쪽 아래
     /// 모서리에 있어서, 아래가 화면 밖으로 나가면 손잡이도 같이 나간다. MacBook Air 13" 를 "더
-    /// 크게" 최대(1024×640pt)로 두면 Dock 과 메뉴 막대를 뺀 높이가 545 언저리라, 최대 메모 높이
-    /// 560 이 이미 그보다 크다.
+    /// 크게" 최대로 두면 화면이 1024×640pt 고, 메뉴 막대와 Dock 을 빼면 최대 메모 높이 560 이
+    /// 들어가지 않는다.
     ///
     /// 최소 크기가 마지막에 이긴다. 화면이 그보다 작아도 메모를 읽을 수 없게 만들지는 않는다.
     nonisolated static func clamped(_ size: NoteSize, within visible: NSRect? = nil) -> NoteSize {

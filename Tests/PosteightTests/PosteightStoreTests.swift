@@ -198,9 +198,9 @@ struct ClampTests {
         #expect(dragged.height.truncatingRemainder(dividingBy: 1) == 0)
     }
 
-    /// MacBook Air 13" 를 "더 크게" 최대(1024×640pt)로 두면 Dock 과 메뉴 막대를 뺀 높이가 532 다.
-    /// 최대 메모 높이 560 이 그보다 크고, 화면보다 큰 메모는 크기 조절 손잡이가 오른쪽 아래
-    /// 모서리라 화면 밖으로 나가 줄일 수 없게 된다.
+    /// MacBook Air 13" 를 "더 크게" 최대로 두면 화면이 1024×640pt 다. 메뉴 막대와 Dock 을 빼면
+    /// 최대 메모 높이 560 이 들어가지 않고, 화면보다 큰 메모는 크기 조절 손잡이가 오른쪽 아래
+    /// 모서리라 화면 밖으로 나가 줄일 수 없게 된다. 아래 532 는 그 상황을 본뜬 값이다.
     @Test("화면보다 큰 메모는 화면에 맞춰 줄어든다")
     func sizeFitsTheScreen() {
         let small = NSRect(x: 0, y: 70, width: 1024, height: 532)
@@ -496,5 +496,49 @@ struct NoteSpawnOriginTests {
         // 한다. 남은 메모는 샘플 두 개뿐이라 계단 오프셋도 2번째 칸이다.
         let standing = try #require(store.notes.last)
         #expect(standing.position == NotePoint(x: external.x + 270 + 68, y: external.y + 240 + 68))
+    }
+}
+
+/// 저장과 복원이 서로의 역인지 본다. 화면 구성이 바뀔 때 옮겨진 자리를 다시 적는 경로가 이 왕복
+/// 위에 서 있다 — 여기가 어긋나면 모니터를 꽂고 뺄 때마다 메모가 조금씩 밀린다. 실제 `NSWindow`
+/// 를 쓰지만 화면에 올리지는 않는다.
+@Suite("Note position round trip")
+@MainActor
+struct NotePositionRoundTripTests {
+    private func window(x: Double, y: Double, width: Double, height: Double) -> NSWindow {
+        _ = NSApplication.shared
+        let window = NSWindow(contentRect: NSRect(x: x, y: y, width: width, height: height),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        // 기본값 `true` 는 `close()` 가 창을 한 번 더 해제하게 만든다. ARC 가 이미 들고 있어서
+        // 그대로 두면 테스트가 SIGSEGV 로 죽는다.
+        window.isReleasedWhenClosed = false
+        return window
+    }
+
+    @Test func savingAndPlacingAreInverses() throws {
+        try #require(NSScreen.noteAnchor != nil)
+        let window = window(x: 240, y: 180, width: 310, height: 292)
+        defer { window.close() }
+        let origin = window.frame.origin
+        let saved = try #require(window.notePosition)
+
+        // 러너 화면이 작아도 메뉴 막대에 닿지 않게 조금만 옮긴다.
+        window.setFrameOrigin(NSPoint(x: origin.x + 120, y: origin.y + 60))
+        #expect(window.notePosition != saved)
+
+        window.placeNote(at: saved)
+        #expect(window.notePosition == saved)
+        #expect(window.frame.origin == origin)
+    }
+
+    /// 폭이 홀수면 중심은 .5 로 남는다. 저장값이 소수인 것은 맞지만 창 원점까지 소수로 내려가면
+    /// 1x 외장 모니터에서 글자가 번진다.
+    @Test func placingLandsOnWholePoints() throws {
+        try #require(NSScreen.noteAnchor != nil)
+        let window = window(x: 100, y: 100, width: 311, height: 293)
+        defer { window.close() }
+        window.placeNote(at: NotePoint(x: 700.5, y: 400.25))
+        #expect(window.frame.origin.x.truncatingRemainder(dividingBy: 1) == 0)
+        #expect(window.frame.origin.y.truncatingRemainder(dividingBy: 1) == 0)
     }
 }

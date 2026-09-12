@@ -700,14 +700,18 @@ extension NSScreen {
     /// 새 메모가 뜰 화면의 좌상단을 메모 좌표로 돌려준다. 주 디스플레이면 (0, 0) 이라 기존
     /// 동작 그대로다.
     ///
-    /// 마우스가 있는 화면을 고른다. `NSScreen.main` 은 여기서도 쓸 수 없다 — 포커스를 가진 창이
-    /// 있는 화면인데, 메뉴 막대에서 새 메모를 누르는 순간 포커스는 이 앱에 없다. 마우스는
-    /// 사용자가 지금 보고 있는 화면에 있다.
+    /// 쓰고 있던 메모 창이 있으면 그 화면, 없으면 마우스가 있는 화면이다. 키보드로 ⌘N 을 누르면
+    /// 쓰던 메모 옆에 뜨고, 메뉴 막대에서 누르면 그 막대가 있는 화면에 뜬다.
+    ///
+    /// `NSScreen.main` 은 여기서도 쓸 수 없다. 이 앱의 창이 아니라 **아무 앱이든** 포커스를 가진
+    /// 창이 있는 화면이라, 이 앱이 활성이 아닌 순간에 읽으면 남의 창을 따라간다.
+    /// `NSApp.keyWindow` 는 이 앱의 창만 본다 — 그 대신 `NSApp` 을 읽느라 이 하나만 MainActor 다.
+    @MainActor
     static var noteSpawnOrigin: NotePoint {
-        let pointer = NSEvent.mouseLocation
-        guard let anchor = noteAnchor,
-              let frame = (screens.first { $0.frame.contains(pointer) } ?? screens.first)?.frame
-        else { return NotePoint(x: 0, y: 0) }
+        let target = NSApp.keyWindow?.screen
+            ?? screens.first { $0.frame.contains(NSEvent.mouseLocation) }
+            ?? screens.first
+        guard let anchor = noteAnchor, let frame = target?.frame else { return NotePoint(x: 0, y: 0) }
         return NotePoint(x: frame.minX - anchor.minX, y: anchor.maxY - frame.maxY)
     }
 
@@ -762,7 +766,6 @@ extension NSWindow {
 
         // 구해 내는 자리는 `visibleFrame` 이다. 판정과 기준이 다른 것은 일부러다 — 사용자가 둔
         // 자리는 Dock 아래라도 그대로 두지만, 앱이 대신 옮길 때는 가리는 것 없는 자리로 옮긴다.
-
         // Clamp into whichever screen already shows most of the card, so a card living on a
         // second display does not jump to the main one.
         let shownArea: (NSScreen) -> CGFloat = { screen in
