@@ -12,7 +12,7 @@ struct PlainTextUndoTests {
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = PosteightStore(directory: directory)
         let noteID = store.addNote()
-        let tab = try #require(store.notes.first?.selectedTab)
+        let tab = try #require(store.notes.first { $0.id == noteID }?.selectedTab)
         let firstID = try #require(tab.items.first?.id)
         store.updateItemTitle(noteID: noteID, tabID: tab.id, itemID: firstID, title: "윗줄🙂")
         let secondID = try #require(store.addItem(to: noteID, tabID: tab.id))

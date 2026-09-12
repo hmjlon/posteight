@@ -25,8 +25,9 @@ struct EditingHistoryTests {
             store.clearEditingHistory()
             let before = store.notes
             #expect(store.deleteEmptyItemBackward(noteID: note, tabID: tab, itemID: second) == first)
-            #expect(store.notes.first?.selectedTab?.items.map(\.id) == [first, third])
-            #expect(store.notes.first?.selectedTab?.items.first == before.first?.selectedTab?.items.first)
+            #expect(store.notes.first { $0.id == note }?.selectedTab?.items.map(\.id) == [first, third])
+            #expect(store.notes.first { $0.id == note }?.selectedTab?.items.first
+                == before.first { $0.id == note }?.selectedTab?.items.first)
             #expect(store.undo())
             #expect(store.notes == before)
             #expect(store.redo())
@@ -47,7 +48,7 @@ struct EditingHistoryTests {
             store.updateItemDetail(noteID: note, tabID: tab, itemID: item, detail: "")
             store.setReminder(noteID: note, tabID: tab, itemID: item, date: Date())
             #expect(store.deleteEmptyItemBackward(noteID: note, tabID: tab, itemID: item) == nil)
-            #expect(store.notes.first?.selectedTab?.items.count == 2)
+            #expect(store.notes.first { $0.id == note }?.selectedTab?.items.count == 2)
         }
     }
 

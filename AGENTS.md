@@ -214,6 +214,9 @@ POSTEIGHT_SYSTEM_LANGUAGE=en swift test
 - 커밋 전마다 `swift test` 를 돌린다.
 - 텍스트 편집, 체크리스트 완료, 노트 이동, 크기 조절, 휴지통, 저장을 건드렸다면 그 영역을 테스트한다.
 - 여러 디스플레이·Space·절전 복귀에서의 창 배치는 테스트로 덮이지 않는다. 릴리스 전에 손으로 확인한다.
+- 테스트가 만든 스토어에는 **샘플 메모 두 개가 이미 들어 있다**. 빈 디렉터리에서는 `loadNotes`
+  가 `sampleNotes` 로 떨어지고 `addNote` 는 그 뒤에 붙는다. 그래서 `store.notes.first` 는 방금
+  만든 메모가 아니다. 항상 `store.notes.first { $0.id == noteID }` 로 집는다.
 
 ## 릴리스
 
