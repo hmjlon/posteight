@@ -79,7 +79,7 @@ private let englishStrings: [String: String] = [
     "TTF·OTF 파일을 보관합니다. 삭제하면 해당 메모는 기본 폰트로 돌아갑니다.": "TTF and OTF files are stored in the app. Removing a font returns its notes to the default font.",
     "폰트를 삭제하지 못했어요. 다시 시도해 주세요.": "Could not remove the font. Please try again.",
     "이미 추가된 폰트입니다.": "This font has already been added.",
-    "폰트를 추가하지 못했어요. 올바른 TTF·OTF 파일인지 확인해 주세요.": "Could not add the font. Please choose a valid TTF or OTF file.",
+    "폰트를 추가하지 못했어요. 올바른 TTF·OTF·TTC 파일인지 확인해 주세요.": "Could not add the font. Please choose a valid TTF, OTF or TTC file.",
 
     "알림을 받으려면 한 번만 허용해 주세요. 아래 버튼에서 Posteight 알림을 켤 수 있어요.": "Allow notifications once to receive reminders. Use the button below to turn on Posteight notifications.",
     "알림은 설치된 Posteight 앱에서 사용할 수 있어요.": "Reminders are available in the installed Posteight app.",

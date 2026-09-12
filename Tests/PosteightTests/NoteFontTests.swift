@@ -333,3 +333,56 @@ struct NoteFontTests {
         #expect(try mode(#require(entry.fileURL)) == 0o600)
     }
 }
+
+@Suite("Font collections")
+@MainActor
+struct FontCollectionTests {
+    private func scratch() throws -> URL {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }
+
+    /// 확장자 관문만 정확히 겨냥한다. CoreText 는 내용으로 판별하므로, 번들 폰트를 `.ttc` 라는
+    /// 이름으로 두면 "예전에는 확장자에서 막히던 파일이 이제 들어온다" 만 본다.
+    @Test func collectionExtensionIsAccepted() throws {
+        let directory = try scratch()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let source = directory.appendingPathComponent("source.ttc")
+        try FileManager.default.copyItem(at: #require(NoteFontLibrary.bundledFontURL), to: source)
+        let fonts = NoteFontLibrary(directory: directory.appendingPathComponent("Fonts"), bundledURL: nil)
+        try fonts.add(source)
+        #expect(fonts.entries.contains { $0.fileURL?.pathExtension == "ttc" })
+    }
+
+    /// 예전 빌드는 `ttf` 와 `otf` 만 받았다. 매니페스트 없이 폴더를 훑는 경로까지 넓히면 파서에
+    /// 넘어갈 수 있는 파일 종류만 늘어난다. 두 목록이 갈려 있다는 것 자체가 이 테스트의 대상이다.
+    @Test func theLegacySweepStaysNarrow() {
+        #expect(NoteFontLibrary.fontExtensions == ["ttf", "otf"])
+        #expect(NoteFontLibrary.importableExtensions.contains("ttc"))
+        #expect(!NoteFontLibrary.fontExtensions.contains("ttc"))
+    }
+
+    /// 진짜 폰트 모음을 넣어 본다. 기계에 `.ttc` 가 없으면 확인할 것이 없으므로 그냥 끝낸다.
+    /// 시스템 폰트는 이미 등록돼 있어서 `CTFontManagerRegisterFontsForURL` 이 false 를 돌려주는데,
+    /// `add` 가 `NSFont(name:size:)` 로 한 번 더 보는 경로가 그 경우를 받아 준다.
+    @Test func aRealCollectionImports() throws {
+        let system = URL(fileURLWithPath: "/System/Library/Fonts")
+        let found = ((try? FileManager.default.contentsOfDirectory(at: system, includingPropertiesForKeys: [.fileSizeKey])) ?? [])
+            .filter { $0.pathExtension == "ttc" }
+            .first { ((try? $0.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? .max) < 8 * 1024 * 1024 }
+        guard let collection = found else { return }
+        let directory = try scratch()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let source = directory.appendingPathComponent(collection.lastPathComponent)
+        try FileManager.default.copyItem(at: collection, to: source)
+        let fontsDirectory = directory.appendingPathComponent("Fonts")
+        let fonts = NoteFontLibrary(directory: fontsDirectory, bundledURL: nil)
+        try fonts.add(source)
+        let entry = try #require(fonts.entries.first { $0.fileURL != nil })
+        #expect(entry.postScriptName?.isEmpty == false)
+        // 매니페스트로 다시 읽어도 같은 서체가 돌아온다 — 확장자를 보지 않고 다이제스트를 본다.
+        let reloaded = NoteFontLibrary(directory: fontsDirectory, bundledURL: nil)
+        #expect(reloaded.entries.contains { $0.postScriptName == entry.postScriptName })
+    }
+}

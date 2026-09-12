@@ -63,7 +63,13 @@ final class NoteFontLibrary: ObservableObject {
 
     /// Ids the built-in entries own. An imported font can never claim one.
     static let reservedIDs: Set<String> = ["system", "hana"]
+    /// 예전 빌드가 남긴 파일을 한 번 주워 담을 때 인정하는 확장자. **여기는 넓히지 않는다.**
+    /// 그 빌드는 `ttf` 와 `otf` 만 받았으므로 폴더에 남아 있을 수 있는 것도 그 둘뿐이고, 넓히면
+    /// 매니페스트 없이 CoreText 파서에 넘어갈 수 있는 파일 종류만 늘어난다.
     static let fontExtensions = ["ttf", "otf"]
+    /// 사용자가 직접 고를 수 있는 확장자. 한 파일에 여러 서체가 든 모음(`ttc`)도 받는다.
+    /// 한글 무료 폰트 상당수가 이 형식으로 배포된다.
+    static let importableExtensions = fontExtensions + ["ttc"]
     /// The bundled font is 6.3MB. Anything approaching this is not something a user picked.
     static let maximumFontBytes = 64 * 1024 * 1024
     private var manifestURL: URL { directory.appendingPathComponent("manifest.json") }
@@ -225,6 +231,10 @@ final class NoteFontLibrary: ObservableObject {
         entries.first { $0.id == resolvedID(for: id, defaultID: defaultID) }?.postScriptName
     }
 
+    /// 한 파일에 여러 서체가 든 모음(`ttc`)은 **첫 번째 서체만** 이름을 얻는다. 등록은
+    /// `CTFontManagerRegisterFontsForURL` 이 파일 단위로 하므로 나머지 서체도 프로세스에는
+    /// 올라가지만, 고를 수 있는 것은 하나다. 모음 안에서 서체를 고르게 하려면 매니페스트가
+    /// 파일이 아니라 서체를 가리켜야 한다 — 그때 손댄다.
     private static func descriptor(at url: URL) -> (name: String, postScriptName: String)? {
         guard let descriptors = CTFontManagerCreateFontDescriptorsFromURL(url as CFURL) as? [CTFontDescriptor],
               let descriptor = descriptors.first else { return nil }
@@ -235,7 +245,7 @@ final class NoteFontLibrary: ObservableObject {
     enum ImportError: Error { case invalidFont, duplicate, registration, unreadableManifest }
 
     func add(_ source: URL) throws {
-        guard Self.fontExtensions.contains(source.pathExtension.lowercased()) else {
+        guard Self.importableExtensions.contains(source.pathExtension.lowercased()) else {
             throw ImportError.invalidFont
         }
         let size = (try? source.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? .max
@@ -416,16 +426,23 @@ struct FontImportButton: View {
 
     private func importFont() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [UTType(filenameExtension: "ttf"), UTType(filenameExtension: "otf")].compactMap { $0 }
+        // 받아들이는 곳과 고르게 하는 곳이 갈리면, 고를 수 있는데 거절당하거나 그 반대가 된다.
+        panel.allowedContentTypes = NoteFontLibrary.importableExtensions
+            .compactMap { UTType(filenameExtension: $0) }
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
+        // `LSUIElement` 앱은 활성 상태가 아닐 수 있고, `begin` 은 모달이 아니라 그냥 창을 띄운다.
+        // 활성화하지 않으면 패널이 앞에 있던 앱 뒤에 열려서, 누른 사람 눈에는 아무 일도 일어나지
+        // 않은 것처럼 보인다. 설정 창을 여는 경로가 이미 활성화하긴 하지만 그건 다른 동작의
+        // 부수 효과라, 그 경로가 바뀌면 여기가 조용히 깨진다.
+        NSApp.activate(ignoringOtherApps: true)
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
             let access = url.startAccessingSecurityScopedResource()
             defer { if access { url.stopAccessingSecurityScopedResource() } }
             do { try fonts.add(url) }
             catch NoteFontLibrary.ImportError.duplicate { errorMessage = L("이미 추가된 폰트입니다.") }
-            catch { errorMessage = L("폰트를 추가하지 못했어요. 올바른 TTF·OTF 파일인지 확인해 주세요.") }
+            catch { errorMessage = L("폰트를 추가하지 못했어요. 올바른 TTF·OTF·TTC 파일인지 확인해 주세요.") }
         }
     }
 }
