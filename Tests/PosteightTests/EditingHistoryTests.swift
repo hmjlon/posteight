@@ -15,6 +15,42 @@ struct EditingHistoryTests {
         try body(store, id, tab.id, try #require(tab.items.first?.id))
     }
 
+    @Test func emptyBackspacePreservesContentAndSupportsUndo() throws {
+        try withStore { store, note, tab, first in
+            #expect(store.deleteEmptyItemBackward(noteID: note, tabID: tab, itemID: first) == nil)
+            store.updateItemTitle(noteID: note, tabID: tab, itemID: first, title: "윗줄🙂")
+            store.toggleItem(noteID: note, tabID: tab, itemID: first)
+            let second = try #require(store.addItem(to: note, tabID: tab))
+            let third = try #require(store.addItem(to: note, tabID: tab))
+            store.clearEditingHistory()
+            let before = store.notes
+            #expect(store.deleteEmptyItemBackward(noteID: note, tabID: tab, itemID: second) == first)
+            #expect(store.notes.first?.selectedTab?.items.map(\.id) == [first, third])
+            #expect(store.notes.first?.selectedTab?.items.first == before.first?.selectedTab?.items.first)
+            #expect(store.undo())
+            #expect(store.notes == before)
+            #expect(store.redo())
+            #expect(store.deleteEmptyItemBackward(noteID: note, tabID: tab, itemID: third) == first)
+        }
+    }
+
+    @Test func emptyBackspaceProtectsTextDetailsAndReminders() throws {
+        try withStore { store, note, tab, _ in
+            let item = try #require(store.addItem(to: note, tabID: tab))
+            for title in ["내용", " ", "\n"] {
+                store.updateItemTitle(noteID: note, tabID: tab, itemID: item, title: title)
+                #expect(store.deleteEmptyItemBackward(noteID: note, tabID: tab, itemID: item) == nil)
+            }
+            store.updateItemTitle(noteID: note, tabID: tab, itemID: item, title: "")
+            store.updateItemDetail(noteID: note, tabID: tab, itemID: item, detail: "내용\n두 번째 줄")
+            #expect(store.deleteEmptyItemBackward(noteID: note, tabID: tab, itemID: item) == nil)
+            store.updateItemDetail(noteID: note, tabID: tab, itemID: item, detail: "")
+            store.setReminder(noteID: note, tabID: tab, itemID: item, date: Date())
+            #expect(store.deleteEmptyItemBackward(noteID: note, tabID: tab, itemID: item) == nil)
+            #expect(store.notes.first?.selectedTab?.items.count == 2)
+        }
+    }
+
     @Test func undoCrossesRowsInReverseOrder() throws {
         try withStore { store, note, tab, first in
             store.updateItemTitle(noteID: note, tabID: tab, itemID: first, title: "1")

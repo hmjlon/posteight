@@ -662,6 +662,19 @@ final class PosteightStore: ObservableObject {
         }
     }
 
+    /// Only a completely empty row can be removed by backspace. Preserve the first input
+    /// and any hidden content; use the current store order rather than a rendered snapshot.
+    func deleteEmptyItemBackward(noteID: UUID, tabID: UUID, itemID: UUID) -> UUID? {
+        guard let tab = tab(noteID: noteID, tabID: tabID),
+              let index = tab.items.firstIndex(where: { $0.id == itemID }), index > 0 else { return nil }
+        let item = tab.items[index]
+        guard item.title.isEmpty, (item.detail ?? "").isEmpty, item.reminderAt == nil else { return nil }
+        let previousID = tab.items[index - 1].id
+        endTextUndoGroup()
+        deleteItem(noteID: noteID, tabID: tabID, itemID: itemID)
+        return previousID
+    }
+
     func deleteItem(noteID: UUID, tabID: UUID, itemID: UUID) {
         let historyBefore = editingSnapshot
         defer { recordEdit(from: historyBefore, noteID: noteID, tabID: tabID) }

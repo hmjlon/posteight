@@ -12,10 +12,12 @@ struct PlainEditableTextField: NSViewRepresentable {
     /// SwiftUI's `.focused()` does not reach an `NSTextField`, so focus is requested here and
     /// handed to AppKit directly.
     var isFocused = false
+    var placesCaretAtEndOnFocus = false
     var onEditingChanged: ((Bool) -> Void)?
     var onSubmit: (() -> Void)?
     var onMoveUp: (() -> Void)?
     var onMoveDown: (() -> Void)?
+    var onDeleteEmpty: (() -> Bool)?
 
     func makeNSView(context: Context) -> NSTextField {
         let textField = FocusableTextField()
@@ -66,8 +68,14 @@ struct PlainEditableTextField: NSViewRepresentable {
             DispatchQueue.main.async {
                 // A row can be built before it joins a window; leaving the flag clear retries then.
                 guard let window = textField.window else { return }
+                guard context.coordinator.parent.isFocused,
+                      !context.coordinator.didRequestFocus else { return }
                 context.coordinator.didRequestFocus = true
-                window.makeFirstResponder(textField)
+                if textField.currentEditor() == nil, window.makeFirstResponder(textField),
+                   context.coordinator.parent.placesCaretAtEndOnFocus,
+                   let editor = textField.currentEditor() as? NSTextView {
+                    editor.setSelectedRange(NSRange(location: (editor.string as NSString).length, length: 0))
+                }
             }
         } else if !isFocused {
             context.coordinator.didRequestFocus = false
@@ -91,6 +99,12 @@ struct PlainEditableTextField: NSViewRepresentable {
         /// Up and down move between checklist rows instead of walking the caret inside one line.
         func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
             switch commandSelector {
+            case #selector(NSResponder.deleteBackward(_:)):
+                // Let AppKit handle text, selections, line breaks and Korean composition.
+                guard !textView.hasMarkedText(), textView.string.isEmpty,
+                      textView.selectedRange() == NSRange(location: 0, length: 0),
+                      let onDeleteEmpty = parent.onDeleteEmpty else { return false }
+                return onDeleteEmpty()
             case #selector(NSResponder.moveUp(_:)):
                 guard let onMoveUp = parent.onMoveUp else { return false }
                 onMoveUp()
@@ -106,6 +120,7 @@ struct PlainEditableTextField: NSViewRepresentable {
 
         func controlTextDidBeginEditing(_ notification: Notification) {
             isEditing = true
+            didRequestFocus = true
             parent.onEditingChanged?(true)
         }
 

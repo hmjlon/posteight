@@ -69,12 +69,23 @@ struct TodoItemRow: View {
                     fontName: fontName,
                     textOpacity: item.isDone ? 0.38 : 0.76,
                     isFocused: focusedItemID == item.id,
-                    onEditingChanged: { isEditingText = $0 },
+                    placesCaretAtEndOnFocus: true,
+                    onEditingChanged: {
+                        isEditingText = $0
+                        if $0 { focusedItemID = item.id }
+                    },
                     onSubmit: {
                         focusedItemID = store.addItem(to: note.id, tabID: tab.id)
                     },
                     onMoveUp: { moveFocus(by: -1) },
-                    onMoveDown: { moveFocus(by: 1) }
+                    onMoveDown: { moveFocus(by: 1) },
+                    onDeleteEmpty: {
+                        guard let previousID = store.deleteEmptyItemBackward(
+                            noteID: note.id, tabID: tab.id, itemID: item.id
+                        ) else { return false }
+                        focusedItemID = previousID
+                        return true
+                    }
                 )
                 .frame(height: 26 + max(0, fontSizeAdjustment))
 
