@@ -305,15 +305,23 @@ final class PosteightStore: ObservableObject {
         totalCount - doneCount
     }
 
-    @discardableResult
-    func addNote(language: AppLanguage = .korean) -> UUID {
+    /// 새 메모를 어디에 놓을지. `origin` 은 띄울 화면의 좌상단이고 주 디스플레이면 (0, 0) 이라
+    /// 기존 동작 그대로다. 화면을 읽는 일은 부르는 쪽이 한다 — 스토어는 화면을 모르고, 테스트도
+    /// 화면 없이 이 값을 만든다. 메모를 새로 세우는 자리가 둘(새 메모, 탭 복원)이라 식은 하나다.
+    private func nextNotePosition(origin: NotePoint) -> NotePoint {
         let offset = Double(notes.count % 4) * 34
+        return NotePoint(x: origin.x + 270 + offset, y: origin.y + 240 + offset)
+    }
+
+    @discardableResult
+    func addNote(language: AppLanguage = .korean, origin: NotePoint = NotePoint(x: 0, y: 0)) -> UUID {
+        let position = nextNotePosition(origin: origin)
         let note = StickyNote(
             stickerSymbol: "tag",
             paperHex: DesignTokens.paperColors[0].hex,
             penHex: DesignTokens.penColors[0].hex,
             includeInNotionLog: false,
-            position: NotePoint(x: 270 + offset, y: 240 + offset),
+            position: position,
             tabs: [
                 MemoTab(
                     name: Lf("메모 %ld", language: language, 1),
@@ -480,7 +488,7 @@ final class PosteightStore: ObservableObject {
 
     /// Restores into the note it was closed from when that note still exists, or stands up a
     /// fresh note around it when that note is itself gone — a restore should never just vanish.
-    func restoreTab(_ trashedTabID: UUID) {
+    func restoreTab(_ trashedTabID: UUID, origin: NotePoint = NotePoint(x: 0, y: 0)) {
         let historyBefore = editingSnapshot
         defer { recordEdit(from: historyBefore) }
         guard let index = trashedTabs.firstIndex(where: { $0.id == trashedTabID }) else { return }
@@ -494,14 +502,13 @@ final class PosteightStore: ObservableObject {
             notes[noteIndex].tabs.append(restoredTab)
             notes[noteIndex].selectedTabID = restoredTab.id
         } else {
-            let offset = Double(notes.count % 4) * 34
             notes.append(
                 StickyNote(
                     stickerSymbol: trashed.stickerSymbol,
                     paperHex: trashed.paperHex,
                     penHex: trashed.penHex,
                     includeInNotionLog: trashed.includeInNotionLog ?? false,
-                    position: NotePoint(x: 270 + offset, y: 240 + offset),
+                    position: nextNotePosition(origin: origin),
                     tabs: [trashed.tab]
                 )
             )

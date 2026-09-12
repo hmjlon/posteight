@@ -420,3 +420,51 @@ struct NoteReachabilityTests {
         #expect(!NSScreen.showsNote(card(x: 0, y: 0), on: []))
     }
 }
+
+/// 새 메모가 뜰 화면의 좌상단을 어디서 받든 자리 계산은 같아야 한다. 화면을 읽는 쪽은
+/// `NSScreen.noteSpawnOrigin` 이고 손으로 확인하지만, 그 값을 쓰는 식은 여기서 못 박는다.
+@Suite("Note spawn origin")
+@MainActor
+struct NoteSpawnOriginTests {
+    private func store() -> PosteightStore {
+        PosteightStore(directory: FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString))
+    }
+
+    @Test("기본값은 주 디스플레이 좌상단이라 기존 자리 그대로다")
+    func defaultOriginKeepsPrimaryPlacement() throws {
+        let store = store()
+        let id = store.addNote()
+        let placed = try #require(store.notes.first { $0.id == id })
+        // 샘플 메모 두 개가 먼저 들어가므로 계단 오프셋은 2번째 칸이다.
+        #expect(placed.position == NotePoint(x: 270 + 68, y: 240 + 68))
+    }
+
+    @Test("외장 모니터의 좌상단을 주면 그 화면 위에 뜬다")
+    func externalOriginMovesTheNote() throws {
+        // 내장 1512×982 왼쪽에 외장 1920×1080. 외장 좌상단은 메모 좌표로 (-1920, -98) 이다.
+        let external = NotePoint(x: -1920, y: 982 - 1080)
+        let store = store()
+        let id = store.addNote(origin: external)
+        let placed = try #require(store.notes.first { $0.id == id })
+        #expect(placed.position == NotePoint(x: external.x + 270 + 68, y: external.y + 240 + 68))
+    }
+
+    @Test("탭 복원이 세우는 메모도 같은 식을 쓴다")
+    func restoringATabUsesTheSameOrigin() throws {
+        let external = NotePoint(x: -1920, y: -98)
+        let store = store()
+        let noteID = store.addNote()
+        let tabID = try #require(store.notes.first { $0.id == noteID }?.selectedTabID)
+        let restoredTabID = try #require(store.addTab(to: noteID))
+        store.moveTabToTrash(noteID: noteID, tabID: restoredTabID)
+        store.moveTabToTrash(noteID: noteID, tabID: tabID)
+        store.moveNoteToTrash(noteID)
+        let trashed = try #require(store.trashedTabs.first { $0.tab.id == restoredTabID })
+        store.restoreTab(trashed.id, origin: external)
+        // 원래 메모가 사라졌으니 복원은 메모를 새로 세운다. 그 자리가 외장 좌상단 기준이어야
+        // 한다. 남은 메모는 샘플 두 개뿐이라 계단 오프셋도 2번째 칸이다.
+        let standing = try #require(store.notes.last)
+        #expect(standing.position == NotePoint(x: external.x + 270 + 68, y: external.y + 240 + 68))
+    }
+}

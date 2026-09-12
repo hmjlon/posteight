@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct TrashView: View {
@@ -169,7 +170,7 @@ private struct TrashTabRow: View {
             Spacer()
 
             Button {
-                store.restoreTab(trashedTab.id)
+                store.restoreTab(trashedTab.id, origin: NSScreen.noteSpawnOrigin)
             } label: {
                 Label(L("복구"), systemImage: "arrow.uturn.backward")
             }

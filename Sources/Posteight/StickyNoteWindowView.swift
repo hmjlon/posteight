@@ -696,6 +696,20 @@ extension NSScreen {
         screens.first?.frame ?? main?.frame
     }
 
+    /// 새 메모가 뜰 화면의 좌상단을 메모 좌표로 돌려준다. 주 디스플레이면 (0, 0) 이라 기존
+    /// 동작 그대로다.
+    ///
+    /// 마우스가 있는 화면을 고른다. `NSScreen.main` 은 여기서도 쓸 수 없다 — 포커스를 가진 창이
+    /// 있는 화면인데, 메뉴 막대에서 새 메모를 누르는 순간 포커스는 이 앱에 없다. 마우스는
+    /// 사용자가 지금 보고 있는 화면에 있다.
+    static var noteSpawnOrigin: NotePoint {
+        let pointer = NSEvent.mouseLocation
+        guard let anchor = noteAnchor,
+              let frame = (screens.first { $0.frame.contains(pointer) } ?? screens.first)?.frame
+        else { return NotePoint(x: 0, y: 0) }
+        return NotePoint(x: frame.minX - anchor.minX, y: anchor.maxY - frame.maxY)
+    }
+
     /// 메모가 아직 손에 닿는가. 창 중심이 어느 디스플레이 안에 있으면 닿는다.
     ///
     /// 예전 판정은 "어느 한 화면의 `visibleFrame` 이 창을 통째로 품는가" 였고 두 가지가 걸렸다.

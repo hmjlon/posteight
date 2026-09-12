@@ -16,7 +16,8 @@ struct MenuBarPanelView: View {
                 .padding(.vertical, 4)
 
             PanelRow(title: L("새 메모"), systemImage: "plus", shortcut: "⌘N") {
-                showNote(store.addNote(language: settings.language))
+                showNote(store.addNote(language: settings.language,
+                                       origin: NSScreen.noteSpawnOrigin))
             }
 
             PanelRow(title: L("메모 보기"), systemImage: "rectangle.on.rectangle") {

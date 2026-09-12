@@ -296,7 +296,8 @@ struct PosteightApp: App {
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button(L("새 메모")) {
-                    store.addNote(language: AppSettings.shared.language)
+                    store.addNote(language: AppSettings.shared.language,
+                                  origin: NSScreen.noteSpawnOrigin)
                 }
                 .keyboardShortcut("n", modifiers: [.command])
             }
