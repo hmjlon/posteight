@@ -378,3 +378,45 @@ struct NotePositionAnchorTests {
         #expect(anchor.maxY - 429 == 740)
     }
 }
+
+/// 실제 배치는 손으로 확인하지만, "구해 낼 창인가" 판정만은 화면을 읽지 않는 순수 함수라
+/// 그대로 부른다. 내장 1512×982 왼쪽에 외장 1920×1080 을 붙인 흔한 배치를 쓴다.
+@Suite("Note reachability")
+struct NoteReachabilityTests {
+    private let builtIn = NSRect(x: 0, y: 0, width: 1512, height: 982)
+    private let external = NSRect(x: -1920, y: 0, width: 1920, height: 1080)
+    private func card(x: Double, y: Double) -> NSRect {
+        NSRect(x: x, y: y, width: 310, height: 292)
+    }
+
+    @Test("두 모니터 경계에 걸친 메모는 손대지 않는다")
+    func straddlingTwoDisplaysStaysPut() {
+        // 외장 오른쪽 끝(x=0)에 걸터앉아 절반이 내장으로 넘어온 창. 중심은 내장 쪽에 있다.
+        let straddling = card(x: -100, y: 400)
+        #expect(NSScreen.showsNote(straddling, on: [builtIn, external]))
+        // 예전 판정이 걸려 넘어지던 자리다. 어느 화면도 이 창을 통째로 품지 못한다.
+        #expect(!builtIn.contains(straddling) && !external.contains(straddling))
+    }
+
+    @Test("Dock 과 메뉴 막대에 걸친 메모는 손대지 않는다")
+    func overlappingDockStaysPut() {
+        // Dock 70pt, 메뉴 막대 38pt 를 뺀 넓이가 `visibleFrame` 이다.
+        let visible = NSRect(x: 0, y: 70, width: 1512, height: 982 - 70 - 38)
+        let onDock = card(x: 600, y: 10)
+        #expect(NSScreen.showsNote(onDock, on: [builtIn]))
+        // 예전 판정의 기준이던 `visibleFrame` 은 이 창을 품지 못해 매번 위로 당겼다.
+        #expect(!visible.contains(onDock))
+    }
+
+    @Test("사라진 화면에 남은 메모는 구해 낸다")
+    func strandedOnRemovedDisplayIsRescued() {
+        let onExternal = card(x: -1500, y: 500)
+        #expect(NSScreen.showsNote(onExternal, on: [builtIn, external]))
+        #expect(!NSScreen.showsNote(onExternal, on: [builtIn]))
+    }
+
+    @Test("화면이 하나도 없으면 닿지 않는다")
+    func noDisplaysReachesNothing() {
+        #expect(!NSScreen.showsNote(card(x: 0, y: 0), on: []))
+    }
+}

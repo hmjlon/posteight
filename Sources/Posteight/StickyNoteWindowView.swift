@@ -452,15 +452,8 @@ struct StickyNoteWindowView: View {
     }
 
     private func saveWindowPosition() {
-        guard let window else { return }
-        let referenceFrame = NSScreen.noteAnchorFrame
-        store.updateNotePosition(
-            noteID,
-            position: NotePoint(
-                x: window.frame.midX - referenceFrame.minX,
-                y: referenceFrame.maxY - window.frame.midY
-            )
-        )
+        guard let position = window?.notePosition else { return }
+        store.updateNotePosition(noteID, position: position)
     }
 
     /// The tab's own × closes just that tab — unless it is the only one left, in which case a
@@ -618,13 +611,7 @@ private struct NoteWindowConfigurator: NSViewRepresentable {
             window.standardWindowButton(.zoomButton)?.isHidden = true
             window.setContentSize(NSSize(width: note.size.width, height: note.size.height))
 
-            let referenceFrame = NSScreen.noteAnchorFrame
-            window.setFrameOrigin(
-                NSPoint(
-                    x: referenceFrame.minX + note.position.x - window.frame.width * 0.5,
-                    y: referenceFrame.maxY - note.position.y - window.frame.height * 0.5
-                )
-            )
+            window.placeNote(at: note.position)
             window.moveOnScreenIfNeeded()
         }
     }
@@ -701,18 +688,56 @@ extension NSScreen {
     /// 밀린다 — Dock 을 옆으로 옮기면 Dock 폭만큼, 화면이 두 대면 아예 다른 모니터로.
     ///
     /// 메뉴 막대가 있는 화면의 `frame` 은 원점이 늘 (0, 0) 이고 여백을 타지 않는다.
-    static var noteAnchorFrame: NSRect {
-        // 디스플레이가 전부 떨어진 순간에는 `screens` 가 비어 있을 수 있다.
-        screens.first?.frame ?? main?.frame ?? .zero
+    ///
+    /// 디스플레이가 전부 떨어진 순간에는 기준이 아예 없다. 예전에는 그때 `.zero` 로 떨어졌는데,
+    /// 그 값으로 위치를 적으면 `y` 가 통째로 음수가 되어 다음 실행에 메모가 화면 위로 튀어나간다.
+    /// 기준이 없다는 것을 타입으로 말하게 해서, 부르는 쪽이 적지 않기로 고르게 한다.
+    static var noteAnchor: NSRect? {
+        screens.first?.frame ?? main?.frame
+    }
+
+    /// 메모가 아직 손에 닿는가. 창 중심이 어느 디스플레이 안에 있으면 닿는다.
+    ///
+    /// 예전 판정은 "어느 한 화면의 `visibleFrame` 이 창을 통째로 품는가" 였고 두 가지가 걸렸다.
+    /// 모니터 두 대 경계에 걸쳐 둔 메모는 어느 쪽도 통째로 품지 못해 실행할 때마다 한쪽으로
+    /// 끌려갔다. 그리고 `visibleFrame` 은 Dock 과 메뉴 막대를 뺀 넓이라, Dock 에 걸친 메모가
+    /// 실행할 때마다 Dock 높이만큼 위로 당겨졌다 — 당겨진 자리는 저장되지 않으므로 Dock 을
+    /// 자동 숨김으로 바꾸면 같은 메모가 또 다른 자리에 떴다.
+    ///
+    /// 그래서 기준이 `visibleFrame` 이 아니라 `frame` 이다. Dock 아래나 메뉴 막대 밑에 창을 두는
+    /// 것은 macOS 가 허락하는 배치이고, 무엇보다 사용자가 끌어다 놓은 자리다. 구해 낼 대상은
+    /// 가려진 창이 아니라 **이제 없는 화면에 남은 창** 하나뿐이다.
+    nonisolated static func showsNote(_ frame: NSRect, on displays: [NSRect]) -> Bool {
+        displays.contains { $0.contains(NSPoint(x: frame.midX, y: frame.midY)) }
     }
 }
 
 extension NSWindow {
+    /// 창의 지금 자리를 메모 좌표로 옮긴다. 기준이 없으면 `nil` — 적을 수 있는 값이 아니다.
+    var notePosition: NotePoint? {
+        guard let anchor = NSScreen.noteAnchor else { return nil }
+        return NotePoint(x: frame.midX - anchor.minX, y: anchor.maxY - frame.midY)
+    }
+
+    /// `notePosition` 의 역. 저장하는 식과 복원하는 식이 갈리지 않게 나란히 둔다.
+    func placeNote(at position: NotePoint) {
+        guard let anchor = NSScreen.noteAnchor else { return }
+        setFrameOrigin(
+            NSPoint(
+                x: anchor.minX + position.x - frame.width * 0.5,
+                y: anchor.maxY - position.y - frame.height * 0.5
+            )
+        )
+    }
+
     /// A note placed while a second display was attached keeps that position after the display
     /// is gone, which opens the window where nobody can see or reach it.
     func moveOnScreenIfNeeded() {
         let screens = NSScreen.screens
-        guard !screens.contains(where: { $0.visibleFrame.contains(frame) }) else { return }
+        guard !NSScreen.showsNote(frame, on: screens.map(\.frame)) else { return }
+
+        // 구해 내는 자리는 `visibleFrame` 이다. 판정과 기준이 다른 것은 일부러다 — 사용자가 둔
+        // 자리는 Dock 아래라도 그대로 두지만, 앱이 대신 옮길 때는 가리는 것 없는 자리로 옮긴다.
 
         // Clamp into whichever screen already shows most of the card, so a card living on a
         // second display does not jump to the main one.

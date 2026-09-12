@@ -56,6 +56,7 @@ final class NoteWindowCoordinator {
     private var visibility = NoteWindowVisibility()
     private var lockHiddenNoteIDs: Set<UUID> = []
     private var historyMonitor: Any?
+    private var screenMonitor: Any?
 
     private init() {
         observeScreenLock()
@@ -76,6 +77,42 @@ final class NoteWindowCoordinator {
             }
             let handled = shortcut == .undo ? store.undo() : store.redo()
             return handled ? nil : event
+        }
+    }
+
+    /// 디스플레이가 붙거나 빠지거나, 해상도나 배치가 바뀌면 macOS 가 창을 알아서 옮긴다. 그
+    /// 이동은 마우스로 끈 것이 아니라서 `onMoveEnded` 가 뜨지 않고, 저장값은 이제 없는 모니터의
+    /// 좌표로 남는다. 다음 실행에 그 좌표를 복원하면 메모는 마지막으로 본 자리가 아니라
+    /// `moveOnScreenIfNeeded` 가 끌어다 놓은 구석에 뜬다.
+    ///
+    /// 옮겨진 자리를 그 자리에서 다시 적는다. 이때 `NSScreen.noteAnchor` 도 이미 새 값이라,
+    /// 주 디스플레이가 바뀌어 기준 높이가 달라진 경우까지 같이 맞춰진다.
+    ///
+    /// 무엇을 내주는지 분명히 해 둔다. 외장을 꽂은 채 잠들었다가 연결이 끊기면 macOS 가 창을
+    /// 내장으로 몰아넣는데, 그 자리를 여기서 적어 버리므로 모니터가 돌아와도 메모는 돌아오지
+    /// 않는다. 그 대신 "뽑고 나면 메모가 마지막으로 본 자리에 있다" 를 얻는다. 적지 않는 쪽을
+    /// 골라도 이득이 없다 — 예전에도 다음 실행에 그 좌표는 어차피 클램프됐고, 구석은 원래
+    /// 자리보다 더 낯설다.
+    func observeScreenChanges(store: PosteightStore) {
+        guard screenMonitor == nil else { return }
+        screenMonitor = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
+        ) { [weak store] _ in
+            MainActor.assumeIsolated {
+                guard let store else { return }
+                NoteWindowCoordinator.shared.resaveWindowPositions(into: store)
+            }
+        }
+    }
+
+    /// 숨긴 창도 함께 적는다. 지금 보이지 않을 뿐 다음에 `present` 가 부를 때 같은 판정을 거치고,
+    /// 저장값만 옛 모니터에 남겨 두면 그때 가서 똑같이 어긋난다.
+    private func resaveWindowPositions(into store: PosteightStore) {
+        for (noteID, weakWindow) in windows {
+            guard let window = weakWindow.value else { continue }
+            window.moveOnScreenIfNeeded()
+            guard let position = window.notePosition else { continue }
+            store.updateNotePosition(noteID, position: position)
         }
     }
 
@@ -320,11 +357,11 @@ private struct MenuBarLabel: View {
         .task {
             // 창을 하나라도 열기 전에 끝나야 한다. 아래 presentNote 가 만드는 창이 이 값을
             // 읽어 자리를 잡고, 한 번 자리를 잡은 창은 다시 잡지 않는다.
-            store.rebaseNotePositions(
-                from: NSScreen.main?.visibleFrame ?? NSScreen.noteAnchorFrame,
-                to: NSScreen.noteAnchorFrame
-            )
+            if let anchor = NSScreen.noteAnchor {
+                store.rebaseNotePositions(from: NSScreen.main?.visibleFrame ?? anchor, to: anchor)
+            }
             NoteWindowCoordinator.shared.installHistoryShortcuts(store: store)
+            NoteWindowCoordinator.shared.observeScreenChanges(store: store)
             reminders.connect(to: store)
             for note in store.notes {
                 presentNote(note.id)
