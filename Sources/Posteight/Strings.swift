@@ -226,6 +226,8 @@ private let englishStrings: [String: String] = [
     "완료 취소": "Undo",
     "할 일을 입력하면 완료할 수 있어요": "Type something first, then you can check it off",
     "할 일 입력": "New item",
+    "상단에 고정": "Pin to top",
+    "상단 고정 해제": "Unpin from top",
     "세부사항 보기": "Show details",
     "세부사항 추가": "Add details",
     "삭제": "Delete",

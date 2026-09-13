@@ -251,6 +251,7 @@ struct TodoItem: Identifiable, Codable, Equatable {
     var createdAt: Date
     var completedAt: Date?
     var reminderAt: Date?
+    var isPinned: Bool
 
     var hasTitle: Bool {
         !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -268,7 +269,8 @@ struct TodoItem: Identifiable, Codable, Equatable {
         isDone: Bool = false,
         createdAt: Date = Date(),
         completedAt: Date? = nil,
-        reminderAt: Date? = nil
+        reminderAt: Date? = nil,
+        isPinned: Bool = false
     ) {
         self.id = id
         self.title = title
@@ -277,6 +279,39 @@ struct TodoItem: Identifiable, Codable, Equatable {
         self.createdAt = createdAt
         self.completedAt = completedAt
         self.reminderAt = reminderAt
+        self.isPinned = isPinned
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, title, detail, isDone, createdAt, completedAt, reminderAt, isPinned, isPositionLocked
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        detail = try container.decodeIfPresent(String.self, forKey: .detail)
+        isDone = try container.decode(Bool.self, forKey: .isDone)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        completedAt = try container.decodeIfPresent(Date.self, forKey: .completedAt)
+        reminderAt = try container.decodeIfPresent(Date.self, forKey: .reminderAt)
+        // Builds that briefly offered a separate position lock wrote this key. Treat those rows
+        // as ordinary top pins so removing that mode never leaves an invisible lock behind.
+        let storedTopPin = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
+        let storedPositionLock = try container.decodeIfPresent(Bool.self, forKey: .isPositionLocked) ?? false
+        isPinned = storedTopPin || storedPositionLock
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(title, forKey: .title)
+        try container.encodeIfPresent(detail, forKey: .detail)
+        try container.encode(isDone, forKey: .isDone)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encodeIfPresent(completedAt, forKey: .completedAt)
+        try container.encodeIfPresent(reminderAt, forKey: .reminderAt)
+        try container.encode(isPinned, forKey: .isPinned)
     }
 }
 

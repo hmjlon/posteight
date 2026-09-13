@@ -171,6 +171,8 @@ struct TodoItemRow: View {
                 .excludedFromScreenCapture()
             }
 
+            pinButton
+
             Button {
                 store.deleteItem(noteID: note.id, tabID: tab.id, itemID: item.id)
             } label: {
@@ -306,6 +308,33 @@ struct TodoItemRow: View {
         !(item.detail ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    private var pinButton: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                store.toggleItemPin(noteID: note.id, tabID: tab.id, itemID: item.id)
+            }
+        } label: {
+            SimplePinShape()
+                .fill(item.isPinned ? Color(hex: note.penHex).opacity(0.7) : .clear)
+                .overlay {
+                    SimplePinShape()
+                        .stroke(
+                            Color(hex: note.penHex).opacity(item.isPinned ? 0.7 : 0.34),
+                            style: StrokeStyle(lineWidth: 1, lineCap: .round, lineJoin: .round)
+                        )
+                }
+                .frame(width: 8, height: 11)
+                .rotationEffect(.degrees(45))
+                .frame(width: 16, height: 16)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .opacity(item.isPinned || isRowHovered || isEditingText ? 1 : 0)
+        .disabled(!hasContent)
+        .help(item.isPinned ? L("상단 고정 해제") : L("상단에 고정"))
+        .accessibilityLabel(item.isPinned ? L("상단 고정 해제") : L("상단에 고정"))
+    }
+
     private func toggleDone() {
         store.toggleItem(noteID: note.id, tabID: tab.id, itemID: item.id)
     }
@@ -315,6 +344,24 @@ struct TodoItemRow: View {
         let target = index + offset
         guard tab.items.indices.contains(target) else { return }
         focusedItemID = tab.items[target].id
+    }
+}
+
+/// A single uninterrupted outline avoids the seam through the middle of the SF Symbol pin.
+private struct SimplePinShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX + rect.width * 0.2, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX - rect.width * 0.2, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX - rect.width * 0.3, y: rect.minY + rect.height * 0.38))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + rect.height * 0.57))
+        path.addLine(to: CGPoint(x: rect.midX + rect.width * 0.08, y: rect.minY + rect.height * 0.57))
+        path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.midX - rect.width * 0.08, y: rect.minY + rect.height * 0.57))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + rect.height * 0.57))
+        path.addLine(to: CGPoint(x: rect.minX + rect.width * 0.3, y: rect.minY + rect.height * 0.38))
+        path.closeSubpath()
+        return path
     }
 }
 

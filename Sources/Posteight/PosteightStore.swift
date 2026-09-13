@@ -701,6 +701,7 @@ final class PosteightStore: ObservableObject {
             moved[targetNote].tabs[targetTab].items.firstIndex(where: { $0.id == id })
         } ?? moved[targetNote].tabs[targetTab].items.count
         moved[targetNote].tabs[targetTab].items.insert(item, at: insertion)
+        moved[targetNote].tabs[targetTab].items = Self.itemsPinnedFirst(moved[targetNote].tabs[targetTab].items)
         guard moved != notes else { return false }
         let before = editingSnapshot
         endTextUndoGroup()
@@ -714,6 +715,18 @@ final class PosteightStore: ObservableObject {
         tab(noteID: noteID, tabID: tabID)?.completionGroupingOriginalOrder != nil
     }
 
+    func toggleItemPin(noteID: UUID, tabID: UUID, itemID: UUID) {
+        let historyBefore = editingSnapshot
+        defer { recordEdit(from: historyBefore, noteID: noteID, tabID: tabID) }
+        endTextUndoGroup()
+        updateTab(noteID: noteID, tabID: tabID) { tab in
+            guard let index = tab.items.firstIndex(where: { $0.id == itemID }),
+                  tab.items[index].hasTitle else { return }
+            tab.items[index].isPinned.toggle()
+            tab.items = Self.itemsPinnedFirst(tab.items)
+        }
+    }
+
     /// The first press groups rows; the next restores their earlier order. Items added in between
     /// are kept after the restored rows instead of being discarded.
     @discardableResult
@@ -725,8 +738,8 @@ final class PosteightStore: ObservableObject {
         if let originalOrder = tab.completionGroupingOriginalOrder {
             let originalIDs = Set(originalOrder)
             let itemsByID = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
-            rearranged = originalOrder.compactMap { itemsByID[$0] }
-                + items.filter { !originalIDs.contains($0.id) }
+            rearranged = Self.itemsPinnedFirst(originalOrder.compactMap { itemsByID[$0] }
+                + items.filter { !originalIDs.contains($0.id) })
             originalOrderAfterToggle = nil
         } else {
             rearranged = Self.itemsGroupedByCompletion(items)
@@ -746,10 +759,15 @@ final class PosteightStore: ObservableObject {
     }
 
     nonisolated private static func itemsGroupedByCompletion(_ items: [TodoItem]) -> [TodoItem] {
-        let pending = items.filter { $0.hasTitle && !$0.isDone }
-        let completed = items.filter { $0.hasTitle && $0.isDone }
-        let empty = items.filter { !$0.hasTitle }
-        return pending + completed + empty
+        let pinned = items.filter(\.isPinned)
+        let pending = items.filter { !$0.isPinned && $0.hasTitle && !$0.isDone }
+        let completed = items.filter { !$0.isPinned && $0.hasTitle && $0.isDone }
+        let empty = items.filter { !$0.isPinned && !$0.hasTitle }
+        return pinned + pending + completed + empty
+    }
+
+    nonisolated private static func itemsPinnedFirst(_ items: [TodoItem]) -> [TodoItem] {
+        items.filter(\.isPinned) + items.filter { !$0.isPinned }
     }
 
     func deleteItem(noteID: UUID, tabID: UUID, itemID: UUID) {

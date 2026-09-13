@@ -146,6 +146,39 @@ struct ItemMovementTests {
                 before.map(\.id) + [addedAfterSorting])
         }
     }
+
+    @Test func pinnedItemStaysAtTheTopAcrossSortingDraggingPersistenceAndUndo() throws {
+        try withStore { store, directory in
+            let note = store.addNote()
+            let tab = try #require(store.notes.first(where: { $0.id == note })?.selectedTab)
+            let first = try #require(tab.items.first?.id)
+            store.updateItemTitle(noteID: note, tabID: tab.id, itemID: first, title: "일반 1")
+            let pinned = try #require(store.addItem(to: note, tabID: tab.id))
+            store.updateItemTitle(noteID: note, tabID: tab.id, itemID: pinned, title: "고정")
+            let last = try #require(store.addItem(to: note, tabID: tab.id))
+            store.updateItemTitle(noteID: note, tabID: tab.id, itemID: last, title: "일반 2")
+
+            store.clearEditingHistory()
+            store.toggleItemPin(noteID: note, tabID: tab.id, itemID: pinned)
+            #expect(store.movementTab(noteID: note, tabID: tab.id)?.items.map(\.id) == [pinned, first, last])
+            #expect(store.movementTab(noteID: note, tabID: tab.id)?.items.first?.isPinned == true)
+            #expect(store.undo())
+            #expect(store.movementTab(noteID: note, tabID: tab.id)?.items.map(\.id) == [first, pinned, last])
+            #expect(store.redo())
+
+            store.toggleItem(noteID: note, tabID: tab.id, itemID: pinned)
+            store.toggleItem(noteID: note, tabID: tab.id, itemID: first)
+            #expect(store.toggleItemsByCompletion(noteID: note, tabID: tab.id))
+            #expect(store.movementTab(noteID: note, tabID: tab.id)?.items.first?.id == pinned)
+            let drag = TodoItemDrag(noteID: note, tabID: tab.id, itemID: last)
+            #expect(!store.moveItem(drag, toNote: note, tab: tab.id, before: pinned))
+            #expect(store.movementTab(noteID: note, tabID: tab.id)?.items.first?.id == pinned)
+
+            store.flush()
+            let restarted = PosteightStore(directory: directory)
+            #expect(restarted.movementTab(noteID: note, tabID: tab.id)?.items.first?.isPinned == true)
+        }
+    }
 }
 
 private extension PosteightStore {
