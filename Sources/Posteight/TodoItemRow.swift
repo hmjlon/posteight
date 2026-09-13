@@ -110,68 +110,9 @@ struct TodoItemRow: View {
             }
             .frame(height: 28 + max(0, fontSizeAdjustment))
 
-            Button {
-                showReminder = true
-            } label: {
-                Image(systemName: item.reminderAt == nil ? "bell" : "bell.fill")
-                    .font(.system(size: 10, weight: .semibold))
-                    .frame(width: 16, height: 20)
-                    .contentShape(Rectangle())
+            ForEach(visibleRowActions, id: \.self) { action in
+                rowActionButton(action)
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(Color(hex: note.penHex).opacity(0.6))
-            .opacity(item.reminderAt != nil || isRowHovered || isEditingText ? 1 : 0)
-            .disabled(!hasContent || item.isDone)
-            .help(item.reminderAt.map { L("알림 예약") + ": " + $0.formatted(date: .abbreviated, time: .shortened) } ?? L("알림 예약"))
-            .popover(isPresented: $showReminder) {
-                ReminderEditor(noteID: note.id, tabID: tab.id, item: item, onClose: { showReminder = false })
-                    .environmentObject(store)
-                    .presentationBackground(Color(hex: note.paperHex))
-                    .preferredColorScheme(.light)
-                    .excludedFromScreenCapture()
-            }
-
-            Button {
-                store.presentedDetailItemID = item.id
-            } label: {
-                Image(systemName: hasDetail ? "bubble.fill" : "plus.bubble")
-                    .font(.system(size: 10, weight: .semibold))
-                    .frame(width: 16, height: 16)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(Color(hex: note.penHex).opacity(hasDetail ? 0.7 : 0.34))
-            // An item with notes keeps its marker visible; an empty one only offers on hover.
-            .opacity(hasDetail ? 1 : (isRowHovered || isEditingText ? 1 : 0))
-            .disabled(!hasContent)
-            .help(hasDetail ? L("세부사항 보기") : L("세부사항 추가"))
-            .popover(isPresented: detailPresentation, arrowEdge: .trailing) {
-                DetailEditor(
-                    text: store.itemDetail(noteID: note.id, tabID: tab.id, itemID: item.id) ?? "",
-                    title: store.itemTitle(noteID: note.id, tabID: tab.id, itemID: item.id) ?? item.title,
-                    symbol: tab.stickerSymbol,
-                    paperColor: Color(hex: note.paperHex),
-                    inkColor: Color(hex: note.penHex),
-                    fontName: fontName,
-                    fontSizeAdjustment: fontSizeAdjustment,
-                    onEdit: {
-                        store.updateItemDetail(
-                            noteID: note.id,
-                            tabID: tab.id,
-                            itemID: item.id,
-                            detail: $0
-                        )
-                    },
-                    onClose: { detailPresentation.wrappedValue = false }
-                )
-                // App switches keep this slip open; opening another detail replaces it.
-                .interactiveDismissDisabled()
-                // Paints the popover's own chrome, arrow included, so the slip reads as a piece
-                // torn off this card rather than a system panel floating over it.
-                .presentationBackground(Color(hex: note.paperHex))
-                .excludedFromScreenCapture()
-            }
-
-            pinButton
 
             Button {
                 store.deleteItem(noteID: note.id, tabID: tab.id, itemID: item.id)
@@ -308,6 +249,101 @@ struct TodoItemRow: View {
         !(item.detail ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    private var showsAllRowActions: Bool {
+        isRowHovered || isEditingText
+    }
+
+    private var visibleRowActions: [TodoRowAction] {
+        let active = TodoRowAction.allCases.filter(isActionActive)
+        guard showsAllRowActions else {
+            return TodoRowAction.allCases.filter(isActionPresented).filter { !active.contains($0) } + active
+        }
+        // New hover controls appear to the left, so active status icons never jump away from
+        // their resting positions beside the delete button.
+        return TodoRowAction.allCases.filter { !isActionActive($0) } + active
+    }
+
+    private func isActionActive(_ action: TodoRowAction) -> Bool {
+        switch action {
+        case .reminder: item.reminderAt != nil
+        case .detail: hasDetail
+        case .pin: item.isPinned
+        }
+    }
+
+    private func isActionPresented(_ action: TodoRowAction) -> Bool {
+        switch action {
+        case .reminder: showReminder
+        case .detail: detailPresentation.wrappedValue
+        case .pin: false
+        }
+    }
+
+    @ViewBuilder
+    private func rowActionButton(_ action: TodoRowAction) -> some View {
+        switch action {
+        case .reminder:
+            Button {
+                showReminder = true
+            } label: {
+                Image(systemName: item.reminderAt == nil ? "bell" : "bell.fill")
+                    .font(.system(size: 10, weight: .semibold))
+                    .frame(width: 16, height: 20)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color(hex: note.penHex).opacity(item.reminderAt == nil ? 0.34 : 0.7))
+            .disabled(!hasContent || item.isDone)
+            .help(item.reminderAt.map { L("알림 예약") + ": " + $0.formatted(date: .abbreviated, time: .shortened) } ?? L("알림 예약"))
+            .popover(isPresented: $showReminder) {
+                ReminderEditor(noteID: note.id, tabID: tab.id, item: item, onClose: { showReminder = false })
+                    .environmentObject(store)
+                    .presentationBackground(Color(hex: note.paperHex))
+                    .preferredColorScheme(.light)
+                    .excludedFromScreenCapture()
+            }
+
+        case .detail:
+            Button {
+                store.presentedDetailItemID = item.id
+            } label: {
+                Image(systemName: hasDetail ? "bubble.fill" : "plus.bubble")
+                    .font(.system(size: 10, weight: .semibold))
+                    .frame(width: 16, height: 16)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color(hex: note.penHex).opacity(hasDetail ? 0.7 : 0.34))
+            .disabled(!hasContent)
+            .help(hasDetail ? L("세부사항 보기") : L("세부사항 추가"))
+            .popover(isPresented: detailPresentation, arrowEdge: .trailing) {
+                DetailEditor(
+                    text: store.itemDetail(noteID: note.id, tabID: tab.id, itemID: item.id) ?? "",
+                    title: store.itemTitle(noteID: note.id, tabID: tab.id, itemID: item.id) ?? item.title,
+                    symbol: tab.stickerSymbol,
+                    paperColor: Color(hex: note.paperHex),
+                    inkColor: Color(hex: note.penHex),
+                    fontName: fontName,
+                    fontSizeAdjustment: fontSizeAdjustment,
+                    onEdit: {
+                        store.updateItemDetail(
+                            noteID: note.id,
+                            tabID: tab.id,
+                            itemID: item.id,
+                            detail: $0
+                        )
+                    },
+                    onClose: { detailPresentation.wrappedValue = false }
+                )
+                .interactiveDismissDisabled()
+                .presentationBackground(Color(hex: note.paperHex))
+                .excludedFromScreenCapture()
+            }
+
+        case .pin:
+            pinButton
+        }
+    }
+
     private var pinButton: some View {
         Button {
             withAnimation(.easeInOut(duration: 0.2)) {
@@ -329,7 +365,6 @@ struct TodoItemRow: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .opacity(item.isPinned || isRowHovered || isEditingText ? 1 : 0)
         .disabled(!hasContent)
         .help(item.isPinned ? L("상단 고정 해제") : L("상단에 고정"))
         .accessibilityLabel(item.isPinned ? L("상단 고정 해제") : L("상단에 고정"))
@@ -345,6 +380,12 @@ struct TodoItemRow: View {
         guard tab.items.indices.contains(target) else { return }
         focusedItemID = tab.items[target].id
     }
+}
+
+private enum TodoRowAction: CaseIterable, Hashable {
+    case reminder
+    case detail
+    case pin
 }
 
 /// A single uninterrupted outline avoids the seam through the middle of the SF Symbol pin.
