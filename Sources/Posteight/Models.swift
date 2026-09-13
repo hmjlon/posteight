@@ -178,19 +178,22 @@ struct MemoTab: Identifiable, Codable, Equatable {
     var title: String
     var stickerSymbol: String
     var items: [TodoItem]
+    var completionGroupingOriginalOrder: [UUID]?
 
     init(
         id: UUID = UUID(),
         name: String,
         title: String,
         stickerSymbol: String = "",
-        items: [TodoItem] = []
+        items: [TodoItem] = [],
+        completionGroupingOriginalOrder: [UUID]? = nil
     ) {
         self.id = id
         self.name = name
         self.title = title
         self.stickerSymbol = stickerSymbol
         self.items = items
+        self.completionGroupingOriginalOrder = completionGroupingOriginalOrder
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -199,6 +202,7 @@ struct MemoTab: Identifiable, Codable, Equatable {
         case title
         case stickerSymbol
         case items
+        case completionGroupingOriginalOrder
     }
 
     init(from decoder: Decoder) throws {
@@ -209,6 +213,10 @@ struct MemoTab: Identifiable, Codable, Equatable {
         // StickyNote fills this from its legacy note-level icon after decoding the tabs.
         stickerSymbol = try container.decodeIfPresent(String.self, forKey: .stickerSymbol) ?? ""
         items = try container.decodeIfPresent([TodoItem].self, forKey: .items) ?? []
+        completionGroupingOriginalOrder = try container.decodeIfPresent(
+            [UUID].self,
+            forKey: .completionGroupingOriginalOrder
+        )
     }
 }
 

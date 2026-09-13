@@ -710,6 +710,48 @@ final class PosteightStore: ObservableObject {
         return true
     }
 
+    func isCompletionGroupingActive(noteID: UUID, tabID: UUID) -> Bool {
+        tab(noteID: noteID, tabID: tabID)?.completionGroupingOriginalOrder != nil
+    }
+
+    /// The first press groups rows; the next restores their earlier order. Items added in between
+    /// are kept after the restored rows instead of being discarded.
+    @discardableResult
+    func toggleItemsByCompletion(noteID: UUID, tabID: UUID) -> Bool {
+        guard let tab = tab(noteID: noteID, tabID: tabID) else { return false }
+        let items = tab.items
+        let rearranged: [TodoItem]
+        let originalOrderAfterToggle: [UUID]?
+        if let originalOrder = tab.completionGroupingOriginalOrder {
+            let originalIDs = Set(originalOrder)
+            let itemsByID = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
+            rearranged = originalOrder.compactMap { itemsByID[$0] }
+                + items.filter { !originalIDs.contains($0.id) }
+            originalOrderAfterToggle = nil
+        } else {
+            rearranged = Self.itemsGroupedByCompletion(items)
+            guard rearranged != items else { return false }
+            originalOrderAfterToggle = items.map(\.id)
+        }
+        let historyBefore = editingSnapshot
+        endTextUndoGroup()
+        presentedDetailItemID = nil
+        let didUpdate = updateTab(noteID: noteID, tabID: tabID) {
+            $0.items = rearranged
+            $0.completionGroupingOriginalOrder = originalOrderAfterToggle
+        }
+        guard didUpdate else { return false }
+        recordEdit(from: historyBefore, noteID: noteID, tabID: tabID)
+        return true
+    }
+
+    nonisolated private static func itemsGroupedByCompletion(_ items: [TodoItem]) -> [TodoItem] {
+        let pending = items.filter { $0.hasTitle && !$0.isDone }
+        let completed = items.filter { $0.hasTitle && $0.isDone }
+        let empty = items.filter { !$0.hasTitle }
+        return pending + completed + empty
+    }
+
     func deleteItem(noteID: UUID, tabID: UUID, itemID: UUID) {
         let historyBefore = editingSnapshot
         defer { recordEdit(from: historyBefore, noteID: noteID, tabID: tabID) }

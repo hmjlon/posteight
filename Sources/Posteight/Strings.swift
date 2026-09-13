@@ -207,6 +207,8 @@ private let englishStrings: [String: String] = [
 
     // StickyNoteView
     "할 일 추가": "Add item",
+    "미완료 항목을 위로 정리": "Move unfinished items to the top",
+    "정렬 이전 순서로 되돌리기": "Restore the order from before sorting",
     "가로 크기 조절": "Resize width",
     "세로 크기 조절": "Resize height",
     "대각선 크기 조절": "Resize",

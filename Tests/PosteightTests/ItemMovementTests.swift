@@ -101,6 +101,51 @@ struct ItemMovementTests {
             #expect(!store.canUndo)
         }
     }
+
+    @Test func completionGroupingTogglesBackToTheOriginalOrderAndKeepsNewRows() throws {
+        try withStore { store, directory in
+            let note = store.addNote()
+            let tab = try #require(store.notes.first(where: { $0.id == note })?.selectedTab)
+            let firstEmpty = try #require(tab.items.first?.id)
+            let doneOne = try #require(store.addItem(to: note, tabID: tab.id))
+            let pendingOne = try #require(store.addItem(to: note, tabID: tab.id))
+            let doneTwo = try #require(store.addItem(to: note, tabID: tab.id))
+            let pendingTwo = try #require(store.addItem(to: note, tabID: tab.id))
+            let lastEmpty = try #require(store.addItem(to: note, tabID: tab.id))
+
+            store.updateItemTitle(noteID: note, tabID: tab.id, itemID: doneOne, title: "완료 1")
+            store.toggleItem(noteID: note, tabID: tab.id, itemID: doneOne)
+            store.updateItemTitle(noteID: note, tabID: tab.id, itemID: pendingOne, title: "미완료 1")
+            store.updateItemTitle(noteID: note, tabID: tab.id, itemID: doneTwo, title: "완료 2")
+            store.toggleItem(noteID: note, tabID: tab.id, itemID: doneTwo)
+            store.updateItemTitle(noteID: note, tabID: tab.id, itemID: pendingTwo, title: "미완료 2")
+
+            let before = try #require(store.movementTab(noteID: note, tabID: tab.id)?.items)
+            store.clearEditingHistory()
+            #expect(!store.isCompletionGroupingActive(noteID: note, tabID: tab.id))
+            #expect(store.toggleItemsByCompletion(noteID: note, tabID: tab.id))
+            #expect(store.movementTab(noteID: note, tabID: tab.id)?.items.map(\.id) == [
+                pendingOne, pendingTwo, doneOne, doneTwo, firstEmpty, lastEmpty
+            ])
+            #expect(store.isCompletionGroupingActive(noteID: note, tabID: tab.id))
+
+            store.flush()
+            let restarted = PosteightStore(directory: directory)
+            #expect(restarted.isCompletionGroupingActive(noteID: note, tabID: tab.id))
+            let addedAfterSorting = try #require(restarted.addItem(to: note, tabID: tab.id))
+            #expect(restarted.toggleItemsByCompletion(noteID: note, tabID: tab.id))
+            #expect(restarted.movementTab(noteID: note, tabID: tab.id)?.items.map(\.id) ==
+                before.map(\.id) + [addedAfterSorting])
+            #expect(!restarted.isCompletionGroupingActive(noteID: note, tabID: tab.id))
+            #expect(restarted.undo())
+            #expect(restarted.movementTab(noteID: note, tabID: tab.id)?.items.map(\.id) == [
+                pendingOne, pendingTwo, doneOne, doneTwo, firstEmpty, lastEmpty, addedAfterSorting
+            ])
+            #expect(restarted.redo())
+            #expect(restarted.movementTab(noteID: note, tabID: tab.id)?.items.map(\.id) ==
+                before.map(\.id) + [addedAfterSorting])
+        }
+    }
 }
 
 private extension PosteightStore {

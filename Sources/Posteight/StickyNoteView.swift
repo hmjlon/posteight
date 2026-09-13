@@ -97,6 +97,25 @@ struct StickyNoteView: View {
                 }
                 .buttonStyle(.plain)
                 .help(L("할 일 추가"))
+
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        _ = store.toggleItemsByCompletion(noteID: note.id, tabID: tab.id)
+                    }
+                } label: {
+                    Image(systemName: "arrow.up.arrow.down")
+                        .symbolRenderingMode(.monochrome)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.black.opacity(0.52))
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(store.isCompletionGroupingActive(noteID: note.id, tabID: tab.id)
+                    ? L("정렬 이전 순서로 되돌리기") : L("미완료 항목을 위로 정리"))
+                .accessibilityLabel(store.isCompletionGroupingActive(noteID: note.id, tabID: tab.id)
+                    ? L("정렬 이전 순서로 되돌리기") : L("미완료 항목을 위로 정리"))
+
                 Spacer()
                 Button(action: onDelete) {
                     Image(systemName: "trash")
