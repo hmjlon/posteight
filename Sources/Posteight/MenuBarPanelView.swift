@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 /// The menu bar popover: quick capture, today's task status, and access to the
-/// log and trash windows. Kept compact on purpose — notes stay the working surface.
+/// trash window. Kept compact on purpose — notes stay the working surface.
 struct MenuBarPanelView: View {
     @EnvironmentObject private var store: PosteightStore
     @ObservedObject private var settings = AppSettings.shared
@@ -26,10 +26,6 @@ struct MenuBarPanelView: View {
 
             PanelRow(title: L("모든 메모 숨기기"), systemImage: "eye.slash") {
                 NoteWindowCoordinator.shared.hideAll()
-            }
-
-            PanelRow(title: L("오늘 기록 미리보기"), systemImage: "square.and.arrow.up") {
-                open(windowID: WindowID.dailyLog)
             }
 
             PanelRow(
