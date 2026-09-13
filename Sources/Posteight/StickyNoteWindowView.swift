@@ -175,6 +175,7 @@ struct StickyNoteWindowView: View {
                             width: tabWidth
                         )
                         .id(tab.id)
+                        .modifier(TodoItemDropTarget(noteID: note.id, tabID: tab.id, selectsTab: true))
                     }
                 }
                 .frame(height: MemoSurfaceMetrics.tabBarHeight, alignment: .bottom)

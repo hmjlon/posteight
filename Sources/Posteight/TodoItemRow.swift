@@ -24,6 +24,16 @@ struct TodoItemRow: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 8) {
+            TodoItemDragHandle(
+                item: TodoItemDrag(noteID: note.id, tabID: tab.id, itemID: item.id),
+                color: NSColor(Color(hex: note.penHex)),
+                isVisible: isRowHovered || isEditingText
+            )
+                .frame(width: 16, height: 24)
+                .help(L("드래그하여 순서 변경 · 우클릭하여 다른 메모로 이동"))
+                .accessibilityLabel(L("할 일 이동"))
+                .contextMenu { moveMenu }
+
             Button {
                 toggleDone()
             } label: {
@@ -230,6 +240,25 @@ struct TodoItemRow: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.76) {
                     guard penGeneration == generation else { return }
                     showPen = false
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var moveMenu: some View {
+        Menu(L("다른 메모로 이동")) {
+            ForEach(store.notes) { destination in
+                ForEach(destination.tabs) { destinationTab in
+                    if destinationTab.id != tab.id {
+                        Button(destinationTab.name + " · " + destinationTab.title) {
+                            store.moveItem(
+                                TodoItemDrag(noteID: note.id, tabID: tab.id, itemID: item.id),
+                                toNote: destination.id,
+                                tab: destinationTab.id
+                            )
+                        }
+                    }
                 }
             }
         }

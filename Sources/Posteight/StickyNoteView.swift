@@ -59,7 +59,11 @@ struct StickyNoteView: View {
                         ForEach(tab.items) { item in
                             TodoItemRow(note: note, tab: tab, item: item, focusedItemID: $focusedItemID)
                                 .id(item.id)
+                                .modifier(TodoItemDropTarget(noteID: note.id, tabID: tab.id, beforeID: item.id))
                         }
+                        Color.clear
+                            .frame(height: 28)
+                            .modifier(TodoItemDropTarget(noteID: note.id, tabID: tab.id))
                     }
                     .padding(.top, isPencilCaseOpen ? 8 : 5)
                     .padding(.bottom, 2)
@@ -71,6 +75,11 @@ struct StickyNoteView: View {
 
                     withAnimation(.easeOut(duration: 0.18)) {
                         proxy.scrollTo(itemID, anchor: .bottom)
+                    }
+                }
+                .onChange(of: tab.items.map(\.id)) { _, ids in
+                    if let focusedItemID, !ids.contains(focusedItemID) {
+                        self.focusedItemID = nil
                     }
                 }
             }

@@ -62,6 +62,9 @@ enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
 /// Xcode build paths — two places to drift. Move to `.lproj` when a third language or a
 /// translator shows up.
 private let englishStrings: [String: String] = [
+    "드래그하여 순서 변경 · 우클릭하여 다른 메모로 이동": "Drag to reorder · Right-click to move to another memo",
+    "할 일 이동": "Move task",
+    "다른 메모로 이동": "Move to another memo",
     "색상": "Color",
     "글자 크기: %@": "Text size: %@",
     "크게": "Large",

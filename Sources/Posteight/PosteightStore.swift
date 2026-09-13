@@ -682,6 +682,34 @@ final class PosteightStore: ObservableObject {
         return previousID
     }
 
+    /// Resolve both ends against live data and publish once so cross-tab moves are atomic.
+    @discardableResult
+    func moveItem(_ source: TodoItemDrag, toNote noteID: UUID, tab tabID: UUID,
+                  before targetID: UUID? = nil) -> Bool {
+        guard let sourceNote = notes.firstIndex(where: { $0.id == source.noteID }),
+              let sourceTab = notes[sourceNote].tabs.firstIndex(where: { $0.id == source.tabID }),
+              let sourceItem = notes[sourceNote].tabs[sourceTab].items.firstIndex(where: { $0.id == source.itemID }),
+              let targetNote = notes.firstIndex(where: { $0.id == noteID }),
+              let targetTab = notes[targetNote].tabs.firstIndex(where: { $0.id == tabID }) else { return false }
+        if let targetID {
+            guard targetID != source.itemID,
+                  notes[targetNote].tabs[targetTab].items.contains(where: { $0.id == targetID }) else { return false }
+        }
+        var moved = notes
+        let item = moved[sourceNote].tabs[sourceTab].items.remove(at: sourceItem)
+        let insertion = targetID.flatMap { id in
+            moved[targetNote].tabs[targetTab].items.firstIndex(where: { $0.id == id })
+        } ?? moved[targetNote].tabs[targetTab].items.count
+        moved[targetNote].tabs[targetTab].items.insert(item, at: insertion)
+        guard moved != notes else { return false }
+        let before = editingSnapshot
+        endTextUndoGroup()
+        presentedDetailItemID = nil
+        notes = moved
+        recordEdit(from: before, noteID: source.noteID, tabID: source.tabID)
+        return true
+    }
+
     func deleteItem(noteID: UUID, tabID: UUID, itemID: UUID) {
         let historyBefore = editingSnapshot
         defer { recordEdit(from: historyBefore, noteID: noteID, tabID: tabID) }
