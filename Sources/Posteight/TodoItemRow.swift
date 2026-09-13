@@ -346,7 +346,6 @@ private struct DetailEditor: View {
         .padding(.vertical, 11)
         .frame(width: 300, height: 224)
         .background(paperColor)
-        .background(PaperGrain())
         .environment(\.colorScheme, .light)
         .onChange(of: sourceText) { _, restored in
             if text != restored { text = restored }

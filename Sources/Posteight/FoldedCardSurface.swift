@@ -52,13 +52,8 @@ struct MemoCardSurface: View {
     let paperColor: Color
 
     var body: some View {
-        ZStack {
-            MemoCardShape()
-                .fill(paperColor)
-
-            PaperGrain()
-                .clipShape(MemoCardShape())
-        }
+        MemoCardShape()
+            .fill(paperColor)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
@@ -83,38 +78,6 @@ struct MemoCardSheen: View {
         )
         .allowsHitTesting(false)
         .accessibilityHidden(true)
-    }
-}
-
-struct PaperGrain: View {
-    var body: some View {
-        Canvas { context, size in
-            let area = max(1, size.width * size.height)
-            let fiberCount = max(42, Int(area / 900))
-
-            for index in 0..<fiberCount {
-                let x = unitValue(index * 47 + 13) * size.width
-                let y = unitValue(index * 71 + 29) * size.height
-                let length = 3 + unitValue(index * 31 + 7) * 8
-                let rise = (unitValue(index * 19 + 3) - 0.5) * 1.8
-
-                var fiber = Path()
-                fiber.move(to: CGPoint(x: x, y: y))
-                fiber.addLine(to: CGPoint(x: min(size.width, x + length), y: y + rise))
-
-                context.stroke(
-                    fiber,
-                    with: .color(.black.opacity(index.isMultiple(of: 3) ? 0.025 : 0.016)),
-                    lineWidth: index.isMultiple(of: 4) ? 0.55 : 0.35
-                )
-            }
-        }
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-    }
-
-    private func unitValue(_ seed: Int) -> CGFloat {
-        CGFloat((seed * 37 + 17) % 101) / 101
     }
 }
 
