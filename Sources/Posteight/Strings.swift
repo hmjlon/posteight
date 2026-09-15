@@ -62,6 +62,26 @@ enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
 /// Xcode build paths — two places to drift. Move to `.lproj` when a third language or a
 /// translator shows up.
 private let englishStrings: [String: String] = [
+    "Mac에서 본인 확인을 완료하지 못했어요.": "Unable to verify your identity on this Mac.",
+    "이 Mac에서 본인 확인을 사용할 수 없어요.": "Owner authentication is unavailable on this Mac.",
+    "앱 잠금을 사용하려면 본인 확인이 필요해요.": "Verify your identity to enable app lock.",
+    "Posteight의 잠금을 해제해 주세요.": "Authenticate to unlock Posteight.",
+    "앱 잠금을 끄려면 본인 확인이 필요해요.": "Verify your identity to turn off app lock.",
+    "Posteight이 잠겨 있어요": "Posteight is locked",
+    "잠금 해제": "Unlock",
+    "Touch ID 또는 Mac 로그인 암호로 잠금을 해제해요.": "Unlock with Touch ID or your Mac login password.",
+    "본인 확인 중…": "Authenticating…",
+    "계속": "Continue",
+    "앱 잠금": "App lock",
+    "앱 잠금 사용": "Use app lock",
+    "Touch ID 또는 Mac 로그인 암호로 잠금을 해제할 수 있어요. 메뉴 막대에서 앱 전체를 잠그고, 다시 실행하면 잠긴 상태로 시작해요.": "Unlock with Touch ID or your Mac login password. Lock the whole app from the menu bar; it starts locked after relaunching.",
+    "앱 잠금 끄기": "Turn off app lock",
+    "Touch ID 또는 Mac 로그인 암호로 본인 확인 후 앱 잠금을 사용해요.": "Verify with Touch ID or your Mac login password to enable app lock.",
+    "Touch ID 또는 Mac 로그인 암호로 본인 확인 후 앱 잠금을 꺼요.": "Verify with Touch ID or your Mac login password to turn off app lock.",
+    "이 기능은 화면을 잠그며 저장된 메모를 암호화하지는 않아요.": "This locks the screen but does not encrypt stored notes.",
+    "Posteight 잠그기": "Lock Posteight",
+    "잠겨 있어요": "Locked",
+
     "드래그하여 순서 변경 · 우클릭하여 다른 메모로 이동": "Drag to reorder · Right-click to move to another memo",
     "할 일 이동": "Move task",
     "다른 메모로 이동": "Move to another memo",

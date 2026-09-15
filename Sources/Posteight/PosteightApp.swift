@@ -65,6 +65,7 @@ final class NoteWindowCoordinator {
     func installHistoryShortcuts(store: PosteightStore) {
         guard historyMonitor == nil else { return }
         historyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak store] event in
+            guard !AppLock.shared.isLocked else { return event }
             guard let store, let shortcut = NoteKeyboardShortcut(event: event),
                   shortcut == .undo || shortcut == .redo else { return event }
             if let editor = (event.window ?? NSApp.keyWindow)?.firstResponder as? NSTextView {
@@ -162,6 +163,7 @@ final class NoteWindowCoordinator {
     }
 
     func present(_ noteID: UUID, openWindow: (UUID) -> Void) {
+        if AppLock.shared.isLocked { AppUnlockWindow.present() }
         visibility.present(noteID)
 
         if let window = windows[noteID]?.value {
@@ -277,6 +279,7 @@ extension View {
 @main
 struct PosteightApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @ObservedObject private var lock = AppLock.shared
     @StateObject private var store = PosteightStore(language: AppSettings.shared.language)
 
     var body: some Scene {
@@ -307,6 +310,7 @@ struct PosteightApp: App {
                                   origin: NSScreen.noteSpawnOrigin)
                 }
                 .keyboardShortcut("n", modifiers: [.command])
+                .disabled(lock.isLocked)
             }
 
             CommandGroup(replacing: .appSettings) {
@@ -318,16 +322,16 @@ struct PosteightApp: App {
         }
 
         Window("오늘 기록", id: WindowID.dailyLog) {
-            DailyLogPreviewView()
-                .environmentObject(store)
+            AppLockGate { DailyLogPreviewView().environmentObject(store) }
+                .frame(minWidth: 440, minHeight: 350)
                 .excludedFromScreenCapture()
         }
         .windowResizability(.contentSize)
         .defaultPosition(.center)
 
         Window("휴지통", id: WindowID.trash) {
-            TrashView()
-                .environmentObject(store)
+            AppLockGate { TrashView().environmentObject(store) }
+                .frame(minWidth: 440, minHeight: 350)
                 .excludedFromScreenCapture()
         }
         .windowResizability(.contentSize)
@@ -355,12 +359,19 @@ private struct MenuBarLabel: View {
     @EnvironmentObject private var store: PosteightStore
     @ObservedObject private var settings = AppSettings.shared
     @Environment(\.openWindow) private var openWindow
+    @ObservedObject private var lock = AppLock.shared
     @ObservedObject private var reminders = ReminderService.shared
 
     var body: some View {
         // Keep the brand mark intact and let the count read as status beside it. With no tasks,
         // the number disappears and the quiet icon is all the app needs to leave behind.
-        MenuBarProgressCard(done: store.doneCount, total: store.totalCount, count: displayCount)
+        Group {
+            if lock.isLocked {
+                Image(systemName: "lock.fill")
+            } else {
+                MenuBarProgressCard(done: store.doneCount, total: store.totalCount, count: displayCount)
+            }
+        }
             .accessibilityLabel(accessibilityLabel)
         .task {
             // 창을 하나라도 열기 전에 끝나야 한다. 아래 presentNote 가 만드는 창이 이 값을
@@ -410,6 +421,7 @@ private struct MenuBarLabel: View {
     }
 
     private var accessibilityLabel: String {
+        guard !lock.isLocked else { return "Posteight, \(L("잠겨 있어요"))" }
         guard store.totalCount > 0 else { return "Posteight" }
         if store.doneCount >= store.totalCount {
             return "Posteight, \(L("모두 완료"))"

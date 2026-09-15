@@ -90,6 +90,8 @@ struct SettingsView: View {
             // the old language until the memo happened to be edited.
             .onChange(of: settings.language) { rebuildScheduledReminders() }
 
+            AppLockSettingsSection()
+
             FontSettingsSection()
 
             Section(L("앱")) {

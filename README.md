@@ -114,6 +114,12 @@ There is no account, no sync, and no telemetry. Export is explicit: the daily lo
 the clipboard as Markdown, marked so clipboard managers keep it out of their history.
 Notion synchronization is not implemented yet.
 
+Enable **Settings → App lock** to lock all of Posteight from the menu bar. Unlocking uses Touch ID
+or your Mac login password, so Posteight stores no separate password. While locked, the app hides
+memos, Trash, the daily log, and task counts. Enabling app lock also keeps task text out of
+notifications, and a relaunched app stays locked until you authenticate. This is a screen lock;
+it does not encrypt the stored note files.
+
 Locking the screen puts the visible memos away, and unlocking brings them back where they
 were; memos you hid yourself stay hidden either way. Memo windows are also left out of
 screen shares, recordings, and screenshots — handing your screen to a meeting does not

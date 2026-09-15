@@ -3,6 +3,7 @@ import SwiftUI
 
 struct StickyNoteWindowView: View {
     @EnvironmentObject private var store: PosteightStore
+    @ObservedObject private var lock = AppLock.shared
     @ObservedObject private var settings = AppSettings.shared
     @Environment(\.dismissWindow) private var dismissWindow
 
@@ -39,26 +40,30 @@ struct StickyNoteWindowView: View {
         ZStack {
             MemoCardSurface(paperColor: Color(hex: note.paperHex))
 
-            VStack(spacing: 0) {
-                memoTabBar(note: note, selectedTab: selectedTab)
+            if lock.isLocked {
+                LockedContentView().clipShape(MemoCardShape())
+            } else {
+                VStack(spacing: 0) {
+                    memoTabBar(note: note, selectedTab: selectedTab)
 
-                StickyNoteView(
-                    note: note,
-                    tab: selectedTab,
-                    onResizeChanged: { translation in
-                        resizeWindow(translation: translation)
-                    },
-                    onResizeEnded: { translation in
-                        finishResizingWindow(translation: translation)
-                    },
-                    onDelete: requestDeleteSelectedTab,
-                    isAllContentSelected: isAllContentSelected,
-                    isPencilCaseOpen: $isPencilCaseOpen
-                )
-                .id(selectedTab.id)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    StickyNoteView(
+                        note: note,
+                        tab: selectedTab,
+                        onResizeChanged: { translation in
+                            resizeWindow(translation: translation)
+                        },
+                        onResizeEnded: { translation in
+                            finishResizingWindow(translation: translation)
+                        },
+                        onDelete: requestDeleteSelectedTab,
+                        isAllContentSelected: isAllContentSelected,
+                        isPencilCaseOpen: $isPencilCaseOpen
+                    )
+                    .id(selectedTab.id)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                .clipShape(MemoCardShape())
             }
-            .clipShape(MemoCardShape())
 
             MemoCardSheen()
                 .clipShape(MemoCardShape())
@@ -82,7 +87,7 @@ struct StickyNoteWindowView: View {
         .background {
             NoteWindowConfigurator(
                 note: note,
-                windowTitle: selectedTab.title,
+                windowTitle: lock.isLocked ? "Posteight" : selectedTab.title,
                 onEscape: closeCard,
                 onDelete: requestDeleteSelectedTab,
                 onSelectAll: {
@@ -120,6 +125,16 @@ struct StickyNoteWindowView: View {
         }
         .onChange(of: settings.hidesNotesFromScreenCapture) { _, _ in
             window?.sharingType = settings.noteWindowSharingType
+        }
+        .onChange(of: lock.isLocked) { _, locked in
+            if locked {
+                isPencilCaseOpen = false
+                showsDeleteConfirmation = false
+                pendingDeleteTabID = nil
+                editingTabID = nil
+                isAllContentSelected = false
+                window?.makeFirstResponder(nil)
+            }
         }
         .onChange(of: selectedTab.id) { _, _ in
             isAllContentSelected = false
@@ -716,7 +731,7 @@ private struct NoteWindowConfigurator: NSViewRepresentable {
             guard escapeMonitor == nil else { return }
 
             dragMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseUp]) { [weak self] event in
-                guard let self else { return event }
+                guard let self, !AppLock.shared.isLocked else { return event }
                 if event.type == .leftMouseDown {
                     if event.window === self.window {
                         self.onClearSelection?()
@@ -736,6 +751,10 @@ private struct NoteWindowConfigurator: NSViewRepresentable {
                     event.window === self.window
                 else { return event }
 
+                if AppLock.shared.isLocked {
+                    if NoteKeyboardShortcut(event: event) == .close { self.onEscape?(); return nil }
+                    return event
+                }
                 switch NoteKeyboardShortcut(event: event) {
                 case .selectAll:
                     if let editor = self.window?.firstResponder as? NSTextView,

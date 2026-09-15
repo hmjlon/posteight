@@ -8,6 +8,7 @@ final class ReminderService: NSObject, ObservableObject, UNUserNotificationCente
     static let shared = ReminderService()
     @Published var errorMessage: String?
     private var subscription: AnyCancellable?
+    private var lockSubscription: AnyCancellable?
     private var synchronization: Task<String?, Never>?
     private let injectedClient: (any ReminderNotificationClient)?
     private lazy var systemClient: SystemReminderNotificationClient? = {
@@ -38,6 +39,12 @@ final class ReminderService: NSObject, ObservableObject, UNUserNotificationCente
     func connect(to store: PosteightStore) {
         guard subscription == nil, client != nil else { return }
         if injectedClient == nil { systemClient?.center.delegate = self }
+        lockSubscription = AppLock.shared.$isEnabled.dropFirst().sink { [weak self, weak store] _ in
+            Task { @MainActor in
+                guard let self, let store else { return }
+                _ = await self.retrySynchronization(for: store.notes)
+            }
+        }
         subscription = store.$notes
             .map { Self.reminders(in: $0, now: .distantPast) }
             .removeDuplicates()
@@ -149,7 +156,7 @@ final class ReminderService: NSObject, ObservableObject, UNUserNotificationCente
         let settings = AppSettings.shared
         for reminder in reminders {
             let desiredBody = Self.notificationBody(
-                for: reminder, showsPreview: settings.showsReminderPreview, language: settings.language
+                for: reminder, showsPreview: settings.showsReminderPreview && !AppLock.shared.isEnabled, language: settings.language
             )
             // Do not reset unchanged requests on every keystroke elsewhere in the app. The
             // comparison has to use the body actually about to be sent, or flipping the preview

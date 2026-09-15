@@ -6,6 +6,7 @@ import SwiftUI
 struct MenuBarPanelView: View {
     @EnvironmentObject private var store: PosteightStore
     @ObservedObject private var settings = AppSettings.shared
+    @ObservedObject private var lock = AppLock.shared
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -15,29 +16,48 @@ struct MenuBarPanelView: View {
             Divider()
                 .padding(.vertical, 4)
 
-            PanelRow(title: L("새 메모"), systemImage: "plus", shortcut: "⌘N") {
-                showNote(store.addNote(language: settings.language,
-                                       origin: NSScreen.noteSpawnOrigin))
-            }
+            if lock.isLocked {
+                PanelRow(title: L("잠금 해제"), systemImage: "lock.open") {
+                    AppUnlockWindow.present()
+                }
+                PanelRow(title: L("메모 보기"), systemImage: "rectangle.on.rectangle") {
+                    showNotes(store.notes.map(\.id))
+                    AppUnlockWindow.present()
+                }
+            } else {
+                PanelRow(title: L("새 메모"), systemImage: "plus", shortcut: "⌘N") {
+                    showNote(store.addNote(language: settings.language,
+                                           origin: NSScreen.noteSpawnOrigin))
+                }
 
-            PanelRow(title: L("메모 보기"), systemImage: "rectangle.on.rectangle") {
-                showNotes(store.notes.map(\.id))
-            }
+                PanelRow(title: L("메모 보기"), systemImage: "rectangle.on.rectangle") {
+                    showNotes(store.notes.map(\.id))
+                }
 
-            PanelRow(title: L("모든 메모 숨기기"), systemImage: "eye.slash") {
-                NoteWindowCoordinator.shared.hideAll()
-            }
+                PanelRow(title: L("모든 메모 숨기기"), systemImage: "eye.slash") {
+                    NoteWindowCoordinator.shared.hideAll()
+                }
 
-            PanelRow(
-                title: L("휴지통"),
-                systemImage: trashIsEmpty ? "trash" : "trash.fill",
-                badge: trashIsEmpty ? nil : "\(store.trashedNotes.count + store.trashedTabs.count)"
-            ) {
-                open(windowID: WindowID.trash)
-            }
+                PanelRow(
+                    title: L("휴지통"),
+                    systemImage: trashIsEmpty ? "trash" : "trash.fill",
+                    badge: trashIsEmpty ? nil : "\(store.trashedNotes.count + store.trashedTabs.count)"
+                ) {
+                    open(windowID: WindowID.trash)
+                }
 
-            Divider()
-                .padding(.vertical, 4)
+                Divider()
+                    .padding(.vertical, 4)
+
+                if lock.isEnabled {
+                    PanelRow(title: L("Posteight 잠그기"), systemImage: "lock") {
+                        for window in NSApp.windows { window.makeFirstResponder(nil) }
+                        store.flush()
+                        SettingsModal.dismiss()
+                        lock.lock()
+                    }
+                }
+            }
 
             PanelRow(title: L("설정…"), systemImage: "gearshape", shortcut: "⌘,") {
                 SettingsModal.present(store: store)
@@ -71,6 +91,7 @@ struct MenuBarPanelView: View {
     }
 
     private var statusLabel: String {
+        guard !lock.isLocked else { return L("잠겨 있어요") }
         guard store.totalCount > 0 else {
             return L("할 일 없음")
         }

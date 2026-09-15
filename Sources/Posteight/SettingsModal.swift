@@ -15,6 +15,7 @@ enum SettingsModal {
     private static let windowDelegate = SettingsWindowDelegate()
 
     static func present(store: PosteightStore) {
+        guard !AppLock.shared.isLocked else { AppUnlockWindow.present(); return }
         if let window {
             NSApp.activate(ignoringOtherApps: true)
             window.makeKeyAndOrderFront(nil)
@@ -22,8 +23,7 @@ enum SettingsModal {
         }
 
         let hosting = NSHostingController(
-            rootView: SettingsView(onClose: dismiss)
-                .environmentObject(store)
+            rootView: AppLockGate { SettingsView(onClose: dismiss).environmentObject(store) }
         )
 
         let window = NSWindow(contentViewController: hosting)

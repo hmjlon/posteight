@@ -87,6 +87,8 @@ Sources/Posteight/
   Models.swift               StickyNote, MemoTab, TodoItem, 휴지통 타입, PenStyle,
                              ColorOption, StickerOption, DesignTokens
   AppSettings.swift          설정 싱글턴(UserDefaults 기반), activation policy
+  AppLock.swift              macOS 본인 인증, 잠금 설정과 현재 잠금 상태
+  AppLockView.swift          잠금 화면, 시스템 인증 창 연결, 설정 UI
   Strings.swift              AppLanguage, L(), Lf(), englishStrings 테이블
   MenuBarPanelView.swift     팝오버 내용
   FoldedCardSurface.swift    종이 도형과 질감, 상태 아이템 글리프 MenuBarProgressCard
