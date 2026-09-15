@@ -156,7 +156,12 @@ struct StickyNoteWindowView: View {
         .frame(height: MemoSurfaceMetrics.tabBarHeight, alignment: .bottom)
         .background {
             Color(hex: note.paperHex)
-                .overlay(Color.black.opacity(0.055))
+                .overlay {
+                    // Inactive tabs sit 3pt above the body. Keep that gap paper-colored
+                    // so the darker tab-bar background does not form a horizontal stripe.
+                    Color.black.opacity(0.055)
+                        .padding(.bottom, 3)
+                }
         }
     }
 
@@ -354,10 +359,11 @@ struct StickyNoteWindowView: View {
             .padding(.bottom, 3)
             .clipped()
             .overlay(alignment: .trailing) {
-                Rectangle()
-                    .fill(Color.black.opacity(0.08))
-                    .frame(width: 0.5, height: 14)
-                    .padding(.bottom, 8)
+                Capsule()
+                    .fill(Color.black.opacity(0.06))
+                    .frame(width: 0.5, height: 12)
+                    .offset(y: -1.5)
+                    .allowsHitTesting(false)
             }
             .onHover(perform: onHover)
         }
