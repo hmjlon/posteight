@@ -13,6 +13,7 @@ struct PlainEditableTextField: NSViewRepresentable {
     /// handed to AppKit directly.
     var isFocused = false
     var placesCaretAtEndOnFocus = false
+    var showsWholeSelection = false
     var onEditingChanged: ((Bool) -> Void)?
     var onSubmit: (() -> Void)?
     var onMoveUp: (() -> Void)?
@@ -61,7 +62,11 @@ struct PlainEditableTextField: NSViewRepresentable {
         if let editor = textField.currentEditor() as? NSTextView, editor.font != font {
             editor.font = font
         }
-        textField.textColor = NSColor.black.withAlphaComponent(textOpacity)
+        textField.drawsBackground = showsWholeSelection
+        textField.backgroundColor = showsWholeSelection ? .selectedTextBackgroundColor : .clear
+        textField.textColor = showsWholeSelection
+            ? .selectedTextColor
+            : NSColor.black.withAlphaComponent(textOpacity)
 
         // Only the rising edge moves focus, so a redraw never steals the caret back.
         if isFocused, !context.coordinator.didRequestFocus {

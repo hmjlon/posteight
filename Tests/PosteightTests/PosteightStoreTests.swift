@@ -336,6 +336,20 @@ struct DailyLogTests {
     }
 }
 
+@Suite("Tab copy")
+struct TabCopyTests {
+    @Test("Copies the visible tab text in display order")
+    func formatsTab() {
+        let tab = MemoTab(name: "메모 1", title: "오늘 할 일", items: [
+            TodoItem(title: "첫 번째"),
+            TodoItem(title: "   "),
+            TodoItem(title: "완료한 항목", isDone: true)
+        ])
+
+        #expect(PosteightStore.tabPlainText(tab) == "오늘 할 일\n첫 번째\n완료한 항목")
+    }
+}
+
 @Suite("Note position anchor")
 struct NotePositionAnchorTests {
     private func placed(_ x: Double, _ y: Double) -> StickyNote {

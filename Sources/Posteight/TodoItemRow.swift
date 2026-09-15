@@ -11,6 +11,7 @@ struct TodoItemRow: View {
     let note: StickyNote
     let tab: MemoTab
     let item: TodoItem
+    let isAllContentSelected: Bool
     @Binding var focusedItemID: UUID?
 
     @State private var strikeProgress: CGFloat = 0
@@ -80,6 +81,7 @@ struct TodoItemRow: View {
                     textOpacity: item.isDone ? 0.38 : 0.76,
                     isFocused: focusedItemID == item.id,
                     placesCaretAtEndOnFocus: true,
+                    showsWholeSelection: isAllContentSelected && hasContent,
                     onEditingChanged: {
                         isEditingText = $0
                         if $0 { focusedItemID = item.id }

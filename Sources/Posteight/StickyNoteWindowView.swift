@@ -18,6 +18,7 @@ struct StickyNoteWindowView: View {
     @State private var editingTabID: UUID?
     @State private var hoveredTabID: UUID?
     @State private var lastMergeAttempt = Date.distantPast
+    @State private var isAllContentSelected = false
 
     var body: some View {
         Group {
@@ -51,6 +52,7 @@ struct StickyNoteWindowView: View {
                         finishResizingWindow(translation: translation)
                     },
                     onDelete: requestDeleteSelectedTab,
+                    isAllContentSelected: isAllContentSelected,
                     isPencilCaseOpen: $isPencilCaseOpen
                 )
                 .id(selectedTab.id)
@@ -83,6 +85,17 @@ struct StickyNoteWindowView: View {
                 windowTitle: selectedTab.title,
                 onEscape: closeCard,
                 onDelete: requestDeleteSelectedTab,
+                onSelectAll: {
+                    isAllContentSelected = true
+                },
+                onCopyAll: {
+                    guard isAllContentSelected else { return false }
+                    store.copyTabToClipboard(noteID: note.id, tabID: selectedTab.id)
+                    return true
+                },
+                onClearSelection: {
+                    isAllContentSelected = false
+                },
                 onMoveEnded: mergeAtDropLocation,
                 onAddTab: {
                     editingTabID = nil
@@ -107,6 +120,9 @@ struct StickyNoteWindowView: View {
         }
         .onChange(of: settings.hidesNotesFromScreenCapture) { _, _ in
             window?.sharingType = settings.noteWindowSharingType
+        }
+        .onChange(of: selectedTab.id) { _, _ in
+            isAllContentSelected = false
         }
     }
 
@@ -607,6 +623,9 @@ private struct NoteWindowConfigurator: NSViewRepresentable {
     let windowTitle: String
     let onEscape: () -> Void
     let onDelete: () -> Void
+    let onSelectAll: () -> Void
+    let onCopyAll: () -> Bool
+    let onClearSelection: () -> Void
     let onMoveEnded: () -> Void
     let onAddTab: () -> Void
     let onWindowAvailable: (NSWindow) -> Void
@@ -631,6 +650,9 @@ private struct NoteWindowConfigurator: NSViewRepresentable {
             coordinator.onEscape = onEscape
             coordinator.onAddTab = onAddTab
             coordinator.onDelete = onDelete
+            coordinator.onSelectAll = onSelectAll
+            coordinator.onCopyAll = onCopyAll
+            coordinator.onClearSelection = onClearSelection
             coordinator.onMoveEnded = onMoveEnded
             coordinator.window = window
             onWindowAvailable(window)
@@ -682,6 +704,9 @@ private struct NoteWindowConfigurator: NSViewRepresentable {
         var onEscape: (() -> Void)?
         var onAddTab: (() -> Void)?
         var onDelete: (() -> Void)?
+        var onSelectAll: (() -> Void)?
+        var onCopyAll: (() -> Bool)?
+        var onClearSelection: (() -> Void)?
         var onMoveEnded: (() -> Void)?
         private var dragStartFrame: NSRect?
         nonisolated(unsafe) private var dragMonitor: Any?
@@ -693,6 +718,9 @@ private struct NoteWindowConfigurator: NSViewRepresentable {
             dragMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseUp]) { [weak self] event in
                 guard let self else { return event }
                 if event.type == .leftMouseDown {
+                    if event.window === self.window {
+                        self.onClearSelection?()
+                    }
                     self.dragStartFrame = event.window === self.window ? self.window?.frame : nil
                 } else if let start = self.dragStartFrame {
                     self.dragStartFrame = nil
@@ -709,6 +737,15 @@ private struct NoteWindowConfigurator: NSViewRepresentable {
                 else { return event }
 
                 switch NoteKeyboardShortcut(event: event) {
+                case .selectAll:
+                    if let editor = self.window?.firstResponder as? NSTextView,
+                       editor.hasMarkedText() {
+                        return event
+                    }
+                    self.onSelectAll?()
+                    return nil
+                case .copy:
+                    return self.onCopyAll?() == true ? nil : event
                 case .addTab:
                     self.onAddTab?()
                     return nil

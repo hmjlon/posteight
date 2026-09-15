@@ -819,14 +819,33 @@ final class PosteightStore: ObservableObject {
         return lines.joined(separator: "\n")
     }
 
-    /// The one path memo text takes out of the app. The general pasteboard is readable by every
+    nonisolated static func tabPlainText(_ tab: MemoTab) -> String {
+        ([tab.title] + tab.items.map(\.title))
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .joined(separator: "\n")
+    }
+
+    func copyTabToClipboard(
+        noteID: UUID,
+        tabID: UUID,
+        to pasteboard: NSPasteboard = .general
+    ) {
+        guard let tab = tab(noteID: noteID, tabID: tabID) else { return }
+        writeConcealed(Self.tabPlainText(tab), to: pasteboard)
+    }
+
+    /// Clipboard paths are concealed because the general pasteboard is readable by every
     /// process and syncs through Universal Clipboard, and a clipboard manager (Maccy, Raycast)
     /// files whatever passes through it into a permanent plain-text history.
     /// `pasteboard` is only overridden by tests, so running them never disturbs what the user
     /// has on their clipboard.
     func copyDailyLogToClipboard(language: AppLanguage = .korean, to pasteboard: NSPasteboard = .general) {
+        writeConcealed(dailyLogMarkdown(language: language), to: pasteboard)
+    }
+
+    private func writeConcealed(_ text: String, to pasteboard: NSPasteboard) {
         pasteboard.clearContents()
-        pasteboard.setString(dailyLogMarkdown(language: language), forType: .string)
+        pasteboard.setString(text, forType: .string)
         // The community convention clipboard managers honour to keep an entry out of their
         // history. It is an extra type on the same item, so pasting is unaffected.
         pasteboard.setString("", forType: Self.concealedPasteboardType)

@@ -11,6 +11,7 @@ struct StickyNoteView: View {
     let onResizeChanged: (CGSize) -> Void
     let onResizeEnded: (CGSize) -> Void
     let onDelete: () -> Void
+    let isAllContentSelected: Bool
     @Binding var isPencilCaseOpen: Bool
     @State private var focusedItemID: UUID?
     @State private var resizeAnchor: CGPoint?
@@ -39,7 +40,8 @@ struct StickyNoteView: View {
                 fontSize: 13 + fontSizeAdjustment,
                 fontWeight: .medium,
                 fontName: fonts.fontName(for: note.fontID, defaultID: settings.defaultFontID),
-                textOpacity: 0.72
+                textOpacity: 0.72,
+                showsWholeSelection: isAllContentSelected && !tab.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             )
             .frame(height: 22 + max(0, fontSizeAdjustment))
 
@@ -57,7 +59,13 @@ struct StickyNoteView: View {
 
                     VStack(spacing: 5) {
                         ForEach(tab.items) { item in
-                            TodoItemRow(note: note, tab: tab, item: item, focusedItemID: $focusedItemID)
+                            TodoItemRow(
+                                note: note,
+                                tab: tab,
+                                item: item,
+                                isAllContentSelected: isAllContentSelected,
+                                focusedItemID: $focusedItemID
+                            )
                                 .id(item.id)
                                 .modifier(TodoItemDropTarget(noteID: note.id, tabID: tab.id, beforeID: item.id))
                         }
