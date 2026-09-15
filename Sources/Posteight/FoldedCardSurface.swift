@@ -6,8 +6,7 @@ enum MemoSurfaceMetrics {
     static let activeTabHeight: CGFloat = 32
     static let inactiveTabHeight: CGFloat = 27
     static let maximumTabWidth: CGFloat = 180
-    /// Overflow scrolls horizontally so every tab stays reachable in narrow notes.
-    static let minimumTabWidth: CGFloat = 30
+    static let tabListButtonWidth: CGFloat = 26
     static let maximumTabCount = 10
     static let addTabButtonWidth: CGFloat = 30
     static let trailingControlsWidth: CGFloat = 56
@@ -23,6 +22,8 @@ struct MemoCardShape: Shape {
 
 /// Chrome-like tabs use calm rounded shoulders and a flat bottom that can join the memo body.
 struct MemoTabShape: Shape {
+    var roundsLeadingCorner = true
+
     func path(in rect: CGRect) -> Path {
         let radius = min(
             MemoSurfaceMetrics.tabCornerRadius,
@@ -32,9 +33,10 @@ struct MemoTabShape: Shape {
 
         var path = Path()
         path.move(to: CGPoint(x: rect.minX, y: rect.maxY))
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + radius))
+        let leadingRadius = roundsLeadingCorner ? radius : 0
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + leadingRadius))
         path.addQuadCurve(
-            to: CGPoint(x: rect.minX + radius, y: rect.minY),
+            to: CGPoint(x: rect.minX + leadingRadius, y: rect.minY),
             control: CGPoint(x: rect.minX, y: rect.minY)
         )
         path.addLine(to: CGPoint(x: rect.maxX - radius, y: rect.minY))

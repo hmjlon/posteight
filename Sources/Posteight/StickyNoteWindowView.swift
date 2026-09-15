@@ -122,7 +122,12 @@ struct StickyNoteWindowView: View {
             )
 
             HStack(alignment: .bottom, spacing: 0) {
-                memoTabs(note: note, selectedTab: selectedTab, availableWidth: occupiedTabWidth)
+                memoTabs(
+                    note: note,
+                    selectedTab: selectedTab,
+                    availableWidth: occupiedTabWidth,
+                    isAtMinimumWidth: geometry.size.width <= CGFloat(DesignTokens.minimumNoteSize.width)
+                )
                     .frame(width: occupiedTabWidth)
 
                 let canAddTab = note.tabs.count < MemoSurfaceMetrics.maximumTabCount
@@ -155,41 +160,86 @@ struct StickyNoteWindowView: View {
         }
     }
 
+    @ViewBuilder
     private func memoTabs(
         note: StickyNote,
         selectedTab: MemoTab,
-        availableWidth: CGFloat
+        availableWidth: CGFloat,
+        isAtMinimumWidth: Bool
     ) -> some View {
-        let tabCount = max(note.tabs.count, 1)
-        let dividedWidth = availableWidth / CGFloat(tabCount)
-        let tabWidth = min(MemoSurfaceMetrics.maximumTabWidth, max(MemoSurfaceMetrics.minimumTabWidth, dividedWidth))
+        let dividedWidth = availableWidth / CGFloat(max(note.tabs.count, 1))
 
-        return ScrollViewReader { proxy in
-            ScrollView(.horizontal) {
-                HStack(alignment: .bottom, spacing: 0) {
+        if note.tabs.count > 1 && isAtMinimumWidth {
+            // Collapse only at the window's minimum width, regardless of tab count.
+            HStack(alignment: .bottom, spacing: 0) {
+                memoTab(
+                    note,
+                    tab: selectedTab,
+                    isSelected: true,
+                    width: max(0, availableWidth - MemoSurfaceMetrics.tabListButtonWidth),
+                    allowsClosing: false
+                )
+                .modifier(TodoItemDropTarget(noteID: note.id, tabID: selectedTab.id, selectsTab: true))
+
+                Menu {
                     ForEach(note.tabs) { tab in
-                        memoTab(
-                            note,
-                            tab: tab,
-                            isSelected: tab.id == selectedTab.id,
-                            width: tabWidth
-                        )
-                        .id(tab.id)
-                        .modifier(TodoItemDropTarget(noteID: note.id, tabID: tab.id, selectsTab: true))
+                        Button {
+                            editingTabID = nil
+                            store.selectTab(noteID: note.id, tabID: tab.id)
+                        } label: {
+                            if tab.id == selectedTab.id {
+                                Label(tab.name, systemImage: "checkmark")
+                            } else {
+                                Text(tab.name)
+                            }
+                        }
                     }
+                } label: {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                        .frame(
+                            width: MemoSurfaceMetrics.tabListButtonWidth,
+                            height: MemoSurfaceMetrics.activeTabHeight
+                        )
+                        .contentShape(Rectangle())
                 }
-                .frame(height: MemoSurfaceMetrics.tabBarHeight, alignment: .bottom)
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .frame(height: MemoSurfaceMetrics.activeTabHeight)
+                // Inset the arrow from the top and right without shifting the tab surface.
+                .offset(x: -3)
+                // AppKit can replace a menu label's symbol styling. Fade the rendered
+                // control instead, matching the adjacent controls even for template images.
+                .compositingGroup()
+                .opacity(0.48 * (isCardHovered || isPencilCaseOpen ? 1 : 0.42))
+                .animation(.easeOut(duration: 0.14), value: isCardHovered)
+                .animation(.easeOut(duration: 0.14), value: isPencilCaseOpen)
+                .help(L("탭 목록"))
+                .accessibilityLabel(L("탭 목록"))
             }
-            .scrollIndicators(.hidden)
-            .onChange(of: selectedTab.id, initial: true) { _, id in
-                proxy.scrollTo(id)
+            // Paint the entire allocated tab width, including any space left by the
+            // native menu's intrinsic sizing, rather than only the HStack's content.
+            .frame(width: availableWidth, height: MemoSurfaceMetrics.activeTabHeight, alignment: .leading)
+            .background {
+                MemoTabShape(roundsLeadingCorner: false)
+                    .fill(Color(hex: note.paperHex))
             }
-            .onChange(of: availableWidth) { _, _ in
-                proxy.scrollTo(selectedTab.id)
+            .frame(width: availableWidth, height: MemoSurfaceMetrics.tabBarHeight, alignment: .bottom)
+        } else {
+            HStack(alignment: .bottom, spacing: 0) {
+                ForEach(note.tabs) { tab in
+                    memoTab(
+                        note,
+                        tab: tab,
+                        isSelected: tab.id == selectedTab.id,
+                        width: dividedWidth
+                    )
+                    .modifier(TodoItemDropTarget(noteID: note.id, tabID: tab.id, selectsTab: true))
+                }
             }
+            .frame(width: availableWidth, height: MemoSurfaceMetrics.tabBarHeight, alignment: .bottomLeading)
         }
-        .frame(width: availableWidth, height: MemoSurfaceMetrics.tabBarHeight, alignment: .bottomLeading)
-        .clipped()
     }
 
     @ViewBuilder
@@ -197,12 +247,13 @@ struct StickyNoteWindowView: View {
         _ note: StickyNote,
         tab: MemoTab,
         isSelected: Bool,
-        width: CGFloat
+        width: CGFloat,
+        allowsClosing: Bool = true
     ) -> some View {
         let showsSticker = width >= 54
         let horizontalPadding: CGFloat = width >= 74 ? 10 : 5
         let isHovered = hoveredTabID == tab.id
-        let showsClose = editingTabID != tab.id && (isSelected || isHovered)
+        let showsClose = allowsClosing && editingTabID != tab.id && (isSelected || isHovered)
         let onHover: (Bool) -> Void = { hovering in
             hoveredTabID = hovering ? tab.id : (hoveredTabID == tab.id ? nil : hoveredTabID)
         }

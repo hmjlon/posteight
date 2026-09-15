@@ -213,6 +213,7 @@ private let englishStrings: [String: String] = [
     "대각선 크기 조절": "Resize",
 
     // StickyNoteWindowView
+    "탭 목록": "Tab list",
     "이 메모에 새 탭 추가": "Add a tab to this memo",
     "탭은 이 메모에 최대 %d개까지 둘 수 있어요": "A memo holds at most %d tabs",
     "현재 탭 — 다시 클릭하면 이름을 수정할 수 있어요": "Current tab — click it again to rename",
