@@ -62,10 +62,17 @@ struct PlainEditableTextField: NSViewRepresentable {
         if let editor = textField.currentEditor() as? NSTextView, editor.font != font {
             editor.font = font
         }
+        // 선택 배경은 창이 key 일 때만 활성 색이다. macOS 는 비활성 선택을 회색으로 낮추고,
+        // 여기서 그러지 않으면 뒤로 물러난 메모가 활성 창처럼 파랗게 남는다. 창이 key 를
+        // 잃으면 전체 선택 자체가 풀리지만(`StickyNoteWindowView` 의 `didResignKey`),
+        // SwiftUI 가 다시 그리기 전에 AppKit 이 먼저 비활성 모습으로 한 번 그린다.
+        let isEmphasized = textField.window?.isKeyWindow ?? false
         textField.drawsBackground = showsWholeSelection
-        textField.backgroundColor = showsWholeSelection ? .selectedTextBackgroundColor : .clear
+        textField.backgroundColor = showsWholeSelection
+            ? (isEmphasized ? .selectedTextBackgroundColor : .unemphasizedSelectedTextBackgroundColor)
+            : .clear
         textField.textColor = showsWholeSelection
-            ? .selectedTextColor
+            ? (isEmphasized ? .selectedTextColor : .unemphasizedSelectedTextColor)
             : NSColor.black.withAlphaComponent(textOpacity)
 
         // Only the rising edge moves focus, so a redraw never steals the caret back.

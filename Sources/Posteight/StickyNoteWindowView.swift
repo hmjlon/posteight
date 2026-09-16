@@ -99,7 +99,9 @@ struct StickyNoteWindowView: View {
                     return true
                 },
                 onClearSelection: {
+                    guard isAllContentSelected else { return false }
                     isAllContentSelected = false
+                    return true
                 },
                 onMoveEnded: mergeAtDropLocation,
                 onAddTab: {
@@ -137,6 +139,14 @@ struct StickyNoteWindowView: View {
             }
         }
         .onChange(of: selectedTab.id) { _, _ in
+            isAllContentSelected = false
+        }
+        // 창이 key 를 잃으면 전체 선택을 내린다. 이게 없으면 다른 앱에 갔다가 ⌘` 로
+        // 돌아왔을 때 — 마우스 클릭이 없으니 해제 경로를 하나도 지나지 않는다 — 여전히
+        // 전체가 선택된 채라, 사용자가 방금 고른 줄 아는 것 대신 ⌘C 가 탭 전체를
+        // 클립보드에 넣는다.
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { notification in
+            guard isAllContentSelected, (notification.object as? NSWindow) === window else { return }
             isAllContentSelected = false
         }
     }
@@ -661,7 +671,7 @@ private struct NoteWindowConfigurator: NSViewRepresentable {
     let onDelete: () -> Void
     let onSelectAll: () -> Void
     let onCopyAll: () -> Bool
-    let onClearSelection: () -> Void
+    let onClearSelection: () -> Bool
     let onMoveEnded: () -> Void
     let onAddTab: () -> Void
     let onWindowAvailable: (NSWindow) -> Void
@@ -742,7 +752,7 @@ private struct NoteWindowConfigurator: NSViewRepresentable {
         var onDelete: (() -> Void)?
         var onSelectAll: (() -> Void)?
         var onCopyAll: (() -> Bool)?
-        var onClearSelection: (() -> Void)?
+        var onClearSelection: (() -> Bool)?
         var onMoveEnded: (() -> Void)?
         private var dragStartFrame: NSRect?
         nonisolated(unsafe) private var dragMonitor: Any?
@@ -774,7 +784,7 @@ private struct NoteWindowConfigurator: NSViewRepresentable {
                 guard let self, !AppLock.shared.isLocked else { return event }
                 if event.type == .leftMouseDown {
                     if event.window === self.window {
-                        self.onClearSelection?()
+                        _ = self.onClearSelection?()
                         self.endEditingIfClickMissedAField(event)
                     }
                     self.dragStartFrame = event.window === self.window ? self.window?.frame : nil
@@ -815,13 +825,23 @@ private struct NoteWindowConfigurator: NSViewRepresentable {
                     self.onDelete?()
                     return nil
                 case .close:
+                    // 전체 선택 중이면 선택만 푼다. 창은 그대로 둔다 — 선택을 취소하려고
+                    // 누른 Esc 로 메모가 닫혀 버리면 되돌릴 방법이 마땅치 않다.
+                    if self.onClearSelection?() == true { return nil }
                     self.onEscape?()
                     return nil
                 case .undo, .redo:
                     // Document history is routed once at app level, including hidden windows.
                     return event
                 case nil:
-                    break
+                    // ⌘·⌃ 없는 키 입력은 전체 선택 표시를 내린다. macOS 의 모든 텍스트 입력은
+                    // ⌘A 다음 입력을 교체로 처리하는데 여기서는 교체가 아니라 캐럿 자리에
+                    // 삽입되고, Backspace 도 한 글자만 지운다. 표시를 남겨 두면 화면이
+                    // 사용자에게 거짓말을 한다. 표시만 내리고 이벤트는 그대로 흘려보낸다.
+                    if !event.modifierFlags.contains(.command),
+                       !event.modifierFlags.contains(.control) {
+                        _ = self.onClearSelection?()
+                    }
                 }
                 return event
             }
