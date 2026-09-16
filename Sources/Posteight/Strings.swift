@@ -131,11 +131,6 @@ private let englishStrings: [String: String] = [
     "표시 없음": "None",
     "완료": "Done",
 
-    // DailyLogPreviewView
-    "오늘 기록": "Today's Log",
-    "Markdown 복사": "Copy Markdown",
-    "Notion 기록이 켜진 메모만 정리됩니다.": "Only memos with the Notion log turned on are collected here.",
-
     // MenuBarPanelView
     "새 메모": "New Memo",
     "메모 보기": "Show Memos",
@@ -178,12 +173,8 @@ private let englishStrings: [String: String] = [
     "메모 삭제": "Delete Memo",
     "이 메모를 휴지통으로 보냅니다": "Moves this memo to the trash",
 
-    // PosteightStore — memo tabs and the daily log
+    // PosteightStore — memo tabs
     "메모 %ld": "Memo %ld",
-    "%@ 업무 기록": "%@ Work Log",
-    "Notion 기록에 포함된 메모가 없습니다.": "No memos are included in the Notion log.",
-    "완료한 일": "Done",
-    "없음": "None",
 
     // PosteightStore — first-launch sample notes
     "오늘 업무": "Today's Work",

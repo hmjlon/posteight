@@ -470,4 +470,60 @@ struct PersistenceTests {
 
         #expect(try mode(directory.appendingPathComponent("notes.json")) == 0o600)
     }
+
+    /// 오늘 기록이 걷혀서 `includeInNotionLog` 는 더 이상 모델에 없다. 그래도 저장할 때는
+    /// 계속 쓴다 — 예전 빌드의 디코더가 이 키를 `decode` 로 **필수** 취급하고, `loadNotes`
+    /// 는 디코딩 실패를 `try?` 로 삼켜 샘플 메모로 떨어지기 때문이다. 키가 빠진 파일을 예전
+    /// 빌드가 읽으면 사용자에게는 메모가 통째로 사라진 것처럼 보인다.
+    @Test("사라진 필드를 예전 빌드가 읽을 수 있도록 계속 써 둔다")
+    func theRemovedFieldIsStillWrittenForOlderBuilds() throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = PosteightStore(directory: directory)
+        _ = store.addNote()
+        store.flush()
+
+        let data = try Data(contentsOf: directory.appendingPathComponent("notes.json"))
+        let rows = try #require(
+            try JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+        )
+        #expect(!rows.isEmpty)
+        for row in rows {
+            #expect(row["includeInNotionLog"] as? Bool == false)
+        }
+    }
+
+    /// 반대 방향. 그 키가 들어 있는 예전 파일은 지금 디코더가 조용히 건너뛰고 읽어야 한다.
+    @Test("그 필드가 남아 있는 예전 파일도 그대로 읽는다")
+    func aFileStillCarryingTheRemovedFieldLoads() throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        let noteID = UUID()
+        let tabID = UUID()
+        let legacy: [[String: Any]] = [[
+            "id": noteID.uuidString,
+            "stickerSymbol": "tag",
+            "paperHex": "#FADDE5",
+            "penHex": "#B84A62",
+            "penStyle": "ballpoint",
+            "includeInNotionLog": true,
+            "position": ["x": 10, "y": 20],
+            "size": ["width": 320, "height": 300],
+            "selectedTabID": tabID.uuidString,
+            "tabs": [[
+                "id": tabID.uuidString,
+                "name": "메모 1",
+                "title": "남아 있어야 한다",
+                "stickerSymbol": "tag",
+                "items": []
+            ]]
+        ]]
+        try JSONSerialization.data(withJSONObject: legacy)
+            .write(to: directory.appendingPathComponent("notes.json"))
+
+        let store = PosteightStore(directory: directory)
+        #expect(try memo(store, id: noteID).selectedTab?.title == "남아 있어야 한다")
+    }
 }

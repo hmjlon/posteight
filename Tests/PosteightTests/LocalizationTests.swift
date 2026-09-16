@@ -67,34 +67,12 @@ struct LocalizationTests {
         #expect(Lf("탭 %ld개 · 할 일 %ld개", language: .english, 2, 5) == "2 tabs · 5 items")
     }
 
-    @Test("일일 기록이 영어로 나온다")
-    func dailyLogInEnglish() {
-        let notes = [
-            StickyNote(
-                stickerSymbol: "tag",
-                paperHex: "#FFFFFF",
-                penHex: "#000000",
-                includeInNotionLog: true,
-                position: NotePoint(x: 0, y: 0),
-                tabs: [MemoTab(name: "Memo 1", title: "Today", items: [TodoItem(title: "ship it")])]
-            )
-        ]
-        let markdown = PosteightStore.dailyLogMarkdown(notes: notes, language: .english)
-
-        #expect(markdown.contains("Work Log"))
-        #expect(markdown.contains("## Memo 1 · Today"))
-        #expect(markdown.contains("### Done"))
-        #expect(markdown.contains("### Remaining"))
-        #expect(markdown.contains("- None"))
-    }
-
     @Test("비어 있는 탭 이름은 읽는 언어로 메꿔진다")
     func blankTabNameIsFilledInReadingLanguage() throws {
         let note = StickyNote(
             stickerSymbol: "tag",
             paperHex: "#FFFFFF",
             penHex: "#000000",
-            includeInNotionLog: false,
             position: NotePoint(x: 0, y: 0),
             tabs: [MemoTab(name: "   ", title: "", items: [])]
         )
@@ -147,7 +125,6 @@ struct LocalizationTests {
             stickerSymbol: "tag",
             paperHex: "#FFFFFF",
             penHex: "#000000",
-            includeInNotionLog: false,
             position: NotePoint(x: 0, y: 0),
             tabs: [MemoTab(name: "n", title: "새 포스트잇", items: [])]
         )

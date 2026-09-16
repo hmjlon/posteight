@@ -320,7 +320,6 @@ final class PosteightStore: ObservableObject {
             stickerSymbol: "tag",
             paperHex: DesignTokens.paperColors[0].hex,
             penHex: DesignTokens.penColors[0].hex,
-            includeInNotionLog: false,
             position: position,
             tabs: [
                 MemoTab(
@@ -478,7 +477,6 @@ final class PosteightStore: ObservableObject {
                 paperHex: note.paperHex,
                 penHex: note.penHex,
                 stickerSymbol: tab.stickerSymbol,
-                includeInNotionLog: note.includeInNotionLog,
                 deletedAt: Date()
             ),
             at: 0
@@ -507,7 +505,6 @@ final class PosteightStore: ObservableObject {
                     stickerSymbol: trashed.stickerSymbol,
                     paperHex: trashed.paperHex,
                     penHex: trashed.penHex,
-                    includeInNotionLog: trashed.includeInNotionLog ?? false,
                     position: nextNotePosition(origin: origin),
                     tabs: [trashed.tab]
                 )
@@ -589,14 +586,6 @@ final class PosteightStore: ObservableObject {
         defer { recordEdit(from: historyBefore, noteID: noteID, tabID: tabID) }
         updateTab(noteID: noteID, tabID: tabID) { tab in
             tab.stickerSymbol = symbol
-        }
-    }
-
-    func updateNotionLog(_ noteID: UUID, include: Bool) {
-        let historyBefore = editingSnapshot
-        defer { recordEdit(from: historyBefore, noteID: noteID) }
-        updateNote(noteID) { note in
-            note.includeInNotionLog = include
         }
     }
 
@@ -805,60 +794,10 @@ final class PosteightStore: ObservableObject {
         }
     }
 
-    func dailyLogMarkdown(for date: Date = Date(), language: AppLanguage = .korean) -> String {
-        Self.dailyLogMarkdown(notes: notes, date: date, language: language)
-    }
-
-    nonisolated static func dailyLogMarkdown(
-        notes: [StickyNote],
-        date: Date = Date(),
-        language: AppLanguage = .korean
-    ) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-
-        let logNotes = notes.filter(\.includeInNotionLog)
-        var lines: [String] = ["# " + Lf("%@ 업무 기록", language: language, formatter.string(from: date)), ""]
-
-        if logNotes.isEmpty {
-            lines.append(L("Notion 기록에 포함된 메모가 없습니다.", language: language))
-            return lines.joined(separator: "\n")
-        }
-
-        let none = "- " + L("없음", language: language)
-
-        for note in logNotes {
-            for tab in note.tabs {
-                let doneItems = tab.items.filter(\.isDone)
-                let pendingItems = tab.items.filter { !$0.isDone }
-
-                lines.append("## \(tab.name) · \(tab.title)")
-                lines.append("")
-                lines.append("### " + L("완료한 일", language: language))
-                lines.append(contentsOf: doneItems.isEmpty ? [none] : doneItems.map { "- \($0.title)" })
-                lines.append("")
-                lines.append("### " + L("남은 일", language: language))
-                lines.append(contentsOf: pendingItems.isEmpty ? [none] : pendingItems.map { "- \($0.title)" })
-                lines.append("")
-            }
-        }
-
-        return lines.joined(separator: "\n")
-    }
-
     nonisolated static func tabPlainText(_ tab: MemoTab) -> String {
         ([tab.title] + tab.items.map(\.title))
             .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             .joined(separator: "\n")
-    }
-
-    func copyTabToClipboard(
-        noteID: UUID,
-        tabID: UUID,
-        to pasteboard: NSPasteboard = .general
-    ) {
-        guard let tab = tab(noteID: noteID, tabID: tabID) else { return }
-        writeConcealed(Self.tabPlainText(tab), to: pasteboard)
     }
 
     /// Clipboard paths are concealed because the general pasteboard is readable by every
@@ -866,8 +805,13 @@ final class PosteightStore: ObservableObject {
     /// files whatever passes through it into a permanent plain-text history.
     /// `pasteboard` is only overridden by tests, so running them never disturbs what the user
     /// has on their clipboard.
-    func copyDailyLogToClipboard(language: AppLanguage = .korean, to pasteboard: NSPasteboard = .general) {
-        writeConcealed(dailyLogMarkdown(language: language), to: pasteboard)
+    func copyTabToClipboard(
+        noteID: UUID,
+        tabID: UUID,
+        to pasteboard: NSPasteboard = .general
+    ) {
+        guard let tab = tab(noteID: noteID, tabID: tabID) else { return }
+        writeConcealed(Self.tabPlainText(tab), to: pasteboard)
     }
 
     private func writeConcealed(_ text: String, to pasteboard: NSPasteboard) {
@@ -1115,7 +1059,6 @@ final class PosteightStore: ObservableObject {
             paperHex: "#EED9D8",
             penHex: "#B84A62",
             penStyle: .ballpoint,
-            includeInNotionLog: true,
             position: NotePoint(x: 260, y: 260),
             tabs: [
                 MemoTab(
@@ -1138,7 +1081,6 @@ final class PosteightStore: ObservableObject {
             paperHex: "#D9E4D5",
             penHex: "#2C7A5A",
             penStyle: .highlighter,
-            includeInNotionLog: false,
             position: NotePoint(x: 590, y: 300),
             tabs: [
                 MemoTab(

@@ -7,7 +7,6 @@ import Testing
 private func note(
     title: String = "메모",
     tabName: String = "메모 1",
-    includeInNotionLog: Bool = true,
     size: NoteSize = DesignTokens.defaultNoteSize,
     items: [TodoItem] = []
 ) -> StickyNote {
@@ -15,7 +14,6 @@ private func note(
         stickerSymbol: "tag",
         paperHex: "#FADDE5",
         penHex: "#B84A62",
-        includeInNotionLog: includeInNotionLog,
         position: NotePoint(x: 0, y: 0),
         size: size,
         tabs: [MemoTab(name: tabName, title: title, items: items)]
@@ -228,94 +226,21 @@ struct ClampTests {
     }
 }
 
-@Suite("Daily log markdown")
-struct DailyLogTests {
-    private let date = Date(timeIntervalSince1970: 1_741_910_400)
+@Suite("Tab copy")
+struct TabCopyTests {
+    @Test("Copies the visible tab text in display order")
+    func formatsTab() {
+        let tab = MemoTab(name: "메모 1", title: "오늘 할 일", items: [
+            TodoItem(title: "첫 번째"),
+            TodoItem(title: "   "),
+            TodoItem(title: "완료한 항목", isDone: true)
+        ])
 
-    @Test("Only memos flagged for the log are included")
-    func filtersByFlag() {
-        let markdown = PosteightStore.dailyLogMarkdown(
-            notes: [
-                note(title: "포함", includeInNotionLog: true),
-                note(title: "제외", includeInNotionLog: false)
-            ],
-            date: date
-        )
-        #expect(markdown.contains("## 메모 1 · 포함"))
-        #expect(!markdown.contains("· 제외"))
+        #expect(PosteightStore.tabPlainText(tab) == "오늘 할 일\n첫 번째\n완료한 항목")
     }
 
-    @Test("Done and pending items are split under their tab")
-    func splitsByCompletion() throws {
-        let markdown = PosteightStore.dailyLogMarkdown(
-            notes: [note(items: [
-                TodoItem(title: "끝난 일", isDone: true, completedAt: date),
-                TodoItem(title: "남은 일")
-            ])],
-            date: date
-        )
-        let done = try #require(markdown.range(of: "### 완료한 일"))
-        let pending = try #require(markdown.range(of: "### 남은 일"))
-        #expect(markdown.range(of: "- 끝난 일")!.lowerBound > done.lowerBound)
-        #expect(markdown.range(of: "- 끝난 일")!.lowerBound < pending.lowerBound)
-        #expect(markdown.range(of: "- 남은 일")!.lowerBound > pending.lowerBound)
-    }
-
-    @Test("An empty section says so instead of leaving a bare heading")
-    func marksEmptySections() {
-        let markdown = PosteightStore.dailyLogMarkdown(
-            notes: [note(items: [TodoItem(title: "남은 일")])],
-            date: date
-        )
-        #expect(markdown.contains("### 완료한 일\n- 없음"))
-    }
-
-    /// 탭 제목은 만든 날짜라 같은 날 만든 탭끼리 똑같다. 제목만 H2 로 쓰면 같은 헤딩이
-    /// 여러 번 나와 문서 개요가 무너진다.
-    @Test("탭이 여럿이어도 같은 헤딩이 반복되지 않는다")
-    func headingsStayDistinctAcrossTabs() throws {
-        let shared = "26.08.29(토)"
-        let memo = StickyNote(
-            stickerSymbol: "tag",
-            paperHex: "#FFFFFF",
-            penHex: "#000000",
-            includeInNotionLog: true,
-            position: NotePoint(x: 0, y: 0),
-            tabs: [
-                MemoTab(name: "메모 1", title: shared, items: [TodoItem(title: "가")]),
-                MemoTab(name: "메모 2", title: shared, items: [TodoItem(title: "나")])
-            ]
-        )
-
-        let markdown = PosteightStore.dailyLogMarkdown(notes: [memo], date: date)
-        let headings = markdown.split(separator: "\n").filter { $0.hasPrefix("## ") }
-
-        #expect(headings.count == 2)
-        #expect(Set(headings).count == 2, "같은 H2 가 반복된다: \(headings)")
-    }
-
-    @Test("A detail stays in the app and never reaches the log")
-    func keepsDetailOutOfLog() {
-        let markdown = PosteightStore.dailyLogMarkdown(
-            notes: [note(items: [TodoItem(title: "배포", detail: "스테이징 먼저")])],
-            date: date
-        )
-
-        #expect(markdown.contains("- 배포"))
-        #expect(!markdown.contains("스테이징 먼저"))
-    }
-
-    @Test("No flagged memos produces a readable message")
-    func handlesNoFlaggedNotes() {
-        let markdown = PosteightStore.dailyLogMarkdown(
-            notes: [note(includeInNotionLog: false)],
-            date: date
-        )
-        #expect(markdown.contains("Notion 기록에 포함된 메모가 없습니다."))
-    }
-
-    /// Copying is the only path memo text takes out of the app, and the general pasteboard is
-    /// read by every process and by clipboard managers that keep a permanent history.
+    /// 복사는 메모 글자가 앱 밖으로 나가는 유일한 경로다. 일반 페이스트보드는 모든
+    /// 프로세스가 읽고, 클립보드 관리자는 지나간 것을 영구 기록으로 남긴다.
     @MainActor
     @Test("Copying marks the entry concealed without changing what is pasted")
     func copyMarksConcealed() throws {
@@ -328,25 +253,13 @@ struct DailyLogTests {
         }
 
         let store = PosteightStore(directory: directory)
-        store.copyDailyLogToClipboard(to: pasteboard)
+        let noteID = store.addNote()
+        let tab = try #require(store.notes.first(where: { $0.id == noteID })?.selectedTab)
+        store.copyTabToClipboard(noteID: noteID, tabID: tab.id, to: pasteboard)
 
         let pasted = try #require(pasteboard.string(forType: .string))
-        #expect(pasted == store.dailyLogMarkdown())
+        #expect(pasted == PosteightStore.tabPlainText(tab))
         #expect(pasteboard.string(forType: PosteightStore.concealedPasteboardType) != nil)
-    }
-}
-
-@Suite("Tab copy")
-struct TabCopyTests {
-    @Test("Copies the visible tab text in display order")
-    func formatsTab() {
-        let tab = MemoTab(name: "메모 1", title: "오늘 할 일", items: [
-            TodoItem(title: "첫 번째"),
-            TodoItem(title: "   "),
-            TodoItem(title: "완료한 항목", isDone: true)
-        ])
-
-        #expect(PosteightStore.tabPlainText(tab) == "오늘 할 일\n첫 번째\n완료한 항목")
     }
 }
 

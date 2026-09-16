@@ -2,7 +2,6 @@ import AppKit
 import SwiftUI
 
 enum WindowID {
-    static let dailyLog = "posteight.daily-log"
     static let trash = "posteight.trash"
 }
 
@@ -320,14 +319,6 @@ struct PosteightApp: App {
                 .keyboardShortcut(",", modifiers: [.command])
             }
         }
-
-        Window("오늘 기록", id: WindowID.dailyLog) {
-            AppLockGate { DailyLogPreviewView().environmentObject(store) }
-                .frame(minWidth: 440, minHeight: 350)
-                .excludedFromScreenCapture()
-        }
-        .windowResizability(.contentSize)
-        .defaultPosition(.center)
 
         Window("휴지통", id: WindowID.trash) {
             AppLockGate { TrashView().environmentObject(store) }

@@ -29,7 +29,6 @@ struct StickyNote: Identifiable, Codable, Equatable {
     var penStyle: PenStyle
     var fontID: String? = nil
     var fontSize: NoteFontSize? = nil
-    var includeInNotionLog: Bool
     var position: NotePoint
     var size: NoteSize
     var tabs: [MemoTab]
@@ -41,7 +40,6 @@ struct StickyNote: Identifiable, Codable, Equatable {
         paperHex: String,
         penHex: String,
         penStyle: PenStyle = .ballpoint,
-        includeInNotionLog: Bool,
         position: NotePoint,
         size: NoteSize = DesignTokens.defaultNoteSize,
         tabs: [MemoTab],
@@ -62,7 +60,6 @@ struct StickyNote: Identifiable, Codable, Equatable {
         self.paperHex = paperHex
         self.penHex = penHex
         self.penStyle = penStyle
-        self.includeInNotionLog = includeInNotionLog
         self.position = position
         self.size = size
         self.tabs = normalizedTabs
@@ -109,7 +106,6 @@ struct StickyNote: Identifiable, Codable, Equatable {
         fontSize = try container.decodeIfPresent(NoteFontSize.self, forKey: .fontSize)
         fontID = try container.decodeIfPresent(String.self, forKey: .fontID)
         penStyle = try container.decodeIfPresent(PenStyle.self, forKey: .penStyle) ?? .ballpoint
-        includeInNotionLog = try container.decode(Bool.self, forKey: .includeInNotionLog)
         position = try container.decode(NotePoint.self, forKey: .position)
         size = try container.decodeIfPresent(NoteSize.self, forKey: .size) ?? DesignTokens.defaultNoteSize
 
@@ -164,7 +160,10 @@ struct StickyNote: Identifiable, Codable, Equatable {
         try container.encodeIfPresent(fontID, forKey: .fontID)
         try container.encodeIfPresent(fontSize, forKey: .fontSize)
         try container.encode(penStyle, forKey: .penStyle)
-        try container.encode(includeInNotionLog, forKey: .includeInNotionLog)
+        // 이 기능은 사라졌지만 키는 계속 쓴다. 예전 빌드의 디코더는 이 키를 `decode` 로
+        // **필수** 취급하고, `loadNotes` 는 디코딩 실패를 `try?` 로 삼켜 샘플 메모로 떨어진다.
+        // 빼면 이 버전을 썼다가 되돌아간 사용자에게 메모가 통째로 사라진 것처럼 보인다.
+        try container.encode(false, forKey: .includeInNotionLog)
         try container.encode(position, forKey: .position)
         try container.encode(size, forKey: .size)
         try container.encode(tabs, forKey: .tabs)
@@ -236,9 +235,6 @@ struct TrashedMemoTab: Identifiable, Codable, Equatable {
     var paperHex: String
     var penHex: String
     var stickerSymbol: String
-    /// Optional so trash written before this field existed still decodes — dropping it would
-    /// empty the tab trash on the first launch after an upgrade.
-    var includeInNotionLog: Bool?
     var deletedAt: Date
 }
 
