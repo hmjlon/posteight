@@ -748,6 +748,25 @@ private struct NoteWindowConfigurator: NSViewRepresentable {
         nonisolated(unsafe) private var dragMonitor: Any?
         nonisolated(unsafe) private var escapeMonitor: Any?
 
+        /// 종이의 빈 곳을 클릭하면 편집을 끝낸다.
+        ///
+        /// AppKit 은 필드 편집을 스스로 끝내지 않는다. 필드 편집 중에 다른 곳을 눌러도 창의
+        /// field editor 는 그 필드에 그대로 남는다. 그래서 이게 없으면 ⌘A 가 항상 필드에
+        /// 양보하게 되어 — 한 번이라도 할 일을 편집한 뒤에는 — 탭 전체 선택에 영영 닿지
+        /// 못한다. 겸사겸사 다른 앱들이 하는 동작과도 같아진다.
+        ///
+        /// 텍스트를 맞고 들어온 클릭은 건드리지 않는다. 그건 AppKit 이 field editor 를 그
+        /// 필드로 옮기는 정상 경로다.
+        private func endEditingIfClickMissedAField(_ event: NSEvent) {
+            guard let window = self.window, window.firstResponder is NSTextView else { return }
+            var view = window.contentView?.hitTest(event.locationInWindow)
+            while let candidate = view {
+                if candidate is NSTextField || candidate is NSTextView { return }
+                view = candidate.superview
+            }
+            window.makeFirstResponder(nil)
+        }
+
         func installEscapeMonitor() {
             guard escapeMonitor == nil else { return }
 
@@ -756,6 +775,7 @@ private struct NoteWindowConfigurator: NSViewRepresentable {
                 if event.type == .leftMouseDown {
                     if event.window === self.window {
                         self.onClearSelection?()
+                        self.endEditingIfClickMissedAField(event)
                     }
                     self.dragStartFrame = event.window === self.window ? self.window?.frame : nil
                 } else if let start = self.dragStartFrame {
@@ -778,10 +798,12 @@ private struct NoteWindowConfigurator: NSViewRepresentable {
                 }
                 switch NoteKeyboardShortcut(event: event) {
                 case .selectAll:
-                    if let editor = self.window?.firstResponder as? NSTextView,
-                       editor.hasMarkedText() {
-                        return event
-                    }
+                    // 편집 중인 필드가 있으면 그 필드의 전체 선택이 먼저다. 로컬 모니터는 메뉴
+                    // key equivalent 보다 먼저 돌기 때문에, 여기서 삼키면 이벤트가 텍스트
+                    // 필드에도 Edit 메뉴에도 도달하지 못한다. 할 일 제목을 편집하다가 ⌘A 로
+                    // 전체를 골라 갈아끼우는 표준 동작이 그래서 사라져 있었다.
+                    // 탭 전체 선택은 아무 필드도 편집 중이 아닐 때만 걸린다.
+                    if self.window?.firstResponder is NSTextView { return event }
                     self.onSelectAll?()
                     return nil
                 case .copy:
