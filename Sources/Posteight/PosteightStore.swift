@@ -6,6 +6,11 @@ import SwiftUI
 final class PosteightStore: ObservableObject {
     // Presentation state is shared across note windows and never persisted.
     @Published var presentedDetailItemID: UUID?
+    @Published var searchFocusRequest: SearchFocusRequest?
+
+    func finishSearchFocus(_ id: UUID) {
+        if searchFocusRequest?.id == id { searchFocusRequest = nil }
+    }
 
     @Published private(set) var notes: [StickyNote] = [] {
         didSet {

@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 
 enum WindowID {
+    static let search = "posteight.search"
     static let trash = "posteight.trash"
 }
 
@@ -319,6 +320,13 @@ struct PosteightApp: App {
                 .keyboardShortcut(",", modifiers: [.command])
             }
         }
+
+        Window("Posteight", id: WindowID.search) {
+            AppLockGate { NoteSearchView().environmentObject(store) }
+                .excludedFromScreenCapture()
+        }
+        .defaultSize(width: 500, height: 460)
+        .defaultPosition(.center)
 
         Window("휴지통", id: WindowID.trash) {
             AppLockGate { TrashView().environmentObject(store) }

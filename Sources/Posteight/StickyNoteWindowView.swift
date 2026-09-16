@@ -130,6 +130,7 @@ struct StickyNoteWindowView: View {
         }
         .onChange(of: lock.isLocked) { _, locked in
             if locked {
+                store.searchFocusRequest = nil
                 isPencilCaseOpen = false
                 showsDeleteConfirmation = false
                 pendingDeleteTabID = nil
@@ -137,6 +138,12 @@ struct StickyNoteWindowView: View {
                 isAllContentSelected = false
                 window?.makeFirstResponder(nil)
             }
+        }
+        .task(id: store.searchFocusRequest?.id) {
+            guard let request = store.searchFocusRequest,
+                  request.noteID == note.id, request.tabID == selectedTab.id else { return }
+            isAllContentSelected = false
+            if request.target == .tabName { editingTabID = selectedTab.id }
         }
         .onChange(of: selectedTab.id) { _, _ in
             isAllContentSelected = false
@@ -327,6 +334,10 @@ struct StickyNoteWindowView: View {
                             fontWeight: .semibold,
                             textOpacity: 0.68,
                             isFocused: true,
+                            searchFocus: store.searchFocusRequest.flatMap {
+                                $0.noteID == note.id && $0.tabID == tab.id && $0.target == .tabName ? $0 : nil
+                            },
+                            onSearchFocusApplied: { store.finishSearchFocus($0) },
                             onEditingChanged: { isEditing in
                                 if !isEditing, editingTabID == tab.id {
                                     editingTabID = nil

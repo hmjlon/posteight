@@ -13,6 +13,7 @@ struct TodoItemRow: View {
     let item: TodoItem
     let isAllContentSelected: Bool
     @Binding var focusedItemID: UUID?
+    var searchFocus: SearchFocusRequest? = nil
 
     @State private var strikeProgress: CGFloat = 0
     @State private var showPen = false
@@ -82,6 +83,8 @@ struct TodoItemRow: View {
                     isFocused: focusedItemID == item.id,
                     placesCaretAtEndOnFocus: true,
                     showsWholeSelection: isAllContentSelected && hasContent,
+                    searchFocus: searchFocus?.target == .itemTitle(item.id) ? searchFocus : nil,
+                    onSearchFocusApplied: { store.finishSearchFocus($0) },
                     onEditingChanged: {
                         isEditingText = $0
                         if $0 { focusedItemID = item.id }
@@ -334,7 +337,9 @@ struct TodoItemRow: View {
                             detail: $0
                         )
                     },
-                    onClose: { detailPresentation.wrappedValue = false }
+                    onClose: { detailPresentation.wrappedValue = false },
+                    searchFocus: searchFocus?.target == .itemDetail(item.id) ? searchFocus : nil,
+                    onSearchFocusApplied: { store.finishSearchFocus($0) }
                 )
                 .interactiveDismissDisabled()
                 .presentationBackground(Color(hex: note.paperHex))
@@ -425,6 +430,8 @@ private struct DetailEditor: View {
     let onEdit: (String) -> Void
     let onClose: () -> Void
 
+    let searchFocus: SearchFocusRequest?
+    let onSearchFocusApplied: ((UUID) -> Void)?
     private let sourceText: String
     @State private var text: String
     @State private var showsClearConfirmation = false
@@ -439,7 +446,9 @@ private struct DetailEditor: View {
         fontName: String?,
         fontSizeAdjustment: CGFloat,
         onEdit: @escaping (String) -> Void,
-        onClose: @escaping () -> Void
+        onClose: @escaping () -> Void,
+        searchFocus: SearchFocusRequest? = nil,
+        onSearchFocusApplied: ((UUID) -> Void)? = nil
     ) {
         sourceText = text
         _text = State(initialValue: text)
@@ -451,6 +460,8 @@ private struct DetailEditor: View {
         self.fontSizeAdjustment = fontSizeAdjustment
         self.onEdit = onEdit
         self.onClose = onClose
+        self.searchFocus = searchFocus
+        self.onSearchFocusApplied = onSearchFocusApplied
     }
 
     var body: some View {
@@ -531,6 +542,9 @@ private struct DetailEditor: View {
 
                 TextEditor(text: $text)
                     .focused($isWriting)
+                    .background {
+                        SearchTextEditorFocus(request: searchFocus, onApplied: onSearchFocusApplied)
+                    }
                     .font(fontName.map { .custom($0, size: 13 + fontSizeAdjustment) } ?? .system(size: 13 + fontSizeAdjustment))
                     .lineSpacing(3)
                     .foregroundStyle(inkColor.opacity(0.78))

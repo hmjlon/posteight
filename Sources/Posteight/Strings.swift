@@ -62,6 +62,16 @@ enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
 /// Xcode build paths — two places to drift. Move to `.lproj` when a third language or a
 /// translator shows up.
 private let englishStrings: [String: String] = [
+    "메모 검색…": "Search Notes…",
+    "메모 검색": "Search Notes",
+    "모든 메모에서 검색": "Search all notes",
+    "검색어 지우기": "Clear search",
+    "찾고 싶은 단어를 입력하세요": "Enter a word to find",
+    "모든 탭의 이름, 제목, 할 일과 세부사항을 검색해요": "Search names, titles, tasks, and details across all tabs",
+    "검색 결과가 없어요": "No results found",
+    "다른 단어로 검색해 보세요": "Try a different word",
+    "탭 %ld개에서 찾았어요": "Found in %ld tabs",
+
     "Mac에서 본인 확인을 완료하지 못했어요.": "Unable to verify your identity on this Mac.",
     "이 Mac에서 본인 확인을 사용할 수 없어요.": "Owner authentication is unavailable on this Mac.",
     "앱 잠금을 사용하려면 본인 확인이 필요해요.": "Verify your identity to enable app lock.",

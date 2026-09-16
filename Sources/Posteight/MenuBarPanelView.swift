@@ -30,6 +30,10 @@ struct MenuBarPanelView: View {
                                            origin: NSScreen.noteSpawnOrigin))
                 }
 
+                PanelRow(title: L("메모 검색…"), systemImage: "magnifyingglass") {
+                    open(windowID: WindowID.search)
+                }
+
                 PanelRow(title: L("메모 보기"), systemImage: "rectangle.on.rectangle") {
                     showNotes(store.notes.map(\.id))
                 }

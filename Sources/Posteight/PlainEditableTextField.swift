@@ -14,6 +14,8 @@ struct PlainEditableTextField: NSViewRepresentable {
     var isFocused = false
     var placesCaretAtEndOnFocus = false
     var showsWholeSelection = false
+    var searchFocus: SearchFocusRequest?
+    var onSearchFocusApplied: ((UUID) -> Void)?
     var onEditingChanged: ((Bool) -> Void)?
     var onSubmit: (() -> Void)?
     var onMoveUp: (() -> Void)?
@@ -23,6 +25,10 @@ struct PlainEditableTextField: NSViewRepresentable {
     func makeNSView(context: Context) -> NSTextField {
         let textField = FocusableTextField()
         textField.delegate = context.coordinator
+        textField.onAttached = { [weak coordinator = context.coordinator, weak textField] in
+            guard let textField else { return }
+            coordinator?.applySearchFocus(to: textField)
+        }
         textField.isEditable = true
         textField.isSelectable = true
         textField.isEnabled = true
@@ -75,6 +81,11 @@ struct PlainEditableTextField: NSViewRepresentable {
             ? (isEmphasized ? .selectedTextColor : .unemphasizedSelectedTextColor)
             : NSColor.black.withAlphaComponent(textOpacity)
 
+        if searchFocus != nil {
+            DispatchQueue.main.async { context.coordinator.applySearchFocus(to: textField) }
+            return
+        }
+
         // Only the rising edge moves focus, so a redraw never steals the caret back.
         if isFocused, !context.coordinator.didRequestFocus {
             DispatchQueue.main.async {
@@ -103,6 +114,21 @@ struct PlainEditableTextField: NSViewRepresentable {
         var isEditing = false
         var didRequestFocus = false
         var historyRevision = 0
+        var appliedSearchID: UUID?
+
+        @MainActor func applySearchFocus(to textField: NSTextField) {
+            guard let request = parent.searchFocus, request.id != appliedSearchID,
+                  !AppLock.shared.isLocked, let window = textField.window,
+                  let range = request.caret(in: textField.stringValue) else { return }
+            window.makeKeyAndOrderFront(nil)
+            guard window.makeFirstResponder(textField),
+                  let editor = textField.currentEditor() as? NSTextView else { return }
+            editor.setSelectedRange(range)
+            editor.scrollRangeToVisible(range)
+            didRequestFocus = true
+            appliedSearchID = request.id
+            parent.onSearchFocusApplied?(request.id)
+        }
 
         init(parent: PlainEditableTextField) {
             self.parent = parent
@@ -182,6 +208,13 @@ struct PlainEditableTextField: NSViewRepresentable {
 }
 
 private final class FocusableTextField: NSTextField {
+    var onAttached: (@MainActor () -> Void)?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil { DispatchQueue.main.async { [weak self] in self?.onAttached?() } }
+    }
+
     override var acceptsFirstResponder: Bool { true }
 
     override func mouseDown(with event: NSEvent) {

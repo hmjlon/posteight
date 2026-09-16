@@ -14,7 +14,14 @@ struct StickyNoteView: View {
     let isAllContentSelected: Bool
     @Binding var isPencilCaseOpen: Bool
     @State private var focusedItemID: UUID?
+    @State private var preparedSearchID: UUID?
     @State private var resizeAnchor: CGPoint?
+
+    private var searchRequest: SearchFocusRequest? {
+        guard let request = store.searchFocusRequest,
+              request.noteID == note.id, request.tabID == tab.id else { return nil }
+        return request
+    }
 
     var body: some View {
         noteBody
@@ -41,7 +48,9 @@ struct StickyNoteView: View {
                 fontWeight: .medium,
                 fontName: fonts.fontName(for: note.fontID, defaultID: settings.defaultFontID),
                 textOpacity: 0.72,
-                showsWholeSelection: isAllContentSelected && !tab.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                showsWholeSelection: isAllContentSelected && !tab.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                searchFocus: searchRequest?.target == .tabTitle ? searchRequest : nil,
+                onSearchFocusApplied: { store.finishSearchFocus($0) }
             )
             .frame(height: 22 + max(0, fontSizeAdjustment))
 
@@ -64,7 +73,8 @@ struct StickyNoteView: View {
                                 tab: tab,
                                 item: item,
                                 isAllContentSelected: isAllContentSelected,
-                                focusedItemID: $focusedItemID
+                                focusedItemID: $focusedItemID,
+                                searchFocus: preparedSearchID == searchRequest?.id ? searchRequest : nil
                             )
                                 .id(item.id)
                                 .modifier(TodoItemDropTarget(noteID: note.id, tabID: tab.id, beforeID: item.id))
@@ -78,6 +88,19 @@ struct StickyNoteView: View {
                 }
                 .scrollIndicators(.hidden)
                 .frame(maxHeight: .infinity)
+                .task(id: searchRequest?.id) {
+                    guard let request = searchRequest, let itemID = request.target.itemID else { return }
+                    isPencilCaseOpen = false
+                    focusedItemID = nil
+                    proxy.scrollTo(itemID, anchor: .center)
+                    // Let layout reveal the row before focusing it or anchoring its detail popover.
+                    await Task.yield()
+                    guard !Task.isCancelled, searchRequest?.id == request.id else { return }
+                    preparedSearchID = request.id
+                    if case .itemDetail = request.target {
+                        store.presentedDetailItemID = itemID
+                    }
+                }
                 .onChange(of: focusedItemID) { _, itemID in
                     guard let itemID else { return }
 
