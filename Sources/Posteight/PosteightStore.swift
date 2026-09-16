@@ -711,6 +711,25 @@ final class PosteightStore: ObservableObject {
         return true
     }
 
+    /// 이 드롭을 받으면 목록이 실제로 바뀌는가.
+    ///
+    /// 고정 블록은 `itemsPinnedFirst` 로 항상 맨 위에 모인다. 그래서 고정 안 된 항목을 고정
+    /// 항목 앞자리에 끌어다 놓으면 `moveItem` 이 넣은 직후 정규화가 원위치로 되돌리고,
+    /// `moved != notes` 가드에 걸려 조용히 거절된다. 사용자 입장에서는 파란 삽입선을 보고
+    /// 손을 뗐는데 목록이 그대로이고, 실패했다는 신호가 없다. 삽입선을 아예 그리지 않으려면
+    /// 드롭을 받기 전에 물어봐야 해서 `moveItem` 과 따로 둔다.
+    func canMoveItem(_ source: TodoItemDrag, toNote noteID: UUID, tab tabID: UUID,
+                     before targetID: UUID? = nil) -> Bool {
+        // 맨 뒤에 붙이는 드롭(탭 헤더와 목록 끝의 빈 줄)은 정규화와 다툴 일이 없다.
+        guard let targetID else { return true }
+        guard targetID != source.itemID,
+              let moving = tab(noteID: source.noteID, tabID: source.tabID)?
+                  .items.first(where: { $0.id == source.itemID }),
+              let target = tab(noteID: noteID, tabID: tabID)?
+                  .items.first(where: { $0.id == targetID }) else { return false }
+        return moving.isPinned || !target.isPinned
+    }
+
     func isCompletionGroupingActive(noteID: UUID, tabID: UUID) -> Bool {
         tab(noteID: noteID, tabID: tabID)?.completionGroupingOriginalOrder != nil
     }

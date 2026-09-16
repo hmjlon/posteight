@@ -179,6 +179,41 @@ struct ItemMovementTests {
             #expect(restarted.movementTab(noteID: note, tabID: tab.id)?.items.first?.isPinned == true)
         }
     }
+
+    /// 고정 항목 앞자리는 `itemsPinnedFirst` 정규화가 되돌리기 때문에 `moveItem` 이 조용히
+    /// 거절한다. 삽입선을 그리기 전에 같은 답이 나와야 사용자가 헛손질을 하지 않는다.
+    @Test func aDropAboveAPinIsRefusedBeforeTheInsertionLineIsDrawn() throws {
+        try withStore { store, _ in
+            let note = store.addNote()
+            let tab = try #require(store.notes.first(where: { $0.id == note })?.selectedTab)
+            let pinned = try #require(tab.items.first?.id)
+            store.updateItemTitle(noteID: note, tabID: tab.id, itemID: pinned, title: "고정")
+            let plain = try #require(store.addItem(to: note, tabID: tab.id))
+            store.updateItemTitle(noteID: note, tabID: tab.id, itemID: plain, title: "보통")
+            store.toggleItemPin(noteID: note, tabID: tab.id, itemID: pinned)
+            #expect(store.movementTab(noteID: note, tabID: tab.id)?.items.map(\.id) == [pinned, plain])
+
+            let plainDrag = TodoItemDrag(noteID: note, tabID: tab.id, itemID: plain)
+            // 거절하는 답과 실제 결과가 같아야 한다. 어긋나면 삽입선이 거짓말을 한다.
+            #expect(!store.canMoveItem(plainDrag, toNote: note, tab: tab.id, before: pinned))
+            #expect(!store.moveItem(plainDrag, toNote: note, tab: tab.id, before: pinned))
+
+            // 맨 뒤에 붙이는 드롭(탭 헤더, 목록 끝의 빈 줄)은 정규화와 다툴 일이 없다.
+            #expect(store.canMoveItem(plainDrag, toNote: note, tab: tab.id, before: nil))
+
+            // 고정된 항목끼리는 서로 앞뒤로 옮길 수 있다.
+            let second = try #require(store.addItem(to: note, tabID: tab.id))
+            store.updateItemTitle(noteID: note, tabID: tab.id, itemID: second, title: "고정 둘")
+            store.toggleItemPin(noteID: note, tabID: tab.id, itemID: second)
+            let pinnedDrag = TodoItemDrag(noteID: note, tabID: tab.id, itemID: second)
+            #expect(store.canMoveItem(pinnedDrag, toNote: note, tab: tab.id, before: pinned))
+            #expect(store.moveItem(pinnedDrag, toNote: note, tab: tab.id, before: pinned))
+            #expect(store.movementTab(noteID: note, tabID: tab.id)?.items.map(\.id) == [second, pinned, plain])
+
+            // 고정 안 된 행 앞은 그대로 받는다.
+            #expect(store.canMoveItem(pinnedDrag, toNote: note, tab: tab.id, before: plain))
+        }
+    }
 }
 
 private extension PosteightStore {

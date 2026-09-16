@@ -168,7 +168,24 @@ private struct TaskDropDelegate: DropDelegate {
     @Binding var insertAfter: Bool
     private let type = "com.younjiyoung.posteight.todo-item"
 
-    func validateDrop(info: DropInfo) -> Bool { info.hasItemsConforming(to: [type]) }
+    /// 받을 수 없는 드롭에는 삽입선을 그리지 않는다. `false` 를 돌려주면 SwiftUI 가
+    /// `dropEntered` 를 부르지 않아 `isTargeted` 가 켜지지 않는다.
+    ///
+    /// 끌고 오는 항목이 무엇인지는 드래그 페이스트보드에서 바로 읽는다. 이 자리에서
+    /// `loadDataRepresentation` 은 비동기라 늦고, 드래그는 앱 안에서만 시작되므로
+    /// (`draggingSession(_:sourceOperationMaskFor:)` 가 앱 밖으로는 빈 마스크를 준다)
+    /// 페이스트보드에는 우리가 쓴 값만 들어 있다.
+    func validateDrop(info: DropInfo) -> Bool {
+        guard info.hasItemsConforming(to: [type]) else { return false }
+        guard let source = draggedItem else { return true }
+        return store.canMoveItem(source, toNote: noteID, tab: tabID, before: beforeID)
+    }
+
+    private var draggedItem: TodoItemDrag? {
+        guard let data = NSPasteboard(name: .drag).data(forType: .init(type)) else { return nil }
+        return try? JSONDecoder().decode(TodoItemDrag.self, from: data)
+    }
+
     func dropEntered(info: DropInfo) { isTargeted = true }
     func dropExited(info: DropInfo) { isTargeted = false }
     func dropUpdated(info: DropInfo) -> DropProposal? {
