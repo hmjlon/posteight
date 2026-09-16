@@ -79,6 +79,7 @@ private let englishStrings: [String: String] = [
     "Touch ID 또는 Mac 로그인 암호로 본인 확인 후 앱 잠금을 사용해요.": "Verify with Touch ID or your Mac login password to enable app lock.",
     "Touch ID 또는 Mac 로그인 암호로 본인 확인 후 앱 잠금을 꺼요.": "Verify with Touch ID or your Mac login password to turn off app lock.",
     "이 기능은 화면을 잠그며 저장된 메모를 암호화하지는 않아요.": "This locks the screen but does not encrypt stored notes.",
+    "잠금 사용 여부는 이 Mac의 다른 프로그램이 본인 확인 없이 바꿀 수 있어요.": "Other programs on this Mac can turn the lock on or off without verifying your identity.",
     "Posteight 잠그기": "Lock Posteight",
     "잠겨 있어요": "Locked",
 

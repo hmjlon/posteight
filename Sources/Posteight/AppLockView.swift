@@ -157,7 +157,12 @@ private struct AuthenticationSettingsView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
+            // 두 줄은 서로 다른 얘기다. 위는 "디스크의 파일은 평문이다", 아래는 "잠금 설정
+            // 자체가 인증으로 지켜지지 않는다" 이고 후자가 고지돼 있지 않았다. 왜 코드로
+            // 막지 않고 고지하는지는 `AppLock.enabledKey` 의 주석을 본다.
             Text(L("이 기능은 화면을 잠그며 저장된 메모를 암호화하지는 않아요."))
+                .font(.caption).foregroundStyle(.secondary)
+            Text(L("잠금 사용 여부는 이 Mac의 다른 프로그램이 본인 확인 없이 바꿀 수 있어요."))
                 .font(.caption).foregroundStyle(.secondary)
             if let error { Text(L(error)).font(.caption).foregroundStyle(.red) }
             HStack {

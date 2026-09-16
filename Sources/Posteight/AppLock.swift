@@ -9,6 +9,24 @@ final class AppLock: ObservableObject {
     typealias Authenticator = @MainActor (_ reason: String) async throws -> Void
 
     static let shared = AppLock()
+
+    /// 잠금 사용 여부의 유일한 근거다. **이 값은 인증으로 지켜지지 않는다.**
+    ///
+    /// 샌드박스 컨테이너 안에 있지만 같은 사용자로 도는 아무 프로세스나 양방향으로 뒤집을 수
+    /// 있다(`defaults write com.younjiyoung.posteight posteight.appLock.isEnabled -bool
+    /// false`). 아래 `enable`/`disable` 의 본인 확인은 이 앱이 값을 바꾸기 *전에* 자발적으로
+    /// 부르는 것일 뿐, 값 자체를 지키지는 못한다.
+    ///
+    /// 제대로 막으려면 `SecAccessControl(.userPresence)` 로 보호되는 Keychain 항목으로
+    /// 옮겨야 하는데, 그건 data protection keychain 을 요구하고 그 키체인은
+    /// `application-identifier`(또는 `keychain-access-groups`) entitlement 를 요구한다.
+    /// 지금은 Team ID 없는 ad-hoc 서명이라 그 entitlement 가 붙지 않고, 샌드박스 + ad-hoc
+    /// 로 재현한 번들에서 `SecItemAdd` 가 실제로 `-34018 errSecMissingEntitlement` 로
+    /// 떨어지는 것을 확인했다. 인증 게이트 없는 평문 Keychain 항목으로 옮기는 것은 의미가
+    /// 없다 — 같은 번들에서 쓴 항목을 무관한 프로세스가 프롬프트 0회로 읽고 지웠다.
+    ///
+    /// 그래서 지금은 설정 화면에서 고지만 한다(`AppLockView`). 배포 서명이 들어오면
+    /// (`.handoff/SECURITY-HANDOFF.md` 의 WP-5) 그때 Keychain 으로 옮긴다.
     static let enabledKey = "posteight.appLock.isEnabled"
 
     @Published private(set) var isEnabled: Bool
