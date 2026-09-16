@@ -72,7 +72,6 @@ several lists side by side.
 - Paper colors, pen colors, pen styles, and per-tab icons, all set from the pen case
 - Closing a memo window — the close button or Esc — only hides it; the memo stays
 - Trash with restore and permanent-delete actions, emptying itself after 30 days
-- Daily work log preview and clipboard export as Markdown
 
 ### Menu bar
 
@@ -81,8 +80,8 @@ several lists side by side.
 Posteight has no main window. The status item is the only permanent surface: the 8 of
 Posteight drawn as a small infinity loop, with today's count beside it. The loop traces
 itself as items get done and completes when nothing is left. Clicking it opens the popover —
-quick capture, opening memo windows, hiding every memo at once, the daily log, the trash,
-settings, and quit.
+quick capture, opening memo windows, hiding every memo at once, the trash, settings,
+and quit.
 
 Settings stay small: what the status item counts, whether notes float above other apps,
 whether memos stay out of screen shares and screenshots, and whether Posteight keeps a
@@ -96,7 +95,7 @@ a menu-bar-only app.
 
 Posteight reads in Korean or English, and follows your Mac's language until you pick one.
 **Settings → Language** switches every string the app draws itself — the popover, the memo
-controls, the trash, the daily log — with no relaunch; open memo windows change as you click.
+controls, the trash — with no relaunch; open memo windows change as you click.
 What you typed stays exactly as you typed it: note text, tab names, and titles are yours, not
 translated.
 
@@ -110,13 +109,13 @@ Nothing else on the Mac can reach in, and the files are written readable by you 
 Settings → App → Open folder takes you there. Notes from versions before the sandbox are
 copied over once, on first launch, and the old folder is left untouched.
 
-There is no account, no sync, and no telemetry. Export is explicit: the daily log copies to
-the clipboard as Markdown, marked so clipboard managers keep it out of their history.
-Notion synchronization is not implemented yet.
+There is no account, no sync, and no telemetry. Export is explicit: Command-A selects the
+current tab in a memo window and Command-C copies it to the clipboard, marked so clipboard
+managers keep it out of their history.
 
 Enable **Settings → App lock** to lock all of Posteight from the menu bar. Unlocking uses Touch ID
 or your Mac login password, so Posteight stores no separate password. While locked, the app hides
-memos, Trash, the daily log, and task counts. Enabling app lock also keeps task text out of
+memos, Trash, and task counts. Enabling app lock also keeps task text out of
 notifications, and a relaunched app stays locked until you authenticate. This is a screen lock;
 it does not encrypt the stored note files.
 
