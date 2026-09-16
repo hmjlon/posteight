@@ -702,7 +702,15 @@ final class PosteightStore: ObservableObject {
         } ?? moved[targetNote].tabs[targetTab].items.count
         moved[targetNote].tabs[targetTab].items.insert(item, at: insertion)
         moved[targetNote].tabs[targetTab].items = Self.itemsPinnedFirst(moved[targetNote].tabs[targetTab].items)
+        // 순서 비교가 먼저다. 아래에서 정렬 기록을 지우고 나면 자리가 그대로인 드롭까지
+        // "바뀌었다" 로 읽혀서, 받아들일 수 없는 드롭이 성공한 것처럼 보인다.
         guard moved != notes else { return false }
+        // 손으로 순서를 바꾼 순간 완료별 정렬의 "원래 순서"는 더 이상 의미가 없다. 남겨 두면
+        // 목록은 정렬 상태가 아닌데 `isCompletionGroupingActive` 만 참으로 남아, 다음에 정렬
+        // 버튼을 누를 때 "다시 정렬"이 아니라 "원래 순서 복원"이 돈다. 출발 탭도 같이 지운다
+        // — 항목이 빠져나간 쪽도 손으로 건드린 것은 마찬가지다.
+        moved[sourceNote].tabs[sourceTab].completionGroupingOriginalOrder = nil
+        moved[targetNote].tabs[targetTab].completionGroupingOriginalOrder = nil
         let before = editingSnapshot
         endTextUndoGroup()
         presentedDetailItemID = nil
