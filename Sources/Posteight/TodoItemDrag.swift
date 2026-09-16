@@ -48,9 +48,20 @@ struct TodoItemDragHandle: NSViewRepresentable {
 
         override func mouseDown(with event: NSEvent) {
             guard let window else { return }
+            // 기한을 준다. `until: .distantFuture` 는 다음 드래그나 마우스 업이 오지 않는 경로가
+            // 하나라도 생기면 메인 스레드를 그 자리에서 영원히 붙잡고, 그때는 앱 전체가 굳어
+            // 복구할 방법이 없다.
+            //
+            // 기한이 지나 빠져나가도 드래그를 잃지는 않는다. 이 메서드가 돌아가면 AppKit 이
+            // 평소대로 `mouseDragged` 를 이 뷰에 보내고, 그쪽도 `beginTaskDrag` 를 부른다.
+            // 그래서 손을 짚은 채 한참 생각하다 끄는 사용자도 그대로 끌 수 있다.
+            //
+            // 이 루프가 `leftMouseUp` 을 직접 dequeue 하므로 `NoteWindowConfigurator` 의 로컬
+            // 마우스 모니터는 그 업을 보지 못한다. 지금은 다음 `leftMouseDown` 이
+            // `dragStartFrame` 을 덮어써서 무해하지만, 그쪽 로직을 고칠 때 알고 있어야 한다.
             while let next = window.nextEvent(
                 matching: [.leftMouseDragged, .leftMouseUp],
-                until: .distantFuture,
+                until: Date().addingTimeInterval(1),
                 inMode: .eventTracking,
                 dequeue: true
             ) {
@@ -63,6 +74,12 @@ struct TodoItemDragHandle: NSViewRepresentable {
         override func draw(_ dirtyRect: NSRect) {
             super.draw(dirtyRect)
             guard isVisible || isHovered else { return }
+            Self.drawGrip(color: color)
+        }
+
+        /// 손잡이 글리프. 드래그 이미지도 이걸 쓴다 — 뷰의 `isHovered` 를 읽지 않아야
+        /// 래스터화 시점이 언제든 같은 그림이 나온다.
+        nonisolated private static func drawGrip(color: NSColor) {
             color.withAlphaComponent(0.65).setStroke()
             let path = NSBezierPath()
             path.lineWidth = 1.2
@@ -83,10 +100,15 @@ struct TodoItemDragHandle: NSViewRepresentable {
             let pasteboardItem = NSPasteboardItem()
             pasteboardItem.setData(data, forType: .init("com.younjiyoung.posteight.todo-item"))
             let draggingItem = NSDraggingItem(pasteboardWriter: pasteboardItem)
-            let image = NSImage(size: bounds.size)
-            image.lockFocus()
-            draw(bounds)
-            image.unlockFocus()
+            // `lockFocus()` 는 주 디스플레이 배율로 굽는다. 배율이 다른 화면이 섞여 있으면
+            // 한쪽에서 흐려진다 — `MenuBarProgressCard` 가 이미 같은 함정을 겪었다
+            // (`FoldedCardSurface` 의 `render`). 그리는 시점의 컨텍스트 배율을 따라가는
+            // drawing handler 로 바꾸면 화면을 고를 필요 자체가 없어진다.
+            let color = self.color
+            let image = NSImage(size: bounds.size, flipped: false) { _ in
+                NativeHandle.drawGrip(color: color)
+                return true
+            }
             draggingItem.setDraggingFrame(bounds, contents: image)
             beginDraggingSession(with: [draggingItem], event: event, source: self)
         }
