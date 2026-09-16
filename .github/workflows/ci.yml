@@ -21,9 +21,22 @@ permissions:
 jobs:
   test:
     name: Unit tests (SwiftPM)
-    # 개발 환경(Xcode 26)과 러너를 맞춘다. 툴체인이 갈리면 CI 실패가 진짜 실패인지
-    # 버전 차이인지 구분할 수 없게 된다.
-    runs-on: macos-26
+    strategy:
+      # 한쪽이 깨져도 다른 쪽 결과를 본다. 어느 조합에서만 깨지는지가 곧 진단이다.
+      fail-fast: false
+      matrix:
+        # 개발자의 주력 환경과 러너를 맞춘다. 툴체인이 갈리면 CI 실패가 진짜 실패인지
+        # 버전 차이인지 구분할 수 없게 된다. 그 환경이 macOS 27 + Xcode 27 로 옮겨갔는데
+        # 러너는 macOS 26 하나뿐이라, CI 가 실제로 쓰이는 조합을 한 번도 돌리지 않았다.
+        #
+        # `macos-27` 라벨은 아직 없다. 그 조합은 `xcode-27` 이미지가 준다 — 이름은 Xcode
+        # 를 가리키지만 실제 OS 도 macOS 27.0 이다(actions/runner-images 의
+        # `images/macos/xcode-27-arm64-Readme.md`). 아직 preview 라 큐가 밀리거나
+        # 불안정할 수 있다. 그런데도 `continue-on-error` 를 주지 않는 것은, 이 WP 의
+        # 목적이 바로 macOS 27 실패를 보이게 하는 것이기 때문이다. 이미지 쪽 문제로
+        # 판명되면 그때 한 줄로 낮춘다.
+        runner: [macos-26, xcode-27]
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -42,6 +55,8 @@ jobs:
 
   app:
     name: App bundle (xcodebuild)
+    # 산출물 성격의 확인이라 러너 하나로 고정한다. 두 벌로 늘려도 얻는 것은 적고,
+    # private 저장소로 돌아가면 macOS 분이 10 배로 붙는다.
     runs-on: macos-26
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
