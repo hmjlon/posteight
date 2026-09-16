@@ -87,7 +87,7 @@ struct StickyNoteWindowView: View {
         .background {
             NoteWindowConfigurator(
                 note: note,
-                windowTitle: lock.isLocked ? "Posteight" : selectedTab.title,
+                windowTitle: NoteWindowTitle.make(isLocked: lock.isLocked, tabName: selectedTab.name),
                 onEscape: closeCard,
                 onDelete: requestDeleteSelectedTab,
                 onSelectAll: {
@@ -632,6 +632,27 @@ struct StickyNoteWindowView: View {
     }
 }
 
+
+/// 메모 창의 `NSWindow.title` 로 내보낼 값.
+///
+/// 이 값은 타이틀 바에는 안 보이지만(`titleVisibility = .hidden`) 거기서 끝나지 않는다.
+/// `kCGWindowName`, Mission Control 과 App Exposé 의 창 라벨, Window 메뉴, 접근성 트리의
+/// `AXTitle` 로 전부 나간다. 화면 캡처 제외(`sharingType = .none`)는 픽셀만 막고 이 경로는
+/// 하나도 막지 못한다 — 캡처에서 검게 가려진 창 옆에서 제목만 그대로 읽히게 된다.
+///
+/// 그래서 사용자가 쓴 본문 제목(`MemoTab.title`)은 절대 여기 들어오지 않는다. 탭
+/// 이름(`MemoTab.name`)만 쓴다. 기본값이 `메모 1` 이라 Window 메뉴에서 창을 구분할 수는
+/// 있고, 사용자가 탭 이름을 직접 바꾸면 그 이름까지는 나간다는 것은 받아들인 절충이다.
+enum NoteWindowTitle {
+    /// 잠금 중이거나 내보낼 이름이 없을 때 쓰는 이름. 앱 이름이라 아무것도 알려 주지 않는다.
+    static let fallback = "Posteight"
+
+    static func make(isLocked: Bool, tabName: String) -> String {
+        guard !isLocked else { return fallback }
+        let trimmed = tabName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? fallback : trimmed
+    }
+}
 
 private struct NoteWindowConfigurator: NSViewRepresentable {
     let note: StickyNote
