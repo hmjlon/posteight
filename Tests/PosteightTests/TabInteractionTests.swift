@@ -5,6 +5,20 @@ import Testing
 @Suite("Tab merging and quick delete", .serialized)
 @MainActor
 struct TabInteractionTests {
+    @Test("The tab bar collapses before equal division makes a tab unselectable")
+    func tabsCollapseBeforeTheyGetTooNarrow() {
+        func strip(_ noteWidth: CGFloat) -> CGFloat {
+            noteWidth - MemoSurfaceMetrics.trailingControlsWidth - MemoSurfaceMetrics.addTabButtonWidth
+        }
+        // 기본 폭에 탭 10개는 22pt, 최대 폭에서도 34pt — 앞의 것은 접어야 한다.
+        #expect(MemoSurfaceMetrics.collapsesTabs(count: 10, stripWidth: strip(310), isAtMinimumWidth: false))
+        #expect(!MemoSurfaceMetrics.collapsesTabs(count: 10, stripWidth: strip(430), isAtMinimumWidth: false))
+        // v0.1.0 에서 나올 수 있던 가장 좁은 배치 — 최소 폭 바로 위에 탭 5개, 31.8pt — 는 그대로 편다.
+        #expect(!MemoSurfaceMetrics.collapsesTabs(count: 5, stripWidth: strip(245), isAtMinimumWidth: false))
+        #expect(MemoSurfaceMetrics.collapsesTabs(count: 2, stripWidth: strip(244), isAtMinimumWidth: true))
+        #expect(!MemoSurfaceMetrics.collapsesTabs(count: 1, stripWidth: strip(244), isAtMinimumWidth: true))
+    }
+
     @Test("Merging preserves every tab, selection and contents after reload")
     func mergeRoundTrip() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

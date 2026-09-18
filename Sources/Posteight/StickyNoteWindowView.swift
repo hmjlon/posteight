@@ -231,8 +231,9 @@ struct StickyNoteWindowView: View {
     ) -> some View {
         let dividedWidth = availableWidth / CGFloat(max(note.tabs.count, 1))
 
-        if note.tabs.count > 1 && isAtMinimumWidth {
-            // Collapse only at the window's minimum width, regardless of tab count.
+        if MemoSurfaceMetrics.collapsesTabs(
+            count: note.tabs.count, stripWidth: availableWidth, isAtMinimumWidth: isAtMinimumWidth
+        ) {
             HStack(alignment: .bottom, spacing: 0) {
                 memoTab(
                     note,

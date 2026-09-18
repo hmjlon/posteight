@@ -6,11 +6,22 @@ enum MemoSurfaceMetrics {
     static let activeTabHeight: CGFloat = 32
     static let inactiveTabHeight: CGFloat = 27
     static let maximumTabWidth: CGFloat = 180
+    /// 균등 분할은 여기서 멈춘다. 이보다 좁은 탭은 누를 곳도 닫을 곳도 남지 않으므로, 그렇게
+    /// 되기 전에 탭 바를 현재 탭과 탭 목록 메뉴로 접는다. 스티커는 54pt 아래에서, 이름은 그보다
+    /// 먼저 잘리지만 그건 되돌릴 수 있는 손실이다. v0.1.0 이 탭 한도 5개를 정한 기준이 이 값이다.
+    static let minimumTabWidth: CGFloat = 30
     static let tabListButtonWidth: CGFloat = 26
     static let maximumTabCount = 10
     static let addTabButtonWidth: CGFloat = 30
     static let trailingControlsWidth: CGFloat = 56
     static let tabCornerRadius: CGFloat = 8
+
+    /// 창이 최소 폭이거나, 폭을 나눴을 때 탭 하나가 `minimumTabWidth` 보다 좁아지면 접는다.
+    /// 탭 10개는 기본 폭(310)에서 22pt, 최대 폭(430)에서도 34pt 라 최소 폭 판정만으로는 부족하다.
+    static func collapsesTabs(count: Int, stripWidth: CGFloat, isAtMinimumWidth: Bool) -> Bool {
+        guard count > 1 else { return false }
+        return isAtMinimumWidth || stripWidth / CGFloat(count) < minimumTabWidth
+    }
 }
 
 struct MemoCardShape: Shape {

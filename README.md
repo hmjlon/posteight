@@ -63,8 +63,9 @@ step is unavoidable for anyone but the person who built the app.
 <img src="docs/images/posteight-note-en.png" alt="A memo window with two tabs: a pinned task with a note, a completed task struck through, and a task with a reminder" width="300">
 
 Each memo is its own floating window that remembers where you put it, across displays too.
-Inside, a compact tab bar holds up to ten lists: tabs share the width while they fit, the bar
-scrolls sideways when they don't, and at the narrowest size it folds into a menu of tabs.
+Inside, a compact tab bar holds up to ten lists. Tabs share the width; when the memo is at its
+narrowest, or holds too many tabs for each to stay clickable, the bar folds into the current tab
+and a menu of the rest.
 
 - Multiple independent, floating, resizable memo windows; a new one opens on the screen you are working on
 - Per-memo tabs, renamed inline by clicking the active tab again. Drop a memo onto another to merge their tabs
