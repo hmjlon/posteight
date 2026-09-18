@@ -53,8 +53,21 @@ final class ReminderService: NSObject, ObservableObject, UNUserNotificationCente
             .removeDuplicates()
             .sink { [weak self, weak store] reminders in
                 guard store?.isStorageBlocked == false else { return }
+                self?.cancelDropped(reminders)
                 self?.enqueue(reminders)
             }
+    }
+
+    /// 완료·삭제·휴지통 이동·해제로 빠진 알림은 큐를 기다리지 않고 바로 지운다. 큐의 동기화는
+    /// `pendingRequests()` 를 기다리는 사이에 앱이 종료되면 끝나지 않아서, 끝내자마자 종료하면 이미
+    /// 끝낸 할 일의 알림이 나중에 떴다. 더하고 고치는 쪽은 그대로 큐가 맡는다.
+    private var knownReminderIDs: Set<String> = []
+
+    private func cancelDropped(_ reminders: [Reminder]) {
+        let current = Set(reminders.map(\.id.uuidString))
+        let dropped = knownReminderIDs.subtracting(current)
+        if !dropped.isEmpty { client?.removePendingRequests(withIdentifiers: Array(dropped)) }
+        knownReminderIDs = current
     }
 
     @discardableResult

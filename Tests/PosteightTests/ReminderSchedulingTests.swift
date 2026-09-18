@@ -234,6 +234,23 @@ struct ReminderSchedulingTests {
         let trigger = try #require(client.requests[i.uuidString]?.trigger as? UNCalendarNotificationTrigger)
         #expect(trigger.nextTriggerDate() == date)
     }
+    @Test("Completing a task cancels its notification at once, without waiting on the sync queue")
+    func completingCancelsImmediately() async throws {
+        let (directory, store, n, t, i) = try fixture()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let client = FakeReminderClient()
+        let service = ReminderService(client: client)
+        service.connect(to: store)
+        _ = try await service.saveReminder(
+            store: store, noteID: n, tabID: t, itemID: i, date: Date().addingTimeInterval(600))
+        #expect(client.requests[i.uuidString] != nil)
+
+        store.toggleItem(noteID: n, tabID: t, itemID: i)
+
+        // 아무것도 기다리지 않는다. 완료 직후 종료해도 이 시점에 이미 지워져 있어야 한다.
+        #expect(client.requests[i.uuidString] == nil)
+    }
+
     @Test("Loading failure does not cancel already scheduled notifications")
     func unreadableStoreKeepsNotifications() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
