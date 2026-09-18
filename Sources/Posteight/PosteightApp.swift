@@ -391,8 +391,11 @@ private struct MenuBarLabel: View {
                 presentNote(note.id)
             }
         }
+        // 백업 복원과 저장소 복구 재시도는 메모 여러 개를 한 번에 들여온다. 첫 번째만 띄우면 나머지는
+        // 메모 보기를 누르기 전까지 숨은 채로 남는다.
         .onChange(of: store.notes.map(\.id)) { previousIDs, currentIDs in
-            if let noteID = currentIDs.first(where: { !previousIDs.contains($0) }) {
+            let previous = Set(previousIDs)
+            for noteID in currentIDs where !previous.contains(noteID) {
                 presentNote(noteID)
             }
         }
