@@ -236,6 +236,11 @@ struct TrashedMemoTab: Identifiable, Codable, Equatable {
     var penHex: String
     var stickerSymbol: String
     var deletedAt: Date
+    // 펜촉과 글꼴도 메모에 속한 모양이라 같이 옮긴다. 이것들이 생기기 전에 쓴 파일에는 키가 없으므로
+    // 선택형이고, 합성된 디코더가 없는 키를 nil 로 읽는다.
+    var penStyle: PenStyle? = nil
+    var fontID: String? = nil
+    var fontSize: NoteFontSize? = nil
 }
 
 struct TodoItem: Identifiable, Codable, Equatable {

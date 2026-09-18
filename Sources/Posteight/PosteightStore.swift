@@ -534,7 +534,10 @@ final class PosteightStore: ObservableObject {
                 paperHex: note.paperHex,
                 penHex: note.penHex,
                 stickerSymbol: tab.stickerSymbol,
-                deletedAt: Date()
+                deletedAt: Date(),
+                penStyle: note.penStyle,
+                fontID: note.fontID,
+                fontSize: note.fontSize
             ),
             at: 0
         )
@@ -557,15 +560,17 @@ final class PosteightStore: ObservableObject {
             notes[noteIndex].tabs.append(restoredTab)
             notes[noteIndex].selectedTabID = restoredTab.id
         } else {
-            notes.append(
-                StickyNote(
-                    stickerSymbol: trashed.stickerSymbol,
-                    paperHex: trashed.paperHex,
-                    penHex: trashed.penHex,
-                    position: nextNotePosition(origin: origin),
-                    tabs: [trashed.tab]
-                )
+            var note = StickyNote(
+                stickerSymbol: trashed.stickerSymbol,
+                paperHex: trashed.paperHex,
+                penHex: trashed.penHex,
+                penStyle: trashed.penStyle ?? .ballpoint,
+                position: nextNotePosition(origin: origin),
+                tabs: [trashed.tab]
             )
+            note.fontID = trashed.fontID
+            note.fontSize = trashed.fontSize
+            notes.append(note)
         }
     }
 

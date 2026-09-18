@@ -211,6 +211,43 @@ struct PersistenceTests {
         #expect(notes.first?.tabs.map(\.id) == [secondTabID])
     }
 
+    @Test("A tab restored into a new note keeps its note's nib, font, and text size")
+    func restoredTabKeepsItsNoteStyle() throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = PosteightStore(directory: directory)
+        let noteID = store.addNote()
+        store.updatePenStyle(noteID, style: .highlighter)
+        store.updateFont(noteID, fontID: "hana")
+        store.updateFontSize(noteID, size: .large)
+        let tabID = try #require(store.addTab(to: noteID))
+        store.moveTabToTrash(noteID: noteID, tabID: tabID)
+        store.moveNoteToTrash(noteID)
+        store.flush()
+
+        let reloaded = PosteightStore(directory: directory)
+        reloaded.restoreTab(tabID)
+
+        let restored = try #require(reloaded.notes.first { $0.tabs.contains { $0.id == tabID } })
+        #expect(restored.penStyle == .highlighter)
+        #expect(restored.fontID == "hana")
+        #expect(restored.fontSize == .large)
+    }
+
+    @Test("Closed tabs saved before the nib and font travelled with them still load")
+    func legacyTrashedTabStillDecodes() throws {
+        let json = """
+        [{"sourceNoteID":"\(UUID().uuidString)","paperHex":"#EED9D8","penHex":"#B84A62",
+          "stickerSymbol":"house","deletedAt":0,
+          "tab":{"id":"\(UUID().uuidString)","name":"메모 1","title":"","items":[]}}]
+        """
+        let tabs = try JSONDecoder().decode([TrashedMemoTab].self, from: Data(json.utf8))
+        #expect(tabs.count == 1)
+        #expect(tabs.first?.penStyle == nil)
+        #expect(tabs.first?.fontID == nil)
+        #expect(tabs.first?.fontSize == nil)
+    }
+
     @Test("Emptying the trash clears closed tabs too")
     func emptyingTrashClearsTabs() throws {
         let directory = temporaryDirectory()
