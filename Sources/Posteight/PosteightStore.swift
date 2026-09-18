@@ -1066,14 +1066,47 @@ final class PosteightStore: ObservableObject {
                 needsSessionBackup = false
                 refreshBackupDate()
             }
-            try write(notes, to: notesURL)
-            try write(trashedNotes, to: trashURL)
-            try write(trashedTabs, to: trashedTabsURL)
+            let encoder = JSONEncoder()
+            try writeTogether([(try encoder.encode(notes), notesURL),
+                               (try encoder.encode(trashedNotes), trashURL),
+                               (try encoder.encode(trashedTabs), trashedTabsURL)])
             storageError = nil
         } catch {
             storageError = .save
             NSLog("Posteight: failed to save: \(error)")
         }
+    }
+
+    /// 메모와 휴지통 세 파일을 함께 바꾼다. 셋을 모두 옆에 써 두고, 바꿔 끼울 자리를 확인한 뒤에야
+    /// 제자리로 옮긴다. 하나씩 쓰면 휴지통으로 옮기거나 되살린 메모처럼 두 파일 사이를 오가는 항목이,
+    /// 두 번째 파일에서 디스크가 차는 순간 어느 파일에도 없게 됐다. 오류를 띄운 채 그대로 종료하면
+    /// 그 메모는 사라진다. 옮기기(`rename`)는 데이터를 쓰지 않으므로 디스크가 차서 실패하지 않는다.
+    private func writeTogether(_ encoded: [(data: Data, url: URL)]) throws {
+        let manager = FileManager.default
+        try manager.createDirectory(at: directory, withIntermediateDirectories: true,
+                                    attributes: [.posixPermissions: 0o700])
+        try manager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
+        var staged: [(temporary: URL, destination: URL)] = []
+        defer { for file in staged { try? manager.removeItem(at: file.temporary) } }
+        for file in encoded {
+            let temporary = directory.appendingPathComponent(".\(file.url.lastPathComponent).saving")
+            try file.data.write(to: temporary)
+            try manager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: temporary.path)
+            staged.append((temporary, file.url))
+        }
+        // 파일 자리에 폴더가 있으면 그 파일 하나만 옮기지 못하므로, 옮기기 전에 걸러 낸다.
+        for file in staged {
+            var isDirectory: ObjCBool = false
+            if manager.fileExists(atPath: file.destination.path, isDirectory: &isDirectory), isDirectory.boolValue {
+                throw CocoaError(.fileWriteFileExists, userInfo: [NSFilePathErrorKey: file.destination.path])
+            }
+        }
+        for file in staged {
+            guard rename(file.temporary.path, file.destination.path) == 0 else {
+                throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+            }
+        }
+        staged.removeAll()
     }
 
     func createBackup() throws {

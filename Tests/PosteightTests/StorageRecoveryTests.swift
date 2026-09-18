@@ -100,6 +100,30 @@ struct StorageRecoveryTests {
         #expect(PosteightStore(directory: root).notes.contains { $0.id == id })
     }
 
+    @Test("A save that cannot write every file replaces none of them")
+    func partialSaveReplacesNothing() throws {
+        let root = directory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = PosteightStore(directory: root)
+        let id = store.addNote()
+        store.flush()
+        let trash = root.appendingPathComponent("trash.json")
+        try FileManager.default.removeItem(at: trash)
+        try FileManager.default.createDirectory(at: trash, withIntermediateDirectories: true)
+
+        store.moveNoteToTrash(id)
+        store.flush()
+
+        #expect(store.storageError == .save)
+        // 휴지통 쪽을 쓰지 못했으니 notes.json 도 그대로다. 하나씩 쓰던 때는 메모가 notes.json 에서
+        // 먼저 빠지고 trash.json 에는 들어가지 못해, 이대로 종료하면 어느 파일에도 없었다.
+        let onDisk = try JSONDecoder().decode(
+            [StickyNote].self, from: Data(contentsOf: root.appendingPathComponent("notes.json")))
+        #expect(onDisk.contains { $0.id == id })
+        #expect(try FileManager.default.contentsOfDirectory(atPath: root.path)
+            .allSatisfy { !$0.hasSuffix(".saving") })
+    }
+
     @Test("Automatic backup preserves the previous session, even after repeated flushes")
     func automaticBackup() throws {
         let root = directory()
