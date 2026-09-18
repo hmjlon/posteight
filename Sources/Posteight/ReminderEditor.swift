@@ -27,7 +27,6 @@ struct ReminderEditor: View {
             Text(L("알림 예약")).font(.headline)
             Text(item.title).lineLimit(2)
             DatePicker(L("날짜와 시간"), selection: $date, displayedComponents: [.date, .hourAndMinute])
-                .environment(\.locale, Locale(identifier: settings.language.resolved == .korean ? "ko_KR" : "en_US"))
                 .disabled(isSaving)
             if let savedDate {
                 Label(L("예약 완료"), systemImage: "checkmark.circle.fill")
@@ -68,6 +67,9 @@ struct ReminderEditor: View {
         }
         .foregroundStyle(Color.black.opacity(0.8))
         .environment(\.colorScheme, .light)
+        // 날짜 선택기만이 아니라 예약 완료 시각까지 앱 언어로 그린다. 로케일은 형제 뷰로 번지지
+        // 않아서, 선택기에만 걸면 바로 아래 시각은 Mac 의 언어로 나왔다.
+        .environment(\.locale, Locale(identifier: settings.language.localeIdentifier))
         .padding(16)
         .frame(width: 340)
         // Keep the result visible when macOS opens its permission alert or System Settings.
