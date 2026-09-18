@@ -546,13 +546,16 @@ final class PosteightStore: ObservableObject {
 
     /// Restores into the note it was closed from when that note still exists, or stands up a
     /// fresh note around it when that note is itself gone — a restore should never just vanish.
+    /// 원래 메모가 탭 한도까지 찼을 때도 새 메모를 세운다. 한도는 탭 추가와 합치기가 지키는
+    /// 것이라, 복원만 끼워 넣으면 메모가 한도를 넘긴 채 남고 되풀이할수록 늘어난다.
     func restoreTab(_ trashedTabID: UUID, origin: NotePoint = NotePoint(x: 0, y: 0)) {
         let historyBefore = editingSnapshot
         defer { recordEdit(from: historyBefore) }
         guard let index = trashedTabs.firstIndex(where: { $0.id == trashedTabID }) else { return }
         let trashed = trashedTabs.remove(at: index)
 
-        if let noteIndex = notes.firstIndex(where: { $0.id == trashed.sourceNoteID }) {
+        if let noteIndex = notes.firstIndex(where: { $0.id == trashed.sourceNoteID }),
+           notes[noteIndex].tabs.count < MemoSurfaceMetrics.maximumTabCount {
             var restoredTab = trashed.tab
             if restoredTab.stickerSymbol.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 restoredTab.stickerSymbol = trashed.stickerSymbol

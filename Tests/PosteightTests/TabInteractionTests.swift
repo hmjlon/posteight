@@ -19,6 +19,26 @@ struct TabInteractionTests {
         #expect(!MemoSurfaceMetrics.collapsesTabs(count: 1, stripWidth: strip(244), isAtMinimumWidth: true))
     }
 
+    @Test("Restoring a closed tab into a full note stands up a new note instead of an eleventh tab")
+    func restoringIntoFullNoteMakesNewNote() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = PosteightStore(directory: directory)
+        let noteID = store.addNote()
+        let closed = try #require(store.addTab(to: noteID))
+        store.moveTabToTrash(noteID: noteID, tabID: closed)
+        while store.addTab(to: noteID) != nil {}
+
+        store.restoreTab(closed)
+
+        let source = try #require(store.notes.first { $0.id == noteID })
+        #expect(source.tabs.count == MemoSurfaceMetrics.maximumTabCount)
+        let home = try #require(store.notes.first { $0.tabs.contains { $0.id == closed } })
+        #expect(home.id != noteID)
+        #expect(home.tabs.map(\.id) == [closed])
+        #expect(store.trashedTabs.isEmpty)
+    }
+
     @Test("Merging preserves every tab, selection and contents after reload")
     func mergeRoundTrip() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
