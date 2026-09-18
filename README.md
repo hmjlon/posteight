@@ -60,42 +60,57 @@ step is unavoidable for anyone but the person who built the app.
 
 ### Memo windows
 
-<img src="docs/images/posteight-note-en.png" alt="A memo window with two tabs and a completed item struck through" width="300">
+<img src="docs/images/posteight-note-en.png" alt="A memo window with two tabs: a pinned task with a note, a completed task struck through, and a task with a reminder" width="300">
 
-Each memo is its own floating window that remembers where you put it. Inside, a compact
-tab bar splits the memo width evenly — no horizontal scrolling — so one window can hold
-several lists side by side.
+Each memo is its own floating window that remembers where you put it, across displays too.
+Inside, a compact tab bar holds up to ten lists: tabs share the width while they fit, the bar
+scrolls sideways when they don't, and at the narrowest size it folds into a menu of tabs.
 
-- Multiple independent, floating, resizable memo windows
-- Per-memo tabs, renamed inline by clicking the active tab again
+- Multiple independent, floating, resizable memo windows; a new one opens on the screen you are working on
+- Per-memo tabs, renamed inline by clicking the active tab again. Drop a memo onto another to merge their tabs
 - Checklists with an animated pen strike-through on completion
-- Paper colors, pen colors, pen styles, and per-tab icons, all set from the pen case
+- Paper and pen colors, nib, per-tab icons, and the memo's font and text size, all set from the pencil case
 - Closing a memo window — the close button or Esc — only hides it; the memo stays
-- Trash with restore and permanent-delete actions, emptying itself after 30 days
+- Trash with content previews, restore, and permanent delete, emptying itself after 30 days
 
 ### Menu bar
 
 <img src="docs/images/posteight-menubar.png" alt="The Posteight status item, an infinity loop that traces itself as items get done" width="44">
 
 Posteight has no main window. The status item is the only permanent surface: the 8 of
-Posteight drawn as a small infinity loop, with today's count beside it. The loop traces
-itself as items get done and completes when nothing is left. Clicking it opens the popover —
-quick capture, opening memo windows, hiding every memo at once, the trash, settings,
-and quit.
+Posteight drawn as a small infinity loop, with the number of remaining or finished tasks
+beside it — or no number at all. The loop traces itself as items get done and completes when
+nothing is left. Clicking it opens the popover — a new memo, search, showing or hiding every
+memo at once, the trash, locking the app when app lock is on, settings, and quit.
 
-Settings stay small: what the status item counts, whether notes float above other apps,
-whether memos stay out of screen shares and screenshots, and whether Posteight keeps a
-Dock icon. The Dock icon is on by default, so a running Posteight can be reached from the
-Dock and Command-Tab, and clicking it brings the memo windows back. Turning it off leaves
-a menu-bar-only app.
+Settings covers the language, what the status item counts, whether notes stay in front of
+other apps and out of screen shares and screenshots, whether reminders show task text, app
+lock, the default font, storage and backups, and whether Posteight keeps a Dock icon. The
+Dock icon is on by default, so a running Posteight can be reached from the Dock and
+Command-Tab, and clicking it brings the memo windows back. Turning it off leaves a
+menu-bar-only app.
 
 ### Search and organize
 
 - Choose **Search Notes…** in the menu bar to search names, titles, tasks, and details across all tabs. Click a result to open the matching location in its memo.
 - Drag task handles to reorder, or use the context menu to move tasks to another memo. Pin tasks to the top or sort by completion state.
-- Use Command-Z to undo and Shift-Command-Z to redo. Command-A and Command-C select and copy a whole tab when you are not editing a text field; active fields keep their own selection behavior.
-- Schedule reminders for individual tasks. Notifications require permission in the installed app, and task previews are hidden by default.
-- Choose a font and text size in Settings, or import your own font files.
+- Schedule reminders for individual tasks. Notifications require permission in the installed app. They show a short notice instead of the task text unless you turn on **Settings → Reminders → Show task text in notifications**.
+- Set the default font and text size in Settings, or pick a different font and size for one memo from its pencil case. Import your own TTF, OTF, or TTC font files.
+
+### Keyboard shortcuts
+
+| Keys | Action |
+| --- | --- |
+| Command-N | New memo |
+| Command-T | New tab in the current memo |
+| Command-Delete | Move the current tab to the Trash, after confirming |
+| Command-Z / Shift-Command-Z | Undo / redo across the whole memo |
+| Command-A, then Command-C | Select and copy the current tab |
+| Esc | Hide the memo |
+| Command-, | Settings |
+
+The memo shortcuts also work while a Korean input source is active. While you are editing a
+field, Command-A selects within that field only.
 
 ### Storage errors and backups
 
@@ -103,7 +118,7 @@ If saved files cannot be read or previous notes cannot be migrated, editing and 
 
 Successfully loaded notes are backed up to `backup.json` before the first save after launch. **Back Up Current Notes** replaces that backup with the current contents. **Restore Backup…** replaces notes and trash with the backup, archiving the original files in a `BeforeRestore-…` folder. A restore interrupted by quitting resumes on the next launch.
 
-Backups contain notes and trash, but not settings or font files. They stay in the same storage folder on this Mac and do not replace an external backup against disk failure. Backups and archived originals can retain deleted content beyond the trash's 30-day retention period. Delete unneeded `backup.json` and `BeforeRestore-…` folders through **Settings → App → Open folder**.
+Backups contain notes and trash, but not settings or font files. They stay in the same storage folder on this Mac and do not replace an external backup against disk failure. Backups and archived originals can retain deleted content beyond the trash's 30-day retention period. Delete unneeded `backup.json` and `BeforeRestore-…` folders through **Settings → App → Open Folder**.
 
 ### Language
 
@@ -122,7 +137,7 @@ The menus macOS draws itself — File, Edit, Window — still follow the system 
 Posteight runs in the App Sandbox, so your notes live inside its own container —
 `~/Library/Containers/com.younjiyoung.posteight/Data/Library/Application Support/Posteight/`.
 File permissions restrict reading and writing to your user account. Files are not encrypted; these permissions do not prevent access by other programs running as the same user.
-Settings → App → Open folder takes you there. Notes from versions before the sandbox are
+Settings → App → Open Folder takes you there. Notes from versions before the sandbox are
 copied over once, on first launch, and the old folder is left untouched.
 
 There is no account, no sync, and no telemetry. Export is explicit: Command-A selects the
