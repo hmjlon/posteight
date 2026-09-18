@@ -54,7 +54,7 @@ macOS 가 `linkd` / Process Instance Registry XPC 실패를 로그에 남기고,
 - **`MenuBarExtra`** (`.menuBarExtraStyle(.window)`) — 상태 아이템에 `MenuBarLabel`, 팝오버에
   `MenuBarPanelView`. 유일한 상설 표면이다.
 - **`WindowGroup("Posteight", for: UUID.self)`** — 노트 ID 하나당 메모 창 하나. 타이틀 바는 숨긴다.
-- **`Window(id:)`** — `WindowID.dailyLog` 와 `WindowID.trash`. `openWindow` 로 여는 단일 창이다.
+- **`Window(id:)`** — `WindowID.search` 와 `WindowID.trash`. `openWindow` 로 여는 단일 창이다.
 - **설정은 씬이 아니다.** 앱에 시트를 붙일 창이 없어서 `SettingsModal.present` 가 자기
   `NSWindow` 를 띄운다. `NSApp.runModal` 은 일부러 피했다. 모달 세션이 `terminate` 를 삼켜서
   설정이 열려 있는 동안 Command-Q 가 통째로 먹통이 됐다.
@@ -83,7 +83,7 @@ activation policy 를 정한다. 나중에 바꾸면 씬이 다시 만들어지�
 Sources/Posteight/
   PosteightApp.swift         @main, 씬, NoteWindowCoordinator, AppDelegate, MenuBarLabel
   PosteightStore.swift       @MainActor ObservableObject — 모든 변경, 저장, 마이그레이션,
-                             오늘 기록 Markdown
+                             백업·복원, 편집 이력, 탭 복사
   Models.swift               StickyNote, MemoTab, TodoItem, 휴지통 타입, PenStyle,
                              ColorOption, StickerOption, DesignTokens
   AppSettings.swift          설정 싱글턴(UserDefaults 기반), activation policy
@@ -95,7 +95,7 @@ Sources/Posteight/
   StickyNoteWindowView.swift 메모 창 껍데기: 탭 바, NSWindow 설정, 프레임 저장과 복원
   StickyNoteView.swift       메모 본문
   TodoItemRow.swift          체크리스트 행과 펜 줄 긋기
-  TrashView.swift, DailyLogPreviewView.swift, SettingsView.swift, SettingsModal.swift,
+  TrashView.swift, NoteSearchView.swift, SettingsView.swift, SettingsModal.swift,
   PencilCaseView.swift       보조 화면들
   PlainEditableTextField.swift, WindowMoveHandle.swift   NSViewRepresentable 브리지
   Color+Hex.swift
@@ -145,8 +145,8 @@ README 이미지를 다시 찍을 때는 **설정 → 노트** 의 "화면 공�
   셋뿐이다. **임시 예외는 한 릴리스용이다. 마이그레이션이 한 바퀴 돌고 나면 지운다.**
   Release 는 `CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO` 다 — 빼면 Xcode 가 ad-hoc 서명을
   배포 신원으로 보지 않아 `get-task-allow` 를 배포 빌드에까지 주입한다.
-- 네트워크 호출도, 계정도, API 키도 없다. 밖으로 나가는 경로는 오늘 기록을 Markdown 으로
-  클립보드에 복사하는 것 하나뿐이고, 그것도 명시적인 동작이다.
+- 네트워크 호출도, 계정도, API 키도 없다. 밖으로 나가는 경로는 메모 창에서 Command-A →
+  Command-C 로 현재 탭을 클립보드에 복사하는 것 하나뿐이고, 그것도 명시적인 동작이다.
 - 환경변수는 `POSTEIGHT_SYSTEM_LANGUAGE` 하나뿐이고 테스트 전용이다.
 
 ## 작업 시 주의할 점
@@ -187,7 +187,7 @@ Posteight 는 자기가 그리는 UI 를 한국어나 영어로 보여 주고, �
 - 뷰는 `@MainActor` 인 `L(_:)` 를 불러도 된다. 이건 실제로 `AppSettings.shared` 를 읽는다. 그런데도
   동작하는 이유는 **모든 창의 루트 뷰가 `@ObservedObject var settings = AppSettings.shared` 를
   들고 있기 때문**이다 — `MenuBarPanelView`, `StickyNoteWindowView`, `TrashView`,
-  `DailyLogPreviewView`, `PencilCaseView`, `SettingsView`, `MenuBarLabel`. 이걸 빠뜨린 새 루트는
+  `NoteSearchView`, `PencilCaseView`, `SettingsView`, `MenuBarLabel`. 이걸 빠뜨린 새 루트는
   처음 그려진 언어에 그대로 멈춘다. 자식 뷰는 루트가 다시 그려질 때 따라오므로 아무것도 필요 없다.
 - SwiftUI 가 값을 비교해야 하는 자리 — `Picker` 옵션 라벨, `ForEach` 안의 것 — 는 언어를 명시적으로
   넘긴다. `PenStyle`, `MenuBarCountStyle`, `StickerOption`, `AppLanguage` 의 `title(in:)` 을 쓴다.
