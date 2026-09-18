@@ -178,6 +178,72 @@ struct StorageRecoveryTests {
             .allSatisfy { !$0.hasPrefix("BeforeRestore-") })
     }
 
+    /// 메뉴 막대 30pt, 왼쪽 Dock 50pt 인 화면에서 옛 기준(visibleFrame)과 새 기준(frame).
+    private let legacyAnchor = NSRect(x: 50, y: 0, width: 1870, height: 1050)
+    private let anchor = NSRect(x: 0, y: 0, width: 1920, height: 1080)
+
+    private func withIsolatedDefaults(_ body: (UserDefaults) throws -> Void) throws {
+        let name = "PosteightTests.Rebase.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        try body(defaults)
+    }
+
+    @Test("The one-time position rebase also moves trashed notes and this session's backup")
+    func rebaseCoversTrashAndSessionBackup() throws {
+        try withIsolatedDefaults { defaults in
+            let root = directory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let original = PosteightStore(directory: root, defaults: defaults)
+            let kept = original.addNote()
+            let trashed = original.addNote()
+            original.moveNoteToTrash(trashed)
+            original.flush()
+            let keptBefore = try #require(original.notes.first { $0.id == kept }).position
+            let trashedBefore = try #require(original.trashedNotes.first { $0.id == trashed }).note.position
+            let movedKept = NotePoint(x: keptBefore.x + 50, y: keptBefore.y + 30)
+            let movedTrashed = NotePoint(x: trashedBefore.x + 50, y: trashedBefore.y + 30)
+
+            let store = PosteightStore(directory: root, defaults: defaults)
+            store.rebaseNotePositions(from: legacyAnchor, to: anchor)
+            store.flush()
+
+            #expect(store.notes.first { $0.id == kept }?.position == movedKept)
+            #expect(store.trashedNotes.first { $0.id == trashed }?.note.position == movedTrashed)
+            let backup = try JSONDecoder().decode(
+                StoreBackup.self, from: Data(contentsOf: root.appendingPathComponent("backup.json")))
+            #expect(backup.notes.first { $0.id == kept }?.position == movedKept)
+            #expect(backup.trashedNotes.first { $0.id == trashed }?.note.position == movedTrashed)
+        }
+    }
+
+    @Test("A rebase asked for while storage is blocked waits for the retry that loads the notes")
+    func rebaseWaitsForSuccessfulRetry() throws {
+        try withIsolatedDefaults { defaults in
+            let root = directory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let original = PosteightStore(directory: root, defaults: defaults)
+            let id = original.addNote()
+            original.flush()
+            let before = try #require(original.notes.first { $0.id == id }).position
+            let notesFile = root.appendingPathComponent("notes.json")
+            let intact = try Data(contentsOf: notesFile)
+            try Data("broken".utf8).write(to: notesFile)
+
+            let store = PosteightStore(directory: root, defaults: defaults)
+            #expect(store.isStorageBlocked)
+            store.rebaseNotePositions(from: legacyAnchor, to: anchor)
+            #expect(!defaults.bool(forKey: "posteight.notePositionsRebased"))
+
+            try intact.write(to: notesFile)
+            store.retryLoading()
+
+            #expect(!store.isStorageBlocked)
+            #expect(store.notes.first { $0.id == id }?.position == NotePoint(x: before.x + 50, y: before.y + 30))
+            #expect(defaults.bool(forKey: "posteight.notePositionsRebased"))
+        }
+    }
+
     @Test("Invalid backup never changes current data")
     func invalidBackup() throws {
         let root = directory()

@@ -136,10 +136,12 @@ final class PosteightStore: ObservableObject {
     // Notes now live in Application Support. These two domains are read-only fallbacks for
     // data written before that move: `swift run` launches an unbundled binary whose standard
     // domain is not the app bundle's, so both were used at different times.
-    private let defaults: UserDefaults = {
+    private let defaults: UserDefaults
+
+    private static var appDefaults: UserDefaults {
         guard Bundle.main.bundleIdentifier == nil else { return .standard }
         return UserDefaults(suiteName: "com.younjiyoung.posteight") ?? .standard
-    }()
+    }
 
     static private(set) var migrationIsBlocked = false
 
@@ -273,12 +275,41 @@ final class PosteightStore: ObservableObject {
     /// 다시 배치하지 않는다.
     func rebaseNotePositions(from legacy: NSRect, to anchor: NSRect) {
         guard !defaults.bool(forKey: Self.positionsRebasedKey) else { return }
+        let offset = (dx: Double(legacy.minX - anchor.minX), dy: Double(anchor.maxY - legacy.maxY))
+        // 메모를 읽지 못한 채 시작했으면 옮길 메모가 아직 없다. 여기서 표시를 남기면 다시 시도로
+        // 불러온 예전 메모는 영영 옮겨지지 않으므로, 불러오기가 성공할 때(`retryLoading`)까지 미룬다.
+        guard !isStorageBlocked else { pendingRebase = offset; return }
+        applyRebase(offset)
+    }
+
+    /// 옛 기준으로 적힌 좌표는 살아 있는 메모에만 있지 않다. 휴지통의 메모는 복원하면 그 좌표로
+    /// 서고, 이번 실행의 자동 백업은 첫 저장 때 불러온 그대로 쓰인다. 셋 다 같이 옮기지 않으면
+    /// 표시가 선 뒤에 되살린 메모가 기준 차이만큼 밀려서 뜬다.
+    private func applyRebase(_ offset: (dx: Double, dy: Double)) {
+        pendingRebase = nil
         defaults.set(true, forKey: Self.positionsRebasedKey)
-        notes = Self.rebasedPositions(
-            notes,
-            dx: legacy.minX - anchor.minX,
-            dy: anchor.maxY - legacy.maxY
-        )
+        notes = Self.rebasedPositions(notes, dx: offset.dx, dy: offset.dy)
+        trashedNotes = Self.rebasedPositions(trashedNotes, dx: offset.dx, dy: offset.dy)
+        if needsSessionBackup, let snapshot = loadedSnapshot {
+            loadedSnapshot = StoreBackup(
+                createdAt: snapshot.createdAt,
+                notes: Self.rebasedPositions(snapshot.notes, dx: offset.dx, dy: offset.dy),
+                trashedNotes: Self.rebasedPositions(snapshot.trashedNotes, dx: offset.dx, dy: offset.dy),
+                trashedTabs: snapshot.trashedTabs
+            )
+        }
+    }
+
+    nonisolated static func rebasedPositions(
+        _ trash: [TrashedStickyNote],
+        dx: Double,
+        dy: Double
+    ) -> [TrashedStickyNote] {
+        trash.map { entry in
+            var entry = entry
+            entry.note = rebasedPositions([entry.note], dx: dx, dy: dy)[0]
+            return entry
+        }
     }
 
     /// 기준 두 개의 차이만 받는다. 화면을 읽지 않으므로 테스트가 그대로 부를 수 있다.
@@ -302,6 +333,8 @@ final class PosteightStore: ObservableObject {
     private let trashedTabsURL: URL
 
     private var saveTask: Task<Void, Never>?
+    /// 읽지 못한 채 시작한 실행에서 받아 둔 위치 기준 차이. 불러오기가 성공하면 그때 옮긴다.
+    private var pendingRebase: (dx: Double, dy: Double)?
     @Published private(set) var storageError: StorageFailure?
     @Published private(set) var isStorageBlocked = false
     @Published private(set) var backupDate: Date?
@@ -318,7 +351,10 @@ final class PosteightStore: ObservableObject {
     /// `language` is what the first load names things in — sample notes and any tab whose name
     /// has to be filled in. It defaults to the source language so tests do not depend on the
     /// language of the machine running them.
-    init(directory: URL? = nil, language: AppLanguage = .korean, legacyDirectory: URL? = nil) {
+    /// `defaults` 도 테스트만 넘긴다. 위치 기준 이전 표시가 실제 앱의 도메인에 남지 않게 한다.
+    init(directory: URL? = nil, language: AppLanguage = .korean, legacyDirectory: URL? = nil,
+         defaults: UserDefaults? = nil) {
+        self.defaults = defaults ?? Self.appDefaults
         let resolvedDirectory = directory ?? Self.storeDirectory
         self.usesDefaultDirectory = directory == nil
         self.migrationSource = directory == nil ? Self.legacyStoreDirectory : legacyDirectory
@@ -950,6 +986,8 @@ final class PosteightStore: ObservableObject {
             searchFocusRequest = nil
             isStorageBlocked = false
             apply(snapshot)
+            // 창이 서기 전에 옮겨야 한다. 이 호출이 끝난 뒤에야 새로 나타난 메모의 창이 열린다.
+            if let pendingRebase { applyRebase(pendingRebase) }
             storageError = nil
             refreshBackupDate()
             purgeExpiredTrash()
