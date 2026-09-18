@@ -124,6 +124,7 @@ private let englishStrings: [String: String] = [
     "기본체": "System",
     "하나손글씨": "Hana Handwriting",
     "기본값 사용": "Use default",
+    "기본값 (%@)": "Default (%@)",
     "기본 메모 폰트": "Default memo font",
     "오늘 할 일을 적어보세요": "Write down your plans for today",
     "각 포스트잇의 필통에서 다른 폰트를 선택할 수 있어요.": "Choose a different font in each note’s pencil case.",

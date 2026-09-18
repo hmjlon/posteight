@@ -321,10 +321,16 @@ final class NoteFontLibrary: ObservableObject {
 
 /// Native menu items retain their typeface in both the menu and the selected title.
 struct NoteFontPicker: NSViewRepresentable {
+    /// 메모가 설정의 기본 폰트를 따른다는 선택값. 메모의 `fontID` 로는 nil 이다.
+    static let followsDefault = ""
+
     let entries: [NoteFontEntry]
     let language: AppLanguage
     @Binding var selection: String
     var fontSize: CGFloat = 13
+    /// 주면 맨 위에 "기본값 (그 폰트)" 항목을 둔다. 필통만 쓴다 — 기본 폰트를 고르는 설정에는 따를
+    /// 기본값이 없다. 이 항목이 없으면 메모가 한 번 폰트를 고른 뒤로는 기본값을 다시 따를 길이 없다.
+    var defaultEntryID: String? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator(selection: $selection) }
 
@@ -338,22 +344,35 @@ struct NoteFontPicker: NSViewRepresentable {
     func updateNSView(_ button: NSPopUpButton, context: Context) {
         context.coordinator.selection = $selection
         button.removeAllItems()
-        for entry in entries {
-            let title = entry.title(language: language)
-            let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-            item.representedObject = entry.id
-            let font = entry.postScriptName.flatMap { NSFont(name: $0, size: fontSize) }
-                ?? NSFont.systemFont(ofSize: fontSize)
-            item.attributedTitle = NSAttributedString(string: title, attributes: [.font: font])
-            button.menu?.addItem(item)
+        let defaultEntry = defaultEntryID.flatMap { id in entries.first { $0.id == id } }
+        if let defaultEntry {
+            let title = Lf("기본값 (%@)", language: language, defaultEntry.title(language: language))
+            addItem(to: button, id: Self.followsDefault, title: title, postScriptName: defaultEntry.postScriptName)
+            button.menu?.addItem(.separator())
         }
-        if let index = entries.firstIndex(where: { $0.id == selection }) {
-            button.selectItem(at: index)
-            button.font = entries[index].postScriptName.flatMap { NSFont(name: $0, size: fontSize) }
-                ?? NSFont.systemFont(ofSize: fontSize)
+        for entry in entries {
+            addItem(to: button, id: entry.id, title: entry.title(language: language), postScriptName: entry.postScriptName)
+        }
+        if let item = button.itemArray.first(where: { ($0.representedObject as? String) == selection }) {
+            button.select(item)
+            let postScriptName = selection == Self.followsDefault
+                ? defaultEntry?.postScriptName
+                : entries.first { $0.id == selection }?.postScriptName
+            button.font = font(postScriptName)
         }
         button.setAccessibilityLabel(L("폰트", language: language))
         button.invalidateIntrinsicContentSize()
+    }
+
+    private func addItem(to button: NSPopUpButton, id: String, title: String, postScriptName: String?) {
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        item.representedObject = id
+        item.attributedTitle = NSAttributedString(string: title, attributes: [.font: font(postScriptName)])
+        button.menu?.addItem(item)
+    }
+
+    private func font(_ postScriptName: String?) -> NSFont {
+        postScriptName.flatMap { NSFont(name: $0, size: fontSize) } ?? NSFont.systemFont(ofSize: fontSize)
     }
 
     final class Coordinator: NSObject {

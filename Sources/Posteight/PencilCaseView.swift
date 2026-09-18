@@ -16,10 +16,12 @@ struct PencilCaseView: View {
             }
 
             toolRow(title: L("폰트")) {
+                // nil 은 "설정의 기본 폰트를 따른다" 는 뜻이다. 지운 폰트를 가리키던 메모도 실제로는 기본
+                // 폰트로 그려지므로 같은 항목에 선다.
                 NoteFontPicker(entries: fonts.entries, language: settings.language, selection: Binding(
-                    get: { fonts.resolvedID(for: note.fontID, defaultID: settings.defaultFontID) },
-                    set: { store.updateFont(note.id, fontID: $0) }
-                ), fontSize: 13)
+                    get: { note.fontID.flatMap { fonts.contains($0) ? $0 : nil } ?? NoteFontPicker.followsDefault },
+                    set: { store.updateFont(note.id, fontID: $0 == NoteFontPicker.followsDefault ? nil : $0) }
+                ), fontSize: 13, defaultEntryID: fonts.resolvedID(for: nil, defaultID: settings.defaultFontID))
                 .fixedSize()
 
                 FontImportButton()
