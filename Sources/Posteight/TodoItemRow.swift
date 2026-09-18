@@ -3,21 +3,39 @@ import SwiftUI
 
 struct TodoItemRow: View {
     @EnvironmentObject private var store: PosteightStore
+    @ObservedObject private var fonts = NoteFontLibrary.shared
+    @ObservedObject private var settings = AppSettings.shared
+    private var fontName: String? { fonts.fontName(for: note.fontID, defaultID: settings.defaultFontID) }
+    private var fontSizeAdjustment: CGFloat { (note.fontSize ?? settings.defaultFontSize).adjustment }
+    private var titleFontSize: CGFloat { 15 + fontSizeAdjustment }
     let note: StickyNote
     let tab: MemoTab
     let item: TodoItem
+    let isAllContentSelected: Bool
     @Binding var focusedItemID: UUID?
+    var searchFocus: SearchFocusRequest? = nil
 
+    @State private var strikeProgress: CGFloat = 0
     @State private var showPen = false
     @State private var isEditingText = false
     @State private var isRowHovered = false
-    @State private var showDetail = false
+    @State private var showReminder = false
     @State private var measuredTitleWidth: CGFloat = 0
     /// Bumped on every strike so a stale timer cannot end a newer flourish early.
     @State private var penGeneration = 0
 
     var body: some View {
         HStack(alignment: .center, spacing: 8) {
+            TodoItemDragHandle(
+                item: TodoItemDrag(noteID: note.id, tabID: tab.id, itemID: item.id),
+                color: NSColor(Color(hex: note.penHex)),
+                isVisible: isRowHovered || isEditingText
+            )
+                .frame(width: 16, height: 24)
+                .help(L("드래그하여 순서 변경 · 우클릭하여 다른 메모로 이동"))
+                .accessibilityLabel(L("할 일 이동"))
+                .contextMenu { moveMenu }
+
             Button {
                 toggleDone()
             } label: {
@@ -58,64 +76,47 @@ struct TodoItemRow: View {
                         }
                     ),
                     placeholder: L("할 일 입력"),
-                    fontSize: Self.titleFontSize,
+                    fontSize: titleFontSize,
                     fontWeight: Self.titleFontWeight,
+                    fontName: fontName,
                     textOpacity: item.isDone ? 0.38 : 0.76,
                     isFocused: focusedItemID == item.id,
-                    onEditingChanged: { isEditingText = $0 },
+                    placesCaretAtEndOnFocus: true,
+                    showsWholeSelection: isAllContentSelected && hasContent,
+                    searchFocus: searchFocus?.target == .itemTitle(item.id) ? searchFocus : nil,
+                    onSearchFocusApplied: { store.finishSearchFocus($0) },
+                    onEditingChanged: {
+                        isEditingText = $0
+                        if $0 { focusedItemID = item.id }
+                    },
                     onSubmit: {
                         focusedItemID = store.addItem(to: note.id, tabID: tab.id)
                     },
                     onMoveUp: { moveFocus(by: -1) },
-                    onMoveDown: { moveFocus(by: 1) }
+                    onMoveDown: { moveFocus(by: 1) },
+                    onDeleteEmpty: {
+                        guard let previousID = store.deleteEmptyItemBackward(
+                            noteID: note.id, tabID: tab.id, itemID: item.id
+                        ) else { return false }
+                        focusedItemID = previousID
+                        return true
+                    }
                 )
-                .frame(height: 26)
+                .frame(height: 26 + max(0, fontSizeAdjustment))
 
                 StrikeLine(
                     color: Color(hex: note.penHex),
                     style: note.penStyle,
                     textWidth: measuredTitleWidth,
-                    progress: isStruck ? 1 : 0,
+                    progress: strikeProgress,
                     showPen: showPen
                 )
                 .allowsHitTesting(false)
-                .animation(.easeInOut(duration: 0.68), value: isStruck)
             }
-            .frame(height: 28)
+            .frame(height: 28 + max(0, fontSizeAdjustment))
 
-            Button {
-                showDetail = true
-            } label: {
-                Image(systemName: hasDetail ? "text.alignleft" : "plus.bubble")
-                    .font(.system(size: 10, weight: .semibold))
-                    .frame(width: 16, height: 16)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(Color(hex: note.penHex).opacity(hasDetail ? 0.7 : 0.34))
-            // An item with notes keeps its marker visible; an empty one only offers on hover.
-            .opacity(hasDetail ? 1 : (isRowHovered || isEditingText ? 1 : 0))
-            .disabled(!hasContent)
-            .help(hasDetail ? L("세부사항 보기") : L("세부사항 추가"))
-            .popover(isPresented: $showDetail, arrowEdge: .trailing) {
-                DetailEditor(
-                    text: store.itemDetail(noteID: note.id, tabID: tab.id, itemID: item.id) ?? "",
-                    title: store.itemTitle(noteID: note.id, tabID: tab.id, itemID: item.id) ?? item.title,
-                    symbol: note.stickerSymbol,
-                    paperColor: Color(hex: note.paperHex),
-                    inkColor: Color(hex: note.penHex),
-                    onEdit: {
-                        store.updateItemDetail(
-                            noteID: note.id,
-                            tabID: tab.id,
-                            itemID: item.id,
-                            detail: $0
-                        )
-                    },
-                    onClose: { showDetail = false }
-                )
-                // Paints the popover's own chrome, arrow included, so the slip reads as a piece
-                // torn off this card rather than a system panel floating over it.
-                .presentationBackground(Color(hex: note.paperHex))
+            ForEach(visibleRowActions, id: \.self) { action in
+                rowActionButton(action)
             }
 
             Button {
@@ -123,38 +124,109 @@ struct TodoItemRow: View {
             } label: {
                 Image(systemName: "minus")
                     .font(.system(size: 9, weight: .bold))
-                    .frame(width: 16, height: 16)
+                    .frame(width: DesignTokens.rowDeleteButtonSize, height: DesignTokens.rowDeleteButtonSize)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .foregroundStyle(.black.opacity(0.24))
             .opacity(isRowHovered || isEditingText ? 1 : 0.12)
-            .help(L("삭제"))
+            .accessibilityLabel(L("삭제"))
+            .help(L("항목 삭제 — ⌘Z로 실행 취소"))
         }
         .contentShape(Rectangle())
+        .overlay(alignment: .bottomLeading) {
+            if tab.items.last?.id != item.id {
+                Rectangle()
+                    .fill(.black.opacity(0.1))
+                    .frame(height: 0.5)
+                    // Like a ruled memo pad, the line starts after the checkbox and continues
+                    // beneath the hover-only controls to the trailing edge.
+                    .padding(.leading, 28)
+                    .offset(y: 2.5)
+                    .allowsHitTesting(false)
+            }
+        }
         .onHover { isRowHovered = $0 }
         .animation(.easeOut(duration: 0.12), value: isRowHovered)
         .onChange(of: currentTitle, initial: true) { _, title in
-            measuredTitleWidth = Self.width(of: title)
+            measuredTitleWidth = width(of: title)
         }
-        // Only the travelling pen is a one-off flourish; the line itself follows the item.
+        .onChange(of: titleFontSize) { _, _ in measuredTitleWidth = width(of: currentTitle) }
+        .onChange(of: fontName) { _, _ in measuredTitleWidth = width(of: currentTitle) }
+        .onAppear {
+            // Persisted completions open already struck without replaying the flourish.
+            strikeProgress = isStruck ? 1 : 0
+        }
         .onChange(of: isStruck) { _, isStruck in
+            penGeneration += 1
+            let generation = penGeneration
+
             guard isStruck else {
                 showPen = false
+                withAnimation(.easeOut(duration: 0.18)) {
+                    strikeProgress = 0
+                }
                 return
             }
 
-            showPen = true
-            penGeneration += 1
-            let generation = penGeneration
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.76) {
+            // Put the nib at the start in a separate render pass. If zero and one are written
+            // in the same pass SwiftUI coalesces them, leaving the pen visible only at the end.
+            var reset = Transaction()
+            reset.disablesAnimations = true
+            withTransaction(reset) {
+                strikeProgress = 0
+                showPen = true
+            }
+
+            DispatchQueue.main.async {
                 guard penGeneration == generation else { return }
-                showPen = false
+
+                withAnimation(.easeInOut(duration: 0.68)) {
+                    strikeProgress = 1
+                }
+
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.76) {
+                    guard penGeneration == generation else { return }
+                    showPen = false
+                }
             }
         }
     }
 
-    private static let titleFontSize: CGFloat = 15
+    @ViewBuilder
+    private var moveMenu: some View {
+        Menu(L("다른 메모로 이동")) {
+            ForEach(store.notes) { destination in
+                ForEach(destination.tabs) { destinationTab in
+                    if destinationTab.id != tab.id {
+                        Button(destinationTab.name + " · " + destinationTab.title) {
+                            store.moveItem(
+                                TodoItemDrag(noteID: note.id, tabID: tab.id, itemID: item.id),
+                                toNote: destination.id,
+                                tab: destinationTab.id
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     private static let titleFontWeight: NSFont.Weight = .medium
+
+    private var detailPresentation: Binding<Bool> {
+        Binding(
+            get: { store.presentedDetailItemID == item.id },
+            set: { isPresented in
+                if isPresented {
+                    store.presentedDetailItemID = item.id
+                } else if store.presentedDetailItemID == item.id {
+                    // A previous popover may finish closing after the next one opens.
+                    store.presentedDetailItemID = nil
+                }
+            }
+        )
+    }
 
     private var currentTitle: String {
         store.itemTitle(noteID: note.id, tabID: tab.id, itemID: item.id) ?? item.title
@@ -163,8 +235,9 @@ struct TodoItemRow: View {
     /// The strike stops where the text does, so it is measured in the field's own font. Measured
     /// on change rather than per render: hovering a row mutates `isRowHovered`, which re-runs the
     /// body, and laying out a string is not free at one call per row per pointer move.
-    private static func width(of title: String) -> CGFloat {
-        let font = NSFont.systemFont(ofSize: titleFontSize, weight: titleFontWeight)
+    private func width(of title: String) -> CGFloat {
+        let font = fontName.flatMap { NSFont(name: $0, size: titleFontSize) }
+            ?? NSFont.systemFont(ofSize: titleFontSize, weight: Self.titleFontWeight)
         return (title as NSString).size(withAttributes: [.font: font]).width
     }
 
@@ -181,6 +254,129 @@ struct TodoItemRow: View {
         !(item.detail ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    private var showsAllRowActions: Bool {
+        isRowHovered || isEditingText
+    }
+
+    private var visibleRowActions: [TodoRowAction] {
+        let active = TodoRowAction.allCases.filter(isActionActive)
+        guard showsAllRowActions else {
+            return TodoRowAction.allCases.filter(isActionPresented).filter { !active.contains($0) } + active
+        }
+        // New hover controls appear to the left, so active status icons never jump away from
+        // their resting positions beside the delete button.
+        return TodoRowAction.allCases.filter { !isActionActive($0) } + active
+    }
+
+    private func isActionActive(_ action: TodoRowAction) -> Bool {
+        switch action {
+        case .reminder: item.reminderAt != nil
+        case .detail: hasDetail
+        case .pin: item.isPinned
+        }
+    }
+
+    private func isActionPresented(_ action: TodoRowAction) -> Bool {
+        switch action {
+        case .reminder: showReminder
+        case .detail: detailPresentation.wrappedValue
+        case .pin: false
+        }
+    }
+
+    @ViewBuilder
+    private func rowActionButton(_ action: TodoRowAction) -> some View {
+        switch action {
+        case .reminder:
+            Button {
+                showReminder = true
+            } label: {
+                Image(systemName: item.reminderAt == nil ? "bell" : "bell.fill")
+                    .font(.system(size: 10, weight: .semibold))
+                    .frame(width: 16, height: 20)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color(hex: note.penHex).opacity(item.reminderAt == nil ? 0.34 : 0.7))
+            .disabled(!hasContent || item.isDone)
+            .help(item.reminderAt.map { L("알림 예약") + ": " + $0.formatted(date: .abbreviated, time: .shortened) } ?? L("알림 예약"))
+            .popover(isPresented: $showReminder) {
+                ReminderEditor(noteID: note.id, tabID: tab.id, item: item, onClose: { showReminder = false })
+                    .environmentObject(store)
+                    .presentationBackground(Color(hex: note.paperHex))
+                    .preferredColorScheme(.light)
+                    .excludedFromScreenCapture()
+            }
+
+        case .detail:
+            Button {
+                store.presentedDetailItemID = item.id
+            } label: {
+                Image(systemName: hasDetail ? "bubble.fill" : "plus.bubble")
+                    .font(.system(size: 10, weight: .semibold))
+                    .frame(width: 16, height: 16)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color(hex: note.penHex).opacity(hasDetail ? 0.7 : 0.34))
+            .disabled(!hasContent)
+            .help(hasDetail ? L("세부사항 보기") : L("세부사항 추가"))
+            .popover(isPresented: detailPresentation, arrowEdge: .trailing) {
+                DetailEditor(
+                    text: store.itemDetail(noteID: note.id, tabID: tab.id, itemID: item.id) ?? "",
+                    title: store.itemTitle(noteID: note.id, tabID: tab.id, itemID: item.id) ?? item.title,
+                    symbol: tab.stickerSymbol,
+                    paperColor: Color(hex: note.paperHex),
+                    inkColor: Color(hex: note.penHex),
+                    fontName: fontName,
+                    fontSizeAdjustment: fontSizeAdjustment,
+                    onEdit: {
+                        store.updateItemDetail(
+                            noteID: note.id,
+                            tabID: tab.id,
+                            itemID: item.id,
+                            detail: $0
+                        )
+                    },
+                    onClose: { detailPresentation.wrappedValue = false },
+                    searchFocus: searchFocus?.target == .itemDetail(item.id) ? searchFocus : nil,
+                    onSearchFocusApplied: { store.finishSearchFocus($0) }
+                )
+                .interactiveDismissDisabled()
+                .presentationBackground(Color(hex: note.paperHex))
+                .excludedFromScreenCapture()
+            }
+
+        case .pin:
+            pinButton
+        }
+    }
+
+    private var pinButton: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                store.toggleItemPin(noteID: note.id, tabID: tab.id, itemID: item.id)
+            }
+        } label: {
+            SimplePinShape()
+                .fill(item.isPinned ? Color(hex: note.penHex).opacity(0.7) : .clear)
+                .overlay {
+                    SimplePinShape()
+                        .stroke(
+                            Color(hex: note.penHex).opacity(item.isPinned ? 0.7 : 0.34),
+                            style: StrokeStyle(lineWidth: 1, lineCap: .round, lineJoin: .round)
+                        )
+                }
+                .frame(width: 8, height: 11)
+                .rotationEffect(.degrees(45))
+                .frame(width: 16, height: 16)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!hasContent)
+        .help(item.isPinned ? L("상단 고정 해제") : L("상단에 고정"))
+        .accessibilityLabel(item.isPinned ? L("상단 고정 해제") : L("상단에 고정"))
+    }
+
     private func toggleDone() {
         store.toggleItem(noteID: note.id, tabID: tab.id, itemID: item.id)
     }
@@ -190,6 +386,30 @@ struct TodoItemRow: View {
         let target = index + offset
         guard tab.items.indices.contains(target) else { return }
         focusedItemID = tab.items[target].id
+    }
+}
+
+private enum TodoRowAction: CaseIterable, Hashable {
+    case reminder
+    case detail
+    case pin
+}
+
+/// A single uninterrupted outline avoids the seam through the middle of the SF Symbol pin.
+private struct SimplePinShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX + rect.width * 0.2, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX - rect.width * 0.2, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX - rect.width * 0.3, y: rect.minY + rect.height * 0.38))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + rect.height * 0.57))
+        path.addLine(to: CGPoint(x: rect.midX + rect.width * 0.08, y: rect.minY + rect.height * 0.57))
+        path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.midX - rect.width * 0.08, y: rect.minY + rect.height * 0.57))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + rect.height * 0.57))
+        path.addLine(to: CGPoint(x: rect.minX + rect.width * 0.3, y: rect.minY + rect.height * 0.38))
+        path.closeSubpath()
+        return path
     }
 }
 
@@ -205,10 +425,16 @@ private struct DetailEditor: View {
     let symbol: String
     let paperColor: Color
     let inkColor: Color
+    let fontName: String?
+    let fontSizeAdjustment: CGFloat
     let onEdit: (String) -> Void
     let onClose: () -> Void
 
+    let searchFocus: SearchFocusRequest?
+    let onSearchFocusApplied: ((UUID) -> Void)?
+    private let sourceText: String
     @State private var text: String
+    @State private var showsClearConfirmation = false
     @FocusState private var isWriting: Bool
 
     init(
@@ -217,16 +443,25 @@ private struct DetailEditor: View {
         symbol: String,
         paperColor: Color,
         inkColor: Color,
+        fontName: String?,
+        fontSizeAdjustment: CGFloat,
         onEdit: @escaping (String) -> Void,
-        onClose: @escaping () -> Void
+        onClose: @escaping () -> Void,
+        searchFocus: SearchFocusRequest? = nil,
+        onSearchFocusApplied: ((UUID) -> Void)? = nil
     ) {
+        sourceText = text
         _text = State(initialValue: text)
         self.title = title
         self.symbol = symbol
         self.paperColor = paperColor
         self.inkColor = inkColor
+        self.fontName = fontName
+        self.fontSizeAdjustment = fontSizeAdjustment
         self.onEdit = onEdit
         self.onClose = onClose
+        self.searchFocus = searchFocus
+        self.onSearchFocusApplied = onSearchFocusApplied
     }
 
     var body: some View {
@@ -241,12 +476,21 @@ private struct DetailEditor: View {
         .padding(.vertical, 11)
         .frame(width: 300, height: 224)
         .background(paperColor)
-        .background(PaperGrain())
         .environment(\.colorScheme, .light)
+        .onChange(of: sourceText) { _, restored in
+            if text != restored { text = restored }
+        }
         .onChange(of: text) { _, edited in onEdit(edited) }
         // Opening the slip is always to read or write in it, so the caret is already there.
         // A hop past the presentation is what makes the focus stick in a popover.
         .task { isWriting = true }
+        .alert(L("세부사항을 모두 지울까요?"), isPresented: $showsClearConfirmation) {
+            Button(L("취소"), role: .cancel) { isWriting = true }
+            Button(L("확인"), role: .destructive) {
+                text = ""
+                isWriting = true
+            }
+        }
     }
 
     private var header: some View {
@@ -256,12 +500,26 @@ private struct DetailEditor: View {
                 .foregroundStyle(inkColor.opacity(0.82))
 
             Text(title)
-                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .font(fontName.map { .custom($0, size: 12 + fontSizeAdjustment) } ?? .system(size: 12 + fontSizeAdjustment, weight: .bold, design: .rounded))
                 .foregroundStyle(.black.opacity(0.62))
                 .lineLimit(1)
                 .truncationMode(.tail)
 
             Spacer(minLength: 0)
+
+            Button {
+                showsClearConfirmation = true
+            } label: {
+                Image(systemName: "eraser")
+                    .font(.system(size: 11, weight: .semibold))
+                    .frame(width: 24, height: 24)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.red.opacity(0.65))
+            .disabled(text.isEmpty)
+            .accessibilityLabel(L("세부사항 모두 지우기"))
+            .help(L("세부사항 모두 지우기"))
         }
         .padding(.bottom, 8)
     }
@@ -276,7 +534,7 @@ private struct DetailEditor: View {
             ZStack(alignment: .topLeading) {
                 if text.isEmpty {
                     Text(L("무엇을, 어떻게 하는지 적어두세요"))
-                        .font(.system(size: 13))
+                        .font(fontName.map { .custom($0, size: 13 + fontSizeAdjustment) } ?? .system(size: 13 + fontSizeAdjustment))
                         .foregroundStyle(inkColor.opacity(0.3))
                         .padding(.top, 1)
                         .allowsHitTesting(false)
@@ -284,7 +542,10 @@ private struct DetailEditor: View {
 
                 TextEditor(text: $text)
                     .focused($isWriting)
-                    .font(.system(size: 13))
+                    .background {
+                        SearchTextEditorFocus(request: searchFocus, onApplied: onSearchFocusApplied)
+                    }
+                    .font(fontName.map { .custom($0, size: 13 + fontSizeAdjustment) } ?? .system(size: 13 + fontSizeAdjustment))
                     .lineSpacing(3)
                     .foregroundStyle(inkColor.opacity(0.78))
                     .tint(inkColor)
@@ -354,6 +615,7 @@ private struct StrikeLine: View {
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
         }
-        .clipped()
+        // The rotated nib intentionally sits above the strike and can pass the text field's
+        // trailing edge. Clipping this layer cuts off the icon at both ends of the flourish.
     }
 }

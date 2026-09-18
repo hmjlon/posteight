@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+
+	<!-- 폰트 임포트 NSOpenPanel 하나 때문에 필요하다. 쓰기 권한은 주지 않는다. -->
+	<key>com.apple.security.files.user-selected.read-only</key>
+	<true/>
+
+	<!-- 한 릴리스 동안만 둔다. 샌드박스 이전에 만들어진 설치의 노트를 컨테이너로
+	     한 번 복사해 오기 위한 것이고, 복사 방향이 밖 -> 안 한쪽뿐이라 읽기만 준다.
+	     ※ 다음 릴리스에서 이 두 줄을 반드시 지운다. -->
+	<key>com.apple.security.temporary-exception.files.home-relative-path.read-only</key>
+	<array>
+		<string>/Library/Application Support/Posteight/</string>
+	</array>
+</dict>
+</plist>

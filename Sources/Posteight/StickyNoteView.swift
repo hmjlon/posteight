@@ -3,14 +3,25 @@ import SwiftUI
 
 struct StickyNoteView: View {
     @EnvironmentObject private var store: PosteightStore
+    @ObservedObject private var fonts = NoteFontLibrary.shared
+    @ObservedObject private var settings = AppSettings.shared
     let note: StickyNote
+    private var fontSizeAdjustment: CGFloat { (note.fontSize ?? settings.defaultFontSize).adjustment }
     let tab: MemoTab
     let onResizeChanged: (CGSize) -> Void
     let onResizeEnded: (CGSize) -> Void
     let onDelete: () -> Void
+    let isAllContentSelected: Bool
     @Binding var isPencilCaseOpen: Bool
     @State private var focusedItemID: UUID?
+    @State private var preparedSearchID: UUID?
     @State private var resizeAnchor: CGPoint?
+
+    private var searchRequest: SearchFocusRequest? {
+        guard let request = store.searchFocusRequest,
+              request.noteID == note.id, request.tabID == tab.id else { return nil }
+        return request
+    }
 
     var body: some View {
         noteBody
@@ -33,18 +44,22 @@ struct StickyNoteView: View {
                     get: { store.tabTitle(noteID: note.id, tabID: tab.id) ?? tab.title },
                     set: { store.updateTabTitle(noteID: note.id, tabID: tab.id, title: $0) }
                 ),
-                fontSize: 13,
+                fontSize: 13 + fontSizeAdjustment,
                 fontWeight: .medium,
-                textOpacity: 0.72
+                fontName: fonts.fontName(for: note.fontID, defaultID: settings.defaultFontID),
+                textOpacity: 0.72,
+                showsWholeSelection: isAllContentSelected && !tab.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                searchFocus: searchRequest?.target == .tabTitle ? searchRequest : nil,
+                onSearchFocusApplied: { store.finishSearchFocus($0) }
             )
-            .frame(height: 22)
+            .frame(height: 22 + max(0, fontSizeAdjustment))
 
             // Without a scroll area a long list overflows the card in both directions and
             // collides with the header, so the list gets the leftover height and nothing else.
             ScrollViewReader { proxy in
                 ScrollView(.vertical) {
                     if isPencilCaseOpen {
-                        PencilCaseView(note: note, onDelete: onDelete)
+                        PencilCaseView(note: note)
                             .transition(.asymmetric(
                                 insertion: .move(edge: .top).combined(with: .opacity),
                                 removal: .move(edge: .top).combined(with: .opacity)
@@ -53,15 +68,39 @@ struct StickyNoteView: View {
 
                     VStack(spacing: 5) {
                         ForEach(tab.items) { item in
-                            TodoItemRow(note: note, tab: tab, item: item, focusedItemID: $focusedItemID)
+                            TodoItemRow(
+                                note: note,
+                                tab: tab,
+                                item: item,
+                                isAllContentSelected: isAllContentSelected,
+                                focusedItemID: $focusedItemID,
+                                searchFocus: preparedSearchID == searchRequest?.id ? searchRequest : nil
+                            )
                                 .id(item.id)
+                                .modifier(TodoItemDropTarget(noteID: note.id, tabID: tab.id, beforeID: item.id))
                         }
+                        Color.clear
+                            .frame(height: 28)
+                            .modifier(TodoItemDropTarget(noteID: note.id, tabID: tab.id))
                     }
                     .padding(.top, isPencilCaseOpen ? 8 : 5)
                     .padding(.bottom, 2)
                 }
                 .scrollIndicators(.hidden)
                 .frame(maxHeight: .infinity)
+                .task(id: searchRequest?.id) {
+                    guard let request = searchRequest, let itemID = request.target.itemID else { return }
+                    isPencilCaseOpen = false
+                    focusedItemID = nil
+                    proxy.scrollTo(itemID, anchor: .center)
+                    // Let layout reveal the row before focusing it or anchoring its detail popover.
+                    await Task.yield()
+                    guard !Task.isCancelled, searchRequest?.id == request.id else { return }
+                    preparedSearchID = request.id
+                    if case .itemDetail = request.target {
+                        store.presentedDetailItemID = itemID
+                    }
+                }
                 .onChange(of: focusedItemID) { _, itemID in
                     guard let itemID else { return }
 
@@ -69,20 +108,63 @@ struct StickyNoteView: View {
                         proxy.scrollTo(itemID, anchor: .bottom)
                     }
                 }
+                .onChange(of: tab.items.map(\.id)) { _, ids in
+                    if let focusedItemID, !ids.contains(focusedItemID) {
+                        self.focusedItemID = nil
+                    }
+                }
             }
 
-            Button {
-                focusedItemID = store.addItem(to: note.id, tabID: tab.id)
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "plus")
-                    Text(L("할 일 추가"))
+            HStack {
+                Button {
+                    focusedItemID = store.addItem(to: note.id, tabID: tab.id)
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "plus")
+                        Text(L("할 일 추가"))
+                    }
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(.black.opacity(0.58))
                 }
-                .font(.system(size: 12, weight: .medium, design: .rounded))
-                .foregroundStyle(.black.opacity(0.58))
+                .buttonStyle(.plain)
+                .help(L("할 일 추가"))
+
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        _ = store.toggleItemsByCompletion(noteID: note.id, tabID: tab.id)
+                    }
+                } label: {
+                    Image(systemName: "arrow.up.arrow.down")
+                        .symbolRenderingMode(.monochrome)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.black.opacity(0.52))
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(store.isCompletionGroupingActive(noteID: note.id, tabID: tab.id)
+                    ? L("정렬 이전 순서로 되돌리기") : L("미완료 항목을 위로 정리"))
+                .accessibilityLabel(store.isCompletionGroupingActive(noteID: note.id, tabID: tab.id)
+                    ? L("정렬 이전 순서로 되돌리기") : L("미완료 항목을 위로 정리"))
+
+                Spacer()
+                Button(action: onDelete) {
+                    Image(systemName: "trash")
+                        .symbolRenderingMode(.monochrome)
+                        .foregroundStyle(Color.red)
+                        .font(.system(size: 11))
+                        .frame(width: 32, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .background {
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .help(L("현재 탭 삭제 (⌘⌫) — 휴지통에서 복구할 수 있어요"))
+                }
+                .accessibilityLabel(L("현재 탭 삭제 (⌘⌫) — 휴지통에서 복구할 수 있어요"))
+                .padding(.trailing, 15)
             }
-            .buttonStyle(.plain)
-            .help(L("할 일 추가"))
         }
         .padding(.horizontal, 13)
         .padding(.top, 9)

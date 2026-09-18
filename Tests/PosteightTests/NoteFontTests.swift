@@ -1,0 +1,388 @@
+import AppKit
+import Foundation
+import Testing
+@testable import Posteight
+
+@Suite("Note fonts", .serialized)
+@MainActor
+struct NoteFontTests {
+    @Test func selectionPersistsAndSupportsUndoWithoutChangingLayout() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = PosteightStore(directory: directory)
+        let id = store.addNote()
+        let original = try #require(store.notes.first { $0.id == id })
+        store.clearEditingHistory()
+        store.updateFont(id, fontID: "hana")
+        #expect(store.undo())
+        #expect(store.notes.first { $0.id == id }?.fontID == nil)
+        #expect(store.redo())
+        store.flush()
+        let loaded = PosteightStore(directory: directory)
+        let note = try #require(loaded.notes.first { $0.id == id })
+        #expect(note.fontID == "hana")
+        #expect(note.tabs == original.tabs)
+        #expect(note.size == original.size)
+        #expect(note.position == original.position)
+        var legacy = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(note)) as? [String: Any])
+        legacy.removeValue(forKey: "fontID")
+        let decoded = try JSONDecoder().decode(StickyNote.self, from: JSONSerialization.data(withJSONObject: legacy))
+        #expect(decoded.fontID == nil)
+    }
+
+    @Test func fontSizePersistsAndUndoRestoresInheritance() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = PosteightStore(directory: directory)
+        let id = store.addNote()
+        let original = try #require(store.notes.first { $0.id == id })
+        #expect(original.fontSize == nil)
+        store.clearEditingHistory()
+        store.updateFontSize(id, size: .large)
+        #expect(store.undo())
+        #expect(store.notes.first { $0.id == id }?.fontSize == nil)
+        #expect(store.redo())
+        store.flush()
+        let loaded = PosteightStore(directory: directory)
+        let note = try #require(loaded.notes.first { $0.id == id })
+        #expect(note.fontSize == .large)
+        #expect(note.size == original.size)
+        #expect(note.position == original.position)
+        #expect(note.tabs == original.tabs)
+        var legacy = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(note)) as? [String: Any])
+        legacy.removeValue(forKey: "fontSize")
+        let decoded = try JSONDecoder().decode(StickyNote.self, from: JSONSerialization.data(withJSONObject: legacy))
+        #expect(decoded.fontSize == nil)
+        loaded.updateFontSize(id, size: nil)
+        loaded.flush()
+        #expect(PosteightStore(directory: directory).notes.first { $0.id == id }?.fontSize == nil)
+        #expect(NoteFontSize.medium.adjustment == 0)
+    }
+
+    @Test func bundledFontAndFallback() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let fonts = NoteFontLibrary(directory: directory)
+        let hana = try #require(fonts.fontName(for: "hana", defaultID: "system"))
+        #expect(NSFont(name: hana, size: 15) != nil)
+        #expect(fonts.fontName(for: nil, defaultID: "hana") == hana)
+        #expect(fonts.fontName(for: "missing", defaultID: "hana") == hana)
+        #expect(fonts.fontName(for: "system", defaultID: "hana") == nil)
+        #expect(fonts.fontName(for: nil, defaultID: "missing") == nil)
+    }
+
+    @Test func customFontCopyReloadRemovalAndInvalidFile() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let source = directory.appendingPathComponent("source.ttf")
+        try FileManager.default.copyItem(at: #require(NoteFontLibrary.bundledFontURL), to: source)
+        let fontsDirectory = directory.appendingPathComponent("Fonts")
+        let fonts = NoteFontLibrary(directory: fontsDirectory, bundledURL: nil)
+        try fonts.add(source)
+        #expect(throws: NoteFontLibrary.ImportError.duplicate) { try fonts.add(source) }
+        let entry = try #require(fonts.entries.first { $0.fileURL != nil })
+        try FileManager.default.removeItem(at: source)
+        #expect(FileManager.default.fileExists(atPath: try #require(entry.fileURL).path))
+        let reloaded = NoteFontLibrary(directory: fontsDirectory, bundledURL: nil)
+        #expect(reloaded.entries.contains { $0.id == entry.id && $0.postScriptName == entry.postScriptName })
+        try reloaded.remove(entry)
+        #expect(reloaded.fontName(for: entry.id, defaultID: "system") == nil)
+        #expect(!FileManager.default.fileExists(atPath: try #require(entry.fileURL).path))
+        let invalid = directory.appendingPathComponent("invalid.ttf")
+        try Data("not a font".utf8).write(to: invalid)
+        #expect(throws: NoteFontLibrary.ImportError.invalidFont) { try reloaded.add(invalid) }
+        #expect(reloaded.entries.count == 1)
+    }
+
+    /// A library holding exactly one imported font, plus the paths to its folder and manifest.
+    private func imported() throws -> (root: URL, fonts: URL, manifest: URL, entry: NoteFontEntry) {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let source = root.appendingPathComponent("source.ttf")
+        try FileManager.default.copyItem(at: #require(NoteFontLibrary.bundledFontURL), to: source)
+
+        let fontsDirectory = root.appendingPathComponent("Fonts")
+        let library = NoteFontLibrary(directory: fontsDirectory, bundledURL: nil)
+        try library.add(source)
+        let entry = try #require(library.entries.first { $0.fileURL != nil })
+        return (root, fontsDirectory, fontsDirectory.appendingPathComponent("manifest.json"), entry)
+    }
+
+    /// The folder is outside any sandbox container, so anything running as this user can drop a
+    /// file into it. Registering it would hand CoreText's parser an attacker's bytes on every
+    /// launch, for as long as the file sits there.
+    @Test func unrecordedFontInTheFolderIsNotRegistered() throws {
+        let (root, fonts, _, entry) = try imported()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        // A real, parseable font — it is refused for not being in the manifest, nothing else.
+        let planted = fonts.appendingPathComponent("\(UUID().uuidString).ttf")
+        try FileManager.default.copyItem(at: #require(NoteFontLibrary.bundledFontURL), to: planted)
+
+        let reloaded = NoteFontLibrary(directory: fonts, bundledURL: nil)
+        #expect(reloaded.entries.filter { $0.fileURL != nil }.map(\.id) == [entry.id])
+        #expect(!reloaded.entries.contains { $0.fileURL == planted })
+        // Refused, not deleted: the app does not own files it did not write.
+        #expect(FileManager.default.fileExists(atPath: planted.path))
+    }
+
+    @Test func recordedFontWithChangedBytesIsNotRegistered() throws {
+        let (root, fonts, _, entry) = try imported()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let url = try #require(entry.fileURL)
+        var bytes = try Data(contentsOf: url)
+        bytes[bytes.count - 1] ^= 0xFF
+        try bytes.write(to: url, options: .atomic)
+
+        let reloaded = NoteFontLibrary(directory: fonts, bundledURL: nil)
+        #expect(!reloaded.entries.contains { $0.id == entry.id })
+        #expect(reloaded.entries.filter { $0.fileURL != nil }.isEmpty)
+    }
+
+    /// A manifest that has been tampered with must not become a way to read files elsewhere.
+    @Test func manifestFileNameCannotEscapeTheFolder() throws {
+        let (root, fonts, _, _) = try imported()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let library = NoteFontLibrary(directory: fonts, bundledURL: nil)
+
+        // Outside the folder, reachable only by climbing out of it.
+        let outside = root.appendingPathComponent("outside.ttf")
+        try FileManager.default.copyItem(at: #require(NoteFontLibrary.bundledFontURL), to: outside)
+        #expect(library.verifiedURL(fileName: "../outside.ttf") == nil)
+        #expect(library.verifiedURL(fileName: "/etc/hosts") == nil)
+        #expect(library.verifiedURL(fileName: "..") == nil)
+
+        // A symlink sitting inside the folder is refused too: it is not a regular file.
+        let link = fonts.appendingPathComponent("link.ttf")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: outside)
+        #expect(library.verifiedURL(fileName: "link.ttf") == nil)
+    }
+
+    @Test func oversizedFileIsRefused() throws {
+        let (root, fonts, _, _) = try imported()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let library = NoteFontLibrary(directory: fonts, bundledURL: nil)
+
+        // Sparse, so this costs no disk. Only its reported size matters.
+        let huge = fonts.appendingPathComponent("huge.ttf")
+        #expect(FileManager.default.createFile(atPath: huge.path, contents: nil))
+        let handle = try FileHandle(forWritingTo: huge)
+        try handle.truncate(atOffset: UInt64(NoteFontLibrary.maximumFontBytes + 1))
+        try handle.close()
+
+        #expect(library.verifiedURL(fileName: "huge.ttf") == nil)
+        #expect(throws: NoteFontLibrary.ImportError.invalidFont) { try library.add(huge) }
+    }
+
+    /// A manifest entry claiming a built-in id would put a second `system` into `entries`, which
+    /// `ForEach` takes as an `Identifiable` array.
+    @Test func manifestCannotClaimABuiltInID() throws {
+        let (root, fonts, manifest, entry) = try imported()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        var rows = try #require(JSONSerialization.jsonObject(
+            with: try Data(contentsOf: manifest)) as? [[String: Any]])
+        rows[0]["id"] = "system"
+        try JSONSerialization.data(withJSONObject: rows).write(to: manifest, options: .atomic)
+
+        let reloaded = NoteFontLibrary(directory: fonts, bundledURL: nil)
+        #expect(reloaded.entries.filter { $0.id == "system" }.count == 1)
+        #expect(reloaded.entries.first { $0.id == "system" }?.fileURL == nil)
+        #expect(!reloaded.entries.contains { $0.id == entry.id })
+    }
+
+    /// Deleting an imported font used to match on id alone, so a folder that produced a
+    /// colliding id took the built-in entries with it and left the picker broken until restart.
+    @Test func removingAnImportedFontLeavesTheBuiltInsAlone() throws {
+        let (root, fonts, _, _) = try imported()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let library = NoteFontLibrary(directory: fonts)
+        let imported = try #require(library.entries.first { $0.fileURL != nil })
+        try library.remove(imported)
+        #expect(library.entries.map(\.id) == ["system", "hana"])
+
+        // Built-ins refuse removal outright, file or no file.
+        try library.remove(NoteFontEntry(id: "hana", name: "", postScriptName: nil,
+                                         fileURL: NoteFontLibrary.bundledFontURL))
+        #expect(library.entries.map(\.id) == ["system", "hana"])
+        let bundled = try #require(NoteFontLibrary.bundledFontURL)
+        #expect(FileManager.default.fileExists(atPath: bundled.path))
+    }
+
+    /// Installs made before the manifest existed have fonts the user did import. Losing them on
+    /// upgrade would read as the app throwing their fonts away.
+    @Test func fontsImportedBeforeTheManifestSurviveTheUpgrade() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let fonts = root.appendingPathComponent("Fonts")
+        try FileManager.default.createDirectory(at: fonts, withIntermediateDirectories: true)
+
+        // Exactly what the old importer left behind: <UUID>.ttf and no manifest.
+        let legacy = fonts.appendingPathComponent("\(UUID().uuidString).ttf")
+        try FileManager.default.copyItem(at: #require(NoteFontLibrary.bundledFontURL), to: legacy)
+        // And one file it never wrote, which the scan must not adopt.
+        let planted = fonts.appendingPathComponent("system.ttf")
+        try FileManager.default.copyItem(at: #require(NoteFontLibrary.bundledFontURL), to: planted)
+
+        let upgraded = NoteFontLibrary(directory: fonts, bundledURL: nil)
+        let adopted = upgraded.entries.filter { $0.fileURL != nil }
+        #expect(adopted.map(\.fileURL) == [legacy])
+
+        // The id has to be the one the old build handed out — it took the entry id from the file
+        // name, and that string is what `AppSettings.defaultFontID` and every note's `fontID`
+        // still hold. Minting a new one leaves the font in the picker but silently resets every
+        // note that had chosen it back to the system face.
+        let legacyID = legacy.deletingPathExtension().lastPathComponent
+        #expect(try #require(adopted.first).id == legacyID)
+        #expect(upgraded.resolvedID(for: legacyID, defaultID: "system") == legacyID)
+        #expect(upgraded.fontName(for: legacyID, defaultID: "system") != nil)
+
+        // The scan runs once. A font dropped in afterwards has no way back into the manifest.
+        let later = fonts.appendingPathComponent("\(UUID().uuidString).ttf")
+        try FileManager.default.copyItem(at: #require(NoteFontLibrary.bundledFontURL), to: later)
+        let relaunched = NoteFontLibrary(directory: fonts, bundledURL: nil)
+        #expect(relaunched.entries.filter { $0.fileURL != nil }.map(\.fileURL) == [legacy])
+    }
+
+    /// A fresh install writes a manifest even with nothing in it, so "no manifest" can only ever
+    /// mean "never started" and the one-time scan cannot be re-armed by deleting fonts.
+    @Test func afreshInstallRecordsAnEmptyManifest() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let fonts = root.appendingPathComponent("Fonts")
+
+        _ = NoteFontLibrary(directory: fonts, bundledURL: nil)
+        let manifest = fonts.appendingPathComponent("manifest.json")
+        #expect(FileManager.default.fileExists(atPath: manifest.path))
+
+        let planted = fonts.appendingPathComponent("\(UUID().uuidString).ttf")
+        try FileManager.default.copyItem(at: #require(NoteFontLibrary.bundledFontURL), to: planted)
+        #expect(NoteFontLibrary(directory: fonts, bundledURL: nil).entries.allSatisfy { $0.fileURL == nil })
+    }
+
+    /// `lstat` cannot tell a hard link from a regular file, but the bytes also live under a
+    /// second name outside the folder, where they can be rewritten after the digest was taken.
+    @Test func hardLinkedFontIsRefused() throws {
+        let (root, fonts, _, _) = try imported()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let library = NoteFontLibrary(directory: fonts, bundledURL: nil)
+
+        let outside = root.appendingPathComponent("outside.ttf")
+        try FileManager.default.copyItem(at: #require(NoteFontLibrary.bundledFontURL), to: outside)
+        let linked = fonts.appendingPathComponent("linked.ttf")
+        try FileManager.default.linkItem(at: outside, to: linked)
+
+        // Same bytes, same size, reports as a regular file — refused on the link count alone.
+        #expect(FileManager.default.contentsEqual(atPath: outside.path, andPath: linked.path))
+        #expect(library.verifiedURL(fileName: "linked.ttf") == nil)
+    }
+
+    /// `entries` goes into a `ForEach` as an `Identifiable` array, so two rows sharing an id is
+    /// the same defect a colliding file name once caused.
+    @Test func duplicateIDsInTheManifestLoadOnlyOnce() throws {
+        let (root, fonts, manifest, entry) = try imported()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        var rows = try #require(JSONSerialization.jsonObject(
+            with: try Data(contentsOf: manifest)) as? [[String: Any]])
+        rows.append(rows[0])
+        try JSONSerialization.data(withJSONObject: rows).write(to: manifest, options: .atomic)
+
+        let reloaded = NoteFontLibrary(directory: fonts, bundledURL: nil)
+        #expect(reloaded.entries.filter { $0.id == entry.id }.count == 1)
+        #expect(Set(reloaded.entries.map(\.id)).count == reloaded.entries.count)
+    }
+
+    /// A manifest that is present but unreadable is not the same as an empty one. Treating them
+    /// alike let the next import replace every row with a single one, stranding the fonts those
+    /// rows named — the one-time scan does not run again while the file exists.
+    @Test func anUnreadableManifestIsNotOverwritten() throws {
+        let (root, fonts, manifest, _) = try imported()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let before = try Data(contentsOf: manifest)
+
+        try Data("{ this is not a manifest".utf8).write(to: manifest, options: .atomic)
+        let library = NoteFontLibrary(directory: fonts, bundledURL: nil)
+        // Nothing is registered from a manifest that cannot be read.
+        #expect(library.entries.allSatisfy { $0.fileURL == nil })
+
+        let source = root.appendingPathComponent("second.ttf")
+        try FileManager.default.copyItem(at: #require(NoteFontLibrary.bundledFontURL), to: source)
+        #expect(throws: NoteFontLibrary.ImportError.unreadableManifest) { try library.add(source) }
+
+        // Still the corrupt bytes, not a fresh one-row manifest written over them.
+        #expect(try Data(contentsOf: manifest) != before)
+        #expect((try? JSONDecoder().decode([String].self, from: Data(contentsOf: manifest))) == nil)
+        #expect(FileManager.default.fileExists(atPath: fonts.appendingPathComponent(
+            "\(try #require(JSONSerialization.jsonObject(with: before) as? [[String: Any]])[0]["fileName"] as! String)").path))
+    }
+
+    @Test func importedFontsAreStoredPrivateToTheUser() throws {
+        let (root, fonts, manifest, entry) = try imported()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        func mode(_ url: URL) throws -> Int {
+            let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+            return try #require(attributes[.posixPermissions] as? NSNumber).intValue
+        }
+        #expect(try mode(fonts) == 0o700)
+        #expect(try mode(manifest) == 0o600)
+        #expect(try mode(#require(entry.fileURL)) == 0o600)
+    }
+}
+
+@Suite("Font collections")
+@MainActor
+struct FontCollectionTests {
+    private func scratch() throws -> URL {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }
+
+    /// 확장자 관문만 정확히 겨냥한다. CoreText 는 내용으로 판별하므로, 번들 폰트를 `.ttc` 라는
+    /// 이름으로 두면 "예전에는 확장자에서 막히던 파일이 이제 들어온다" 만 본다.
+    @Test func collectionExtensionIsAccepted() throws {
+        let directory = try scratch()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let source = directory.appendingPathComponent("source.ttc")
+        try FileManager.default.copyItem(at: #require(NoteFontLibrary.bundledFontURL), to: source)
+        let fonts = NoteFontLibrary(directory: directory.appendingPathComponent("Fonts"), bundledURL: nil)
+        try fonts.add(source)
+        #expect(fonts.entries.contains { $0.fileURL?.pathExtension == "ttc" })
+    }
+
+    /// 예전 빌드는 `ttf` 와 `otf` 만 받았다. 매니페스트 없이 폴더를 훑는 경로까지 넓히면 파서에
+    /// 넘어갈 수 있는 파일 종류만 늘어난다. 두 목록이 갈려 있다는 것 자체가 이 테스트의 대상이다.
+    @Test func theLegacySweepStaysNarrow() {
+        #expect(NoteFontLibrary.fontExtensions == ["ttf", "otf"])
+        #expect(NoteFontLibrary.importableExtensions.contains("ttc"))
+        #expect(!NoteFontLibrary.fontExtensions.contains("ttc"))
+    }
+
+    /// 진짜 폰트 모음을 넣어 본다. 기계에 `.ttc` 가 없으면 확인할 것이 없으므로 그냥 끝낸다.
+    /// 시스템 폰트는 이미 등록돼 있어서 `CTFontManagerRegisterFontsForURL` 이 false 를 돌려주는데,
+    /// `add` 가 `NSFont(name:size:)` 로 한 번 더 보는 경로가 그 경우를 받아 준다.
+    @Test func aRealCollectionImports() throws {
+        let system = URL(fileURLWithPath: "/System/Library/Fonts")
+        let found = ((try? FileManager.default.contentsOfDirectory(at: system, includingPropertiesForKeys: [.fileSizeKey])) ?? [])
+            .filter { $0.pathExtension == "ttc" }
+            .first { ((try? $0.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? .max) < 8 * 1024 * 1024 }
+        guard let collection = found else { return }
+        let directory = try scratch()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let source = directory.appendingPathComponent(collection.lastPathComponent)
+        try FileManager.default.copyItem(at: collection, to: source)
+        let fontsDirectory = directory.appendingPathComponent("Fonts")
+        let fonts = NoteFontLibrary(directory: fontsDirectory, bundledURL: nil)
+        try fonts.add(source)
+        let entry = try #require(fonts.entries.first { $0.fileURL != nil })
+        #expect(entry.postScriptName?.isEmpty == false)
+        // 매니페스트로 다시 읽어도 같은 서체가 돌아온다 — 확장자를 보지 않고 다이제스트를 본다.
+        let reloaded = NoteFontLibrary(directory: fontsDirectory, bundledURL: nil)
+        #expect(reloaded.entries.contains { $0.postScriptName == entry.postScriptName })
+    }
+}

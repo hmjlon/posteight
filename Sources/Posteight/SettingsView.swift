@@ -68,7 +68,34 @@ struct SettingsView: View {
                 Text(L("끄면 다른 앱 뒤로 밀려나서, 집중해서 일할 때 화면을 덜 가립니다."))
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
+
+                Toggle(L("화면 공유와 스크린샷에서 노트 감추기"), isOn: $settings.hidesNotesFromScreenCapture)
+                Text(L("켜 두면 화면을 공유하거나 녹화할 때, 스크린샷을 찍을 때 노트가 찍히지 않습니다."))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
             }
+
+            Section(L("알림")) {
+                Toggle(L("알림 본문에 할 일 내용 표시"), isOn: $settings.showsReminderPreview)
+                Text(L("끄면 알림에 할 일 내용 대신 짧은 안내만 표시됩니다. 알림은 잠긴 화면에도 뜨고 macOS 알림 기록에 남습니다."))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+            // Already-scheduled notifications keep the body they were created with, so the
+            // setting only takes effect on the next memo edit unless the queue is rebuilt here.
+            .onChange(of: settings.showsReminderPreview) { rebuildScheduledReminders() }
+            // The hidden body is a translated string, so the language picker moves it too. The
+            // reminder list the service subscribes to is language-independent and deduplicated,
+            // so nothing else would ever notice — an alarm set before the switch would fire in
+            // the old language until the memo happened to be edited.
+            .onChange(of: settings.language) { rebuildScheduledReminders() }
+
+            AppLockSettingsSection()
+
+            FontSettingsSection()
+                .disabled(store.storageError == .migration)
+
+            StorageRecoverySection()
 
             Section(L("앱")) {
                 Toggle(L("Dock 아이콘 표시"), isOn: $settings.showsDockIcon)
@@ -90,8 +117,19 @@ struct SettingsView: View {
         .formStyle(.grouped)
     }
 
-    private var previewCount: Int {
-        settings.menuBarCountStyle == .done ? store.doneCount : store.remainingCount
+    private func rebuildScheduledReminders() {
+        Task {
+            guard !store.isStorageBlocked else { return }
+            _ = await ReminderService.shared.retrySynchronization(for: store.notes)
+        }
+    }
+
+    private var previewCount: Int? {
+        switch settings.menuBarCountStyle {
+        case .remaining: store.remainingCount
+        case .done: store.doneCount
+        case .hidden: nil
+        }
     }
 
     private var versionLabel: String {

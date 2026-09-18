@@ -2,6 +2,7 @@ name: Release
 
 on:
   push:
+    branches: [release]
     tags: ['v*']
   workflow_dispatch:
     inputs:
@@ -21,23 +22,42 @@ jobs:
     name: Build and publish dmg
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      # 버전의 유일한 출처는 git 태그다. Info.plist 는 $(MARKETING_VERSION) 을 쓰므로
-      # 여기서 넘긴 값이 그대로 번들에 박힌다.
+      # 버전은 세 곳에서 온다. 태그를 직접 밀면 그 태그가, release 브랜치로
+      # 머지하면 직전 릴리스에서 마이너를 하나 올린 값이, 시험 실행이면 입력값이
+      # 쓰인다. Info.plist 는 $(MARKETING_VERSION) 을 쓰므로 여기서 넘긴 값이
+      # 그대로 번들에 박힌다.
       - name: Resolve version
         id: version
         # 입력값은 env 로만 받는다. ${{ }} 를 셸에 그대로 펼치면 형식 검증이
         # 돌기도 전에 임의 명령이 실행된다.
         env:
           INPUT_VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
             VERSION="$INPUT_VERSION"
-          else
+          elif [ "$GITHUB_REF_TYPE" = "tag" ]; then
             VERSION="${GITHUB_REF_NAME#v}"
+          else
+            LAST=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" -q .tag_name 2>/dev/null || echo v0.0.0)
+            LAST="${LAST#v}"
+            # 산술식에 넣기 전에 형식을 확인한다. $(( )) 는 배열 첨자 자리에서 명령
+            # 치환을 수행하므로, 검증하지 않은 태그 이름은 그대로 실행 가능한 코드가
+            # 된다. 이 값은 릴리스 API 에서 오지 이 저장소의 소스에서 오지 않는다.
+            if ! printf '%s' "$LAST" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "::warning::직전 릴리스 태그($LAST)가 형식에 맞지 않는다. 0.0.0 으로 간주한다."
+              LAST="0.0.0"
+            fi
+            MAJOR="${LAST%%.*}"
+            REST="${LAST#*.}"
+            MINOR="${REST%%.*}"
+            # 10# 을 붙여 08, 09 가 8진수로 해석되는 것도 막는다.
+            VERSION="$MAJOR.$((10#$MINOR + 1)).0"
+            echo "직전 릴리스 v$LAST -> v$VERSION"
           fi
           if ! printf '%s' "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
             echo "::error::버전 형식이 아니다: $VERSION (기대: 1.2.3)"
@@ -100,13 +120,16 @@ jobs:
       # 시험 실행은 dmg 를 아티팩트로만 남긴다. 90 일 뒤 자동 삭제된다.
       - name: Upload dmg (시험 실행)
         if: github.event_name != 'push'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: Posteight-${{ steps.version.outputs.version }}-dmg
           path: dist/*.dmg*
 
-      # 태그 푸시에서만 게시한다. workflow_dispatch 로 돌리면 gh 가 태그를 새로
-      # 만들어 버리고, 그 대상은 빌드한 커밋이 아니라 기본 브랜치 HEAD 다.
+      # 태그·브랜치 푸시에서만 게시한다. 시험 실행(workflow_dispatch)은 dmg 를
+      # 아티팩트로만 남긴다. --target 으로 태그가 붙을 커밋을 못 박는다. 이게
+      # 없으면 gh 는 기본 브랜치 HEAD 에 태그를 만든다 (빌드한 커밋이 아니다).
+      # 여기서 만든 태그는 GITHUB_TOKEN 이 만든 것이라 워크플로를 다시 깨우지
+      # 않는다. 재귀 실행 걱정은 없다.
       - name: Publish GitHub Release
         if: github.event_name == 'push'
         env:
@@ -116,29 +139,39 @@ jobs:
           SHA: ${{ steps.sum.outputs.sha256 }}
         run: |
           # 서명하지 않은 빌드라 첫 실행에 Gatekeeper 가 막는다. 릴리스 노트에
-          # 여는 방법을 항상 적어 둔다.
+          # 여는 방법을 항상 적어 둔다. 무엇이 바뀌었는지는 --generate-notes 가
+          # 이 안내 뒤에 직전 릴리스 이후 머지된 PR 목록으로 붙인다.
           cat > notes.md <<EOF
           ## 설치
 
+          ### Homebrew (권장)
+
           \`\`\`bash
-          brew install --cask hmjlon/posteight/posteight
+          brew install --cask hmjlon/tap/posteight
           \`\`\`
 
-          또는 아래 \`$DMG\` 를 내려받아 Posteight 를 Applications 로 끌어다 놓는다.
+          ### dmg 직접 내려받기
+
+          아래 \`$DMG\` 를 내려받아 Posteight 를 Applications 로 끌어다 놓는다.
 
           ### 처음 열 때
 
-          Posteight 는 아직 Apple 공증을 받지 않았다. macOS 가 한 번 차단한다.
+          Posteight 는 아직 Apple 공증을 받지 않았다. 어느 쪽으로 설치하든 macOS 가
+          첫 실행을 한 번 막는다.
 
           1. Posteight 를 연다 (차단 경고가 뜬다)
           2. 시스템 설정 > 개인정보 보호 및 보안 을 연다
           3. 아래로 내려 **그래도 열기** 를 누른다
 
-          한 번만 하면 그다음부터는 바로 열린다. 터미널을 쓴다면 아래 한 줄로도 된다.
+          터미널을 쓴다면 아래 한 줄이 같은 일을 한다.
 
           \`\`\`bash
           xattr -dr com.apple.quarantine /Applications/Posteight.app
           \`\`\`
+
+          공증을 받기 전까지는 \`brew upgrade\` 로 새 버전을 받을 때마다 이 단계가
+          한 번씩 더 필요하다. ad-hoc 서명은 빌드마다 서명이 달라져서 Homebrew 가
+          이전에 승인한 앱과 같은 앱이라고 판단하지 못한다.
 
           ### 요구 사항
 
@@ -153,10 +186,69 @@ jobs:
           EOF
 
           gh release create "v$V" \
+            --target "$GITHUB_SHA" \
             "dist/$DMG" \
             "dist/$DMG.sha256" \
             --title "Posteight $V" \
+            --generate-notes \
             --notes-file notes.md
+
+      # 릴리스가 게시된 뒤 tap 의 cask 를 새 버전으로 갱신한다. GITHUB_TOKEN 은
+      # 이 저장소 밖으로는 못 쓰므로 homebrew-tap 쓰기 권한을 가진 PAT 가 필요하다.
+      # 시크릿이 없거나 만료됐으면 경고만 남기고 넘어간다. 릴리스는 이미 게시됐고,
+      # cask 는 아래 요약을 보고 손으로 고치면 되기 때문이다.
+      - name: Update Homebrew cask
+        env:
+          TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
+          V: ${{ steps.version.outputs.version }}
+          SHA: ${{ steps.sum.outputs.sha256 }}
+        run: |
+          if [ -z "$TAP_TOKEN" ]; then
+            echo "::warning::TAP_TOKEN 시크릿이 없어 cask 갱신을 건너뛴다. 손으로 갱신해야 한다."
+            exit 0
+          fi
+
+          echo "::add-mask::$TAP_TOKEN"
+
+          # 토큰을 remote URL 에 넣으면 tap/.git/config 에 평문으로 기록되고 clone
+          # 프로세스의 인자로도 드러난다. 지금은 upload-artifact 가 dist/*.dmg* 만
+          # 올려서 새지 않지만, 그 경로가 한 번 넓어지는 순간 homebrew-tap 쓰기 권한
+          # PAT 가 그대로 유출된다. 이 명령에만 붙는 헤더로 넘긴다.
+          AUTH_HEADER="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$TAP_TOKEN" | base64 | tr -d '\n')"
+
+          git -c http.extraheader="$AUTH_HEADER" clone --depth 1 \
+            https://github.com/hmjlon/homebrew-tap.git tap
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # 시험 실행은 토큰이 실제로 쓸 수 있는지만 확인하고 끝낸다. 빈 커밋을
+          # --dry-run 으로 밀어 보면 인증까지 돌지만 원격은 바뀌지 않는다.
+          if [ "$GITHUB_EVENT_NAME" != "push" ]; then
+            git commit -q --allow-empty -m "TAP_TOKEN 확인"
+            git -c http.extraheader="$AUTH_HEADER" push --dry-run origin main
+            echo "TAP_TOKEN 으로 homebrew-tap 에 쓸 수 있다."
+            exit 0
+          fi
+
+          CASK=Casks/posteight.rb
+
+          # 두 줄만 바꾼다. url 은 cask 안에서 #{version} 을 쓰므로 따라온다.
+          sed -i '' -E \
+            -e "s|^  version \".*\"$|  version \"$V\"|" \
+            -e "s|^  sha256 \".*\"$|  sha256 \"$SHA\"|" \
+            "$CASK"
+
+          # sed 가 아무것도 못 바꿔도 조용히 성공한다. 실제로 박혔는지 확인한다.
+          grep -qF "  version \"$V\"" "$CASK" || { echo "::error::version 치환 실패"; exit 1; }
+          grep -qF "  sha256 \"$SHA\"" "$CASK" || { echo "::error::sha256 치환 실패"; exit 1; }
+
+          if git diff --quiet; then
+            echo "cask 가 이미 $V 다. 넘어간다."
+            exit 0
+          fi
+          git commit -qam "posteight $V"
+          git -c http.extraheader="$AUTH_HEADER" push -q origin main
 
       # cask 를 손으로 고칠 때 쓸 값을 요약에 남긴다.
       - name: Cask summary

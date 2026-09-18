@@ -107,6 +107,25 @@ struct PersistenceTests {
         #expect(store.tabName(noteID: secondID, tabID: secondOriginalTabID) == "메모 1")
     }
 
+    @Test("각 탭의 아이콘을 독립적으로 바꾸고 저장한다")
+    func tabStickersAreIndependentAndPersistent() throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = PosteightStore(directory: directory)
+        let noteID = store.addNote()
+        let firstTabID = try memo(store, id: noteID).selectedTabID
+        let secondTabID = try #require(store.addTab(to: noteID))
+
+        store.updateTabSticker(noteID: noteID, tabID: firstTabID, symbol: "briefcase")
+        store.updateTabSticker(noteID: noteID, tabID: secondTabID, symbol: "house")
+        store.flush()
+
+        let reloaded = PosteightStore(directory: directory)
+        let tabs = try memo(reloaded, id: noteID).tabs
+        #expect(tabs.first { $0.id == firstTabID }?.stickerSymbol == "briefcase")
+        #expect(tabs.first { $0.id == secondTabID }?.stickerSymbol == "house")
+    }
+
     @Test("Closing a tab that isn't selected leaves the current one open")
     func closingOtherTabKeepsSelection() throws {
         let directory = temporaryDirectory()
@@ -192,6 +211,43 @@ struct PersistenceTests {
         #expect(notes.first?.tabs.map(\.id) == [secondTabID])
     }
 
+    @Test("A tab restored into a new note keeps its note's nib, font, and text size")
+    func restoredTabKeepsItsNoteStyle() throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = PosteightStore(directory: directory)
+        let noteID = store.addNote()
+        store.updatePenStyle(noteID, style: .highlighter)
+        store.updateFont(noteID, fontID: "hana")
+        store.updateFontSize(noteID, size: .large)
+        let tabID = try #require(store.addTab(to: noteID))
+        store.moveTabToTrash(noteID: noteID, tabID: tabID)
+        store.moveNoteToTrash(noteID)
+        store.flush()
+
+        let reloaded = PosteightStore(directory: directory)
+        reloaded.restoreTab(tabID)
+
+        let restored = try #require(reloaded.notes.first { $0.tabs.contains { $0.id == tabID } })
+        #expect(restored.penStyle == .highlighter)
+        #expect(restored.fontID == "hana")
+        #expect(restored.fontSize == .large)
+    }
+
+    @Test("Closed tabs saved before the nib and font travelled with them still load")
+    func legacyTrashedTabStillDecodes() throws {
+        let json = """
+        [{"sourceNoteID":"\(UUID().uuidString)","paperHex":"#EED9D8","penHex":"#B84A62",
+          "stickerSymbol":"house","deletedAt":0,
+          "tab":{"id":"\(UUID().uuidString)","name":"메모 1","title":"","items":[]}}]
+        """
+        let tabs = try JSONDecoder().decode([TrashedMemoTab].self, from: Data(json.utf8))
+        #expect(tabs.count == 1)
+        #expect(tabs.first?.penStyle == nil)
+        #expect(tabs.first?.fontID == nil)
+        #expect(tabs.first?.fontSize == nil)
+    }
+
     @Test("Emptying the trash clears closed tabs too")
     func emptyingTrashClearsTabs() throws {
         let directory = temporaryDirectory()
@@ -252,5 +308,259 @@ struct PersistenceTests {
         let note = try memo(reloaded, id: noteID)
         #expect(note.tabs.map(\.name) == ["메모 1", "개인"])
         #expect(note.selectedTabID == tabID)
+    }
+
+    private func mode(_ url: URL) throws -> Int {
+        let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+        return try #require(attributes[.posixPermissions] as? NSNumber).intValue
+    }
+
+    /// Notes are plain JSON at a fixed path. The default `0755`/`0644` leaves them readable by
+    /// anything else running as this user.
+    @Test("A fresh store is created private to the user")
+    func fileModes() throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = PosteightStore(directory: directory)
+        store.flush()
+
+        #expect(try mode(directory) == 0o700)
+        for name in ["notes.json", "trash.json", "trashed-tabs.json"] {
+            #expect(try mode(directory.appendingPathComponent(name)) == 0o600, "\(name)")
+        }
+    }
+
+    /// An install that predates this already has a `0755` directory, and `createDirectory`
+    /// ignores its attributes once the directory exists.
+    @Test("An already wide store is narrowed on the next save")
+    func existingStoreIsNarrowed() throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let manager = FileManager.default
+        try manager.createDirectory(at: directory, withIntermediateDirectories: true,
+                                    attributes: [.posixPermissions: 0o755])
+
+        let store = PosteightStore(directory: directory)
+        store.flush()
+        #expect(try mode(directory) == 0o700)
+    }
+
+    /// Turning on the sandbox moves Application Support into the container, and macOS does not
+    /// migrate this app's folder for us. Getting this wrong looks to the user exactly like the
+    /// upgrade having thrown every note away.
+    @Test("An install from before the sandbox is copied into the container")
+    func legacyStoreIsMigrated() throws {
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let legacy = root.appendingPathComponent("legacy")
+        let container = root.appendingPathComponent("container")
+
+        let old = PosteightStore(directory: legacy)
+        let noteID = old.addNote()
+        old.updateTabTitle(noteID: noteID, tabID: try memo(old, id: noteID).selectedTabID,
+                           title: "샌드박스 이전 메모")
+        old.moveNoteToTrash(old.addNote())
+        old.flush()
+        // The font library keeps its own folder under the store, and it travels too.
+        let fonts = legacy.appendingPathComponent("Fonts")
+        try FileManager.default.createDirectory(at: fonts, withIntermediateDirectories: true)
+        try Data("[]".utf8).write(to: fonts.appendingPathComponent("manifest.json"))
+
+        #expect(PosteightStore.migrateStore(from: legacy, to: container))
+
+        let migrated = PosteightStore(directory: container)
+        #expect(try memo(migrated, id: noteID).tabs.first?.title == "샌드박스 이전 메모")
+        #expect(migrated.trashedNotes.count == 1)
+        #expect(FileManager.default.fileExists(
+            atPath: container.appendingPathComponent("Fonts/manifest.json").path))
+
+        // Copied, not moved: rolling this release back has to leave the old install usable.
+        #expect(FileManager.default.fileExists(atPath: legacy.appendingPathComponent("notes.json").path))
+
+        // And the copy does not carry the old 0644 into the container.
+        #expect(try mode(container.appendingPathComponent("notes.json")) == 0o600)
+        #expect(try mode(container.appendingPathComponent("Fonts")) == 0o700)
+        #expect(try mode(container.appendingPathComponent("Fonts/manifest.json")) == 0o600)
+    }
+
+    /// Running twice would overwrite whatever the user has done since the upgrade.
+    @Test("Migration does not run a second time")
+    func migrationRunsOnce() throws {
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let legacy = root.appendingPathComponent("legacy")
+        let container = root.appendingPathComponent("container")
+
+        let old = PosteightStore(directory: legacy)
+        let legacyNote = old.addNote()
+        old.flush()
+        #expect(PosteightStore.migrateStore(from: legacy, to: container))
+
+        // What the user did after the upgrade.
+        let migrated = PosteightStore(directory: container)
+        migrated.moveNoteToTrash(legacyNote)
+        let freshNote = migrated.addNote()
+        migrated.flush()
+
+        #expect(!PosteightStore.migrateStore(from: legacy, to: container))
+        let reloaded = PosteightStore(directory: container)
+        // A second run would put the deleted note back and lose the new one.
+        #expect(!reloaded.notes.contains { $0.id == legacyNote })
+        #expect(reloaded.trashedNotes.map(\.id) == [legacyNote])
+        #expect(reloaded.notes.contains { $0.id == freshNote })
+    }
+
+    /// One item failing used to leave the rest behind permanently: the run-once guard only asks
+    /// whether *any* item is already in the container, so the next launch skipped everything and
+    /// the data that never made it was invisible to the app for good.
+    @Test("A migration that cannot finish rolls back and retries next launch")
+    func partialMigrationRollsBack() throws {
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let legacy = root.appendingPathComponent("legacy")
+        let container = root.appendingPathComponent("container")
+
+        let old = PosteightStore(directory: legacy)
+        let noteID = old.addNote()
+        old.moveNoteToTrash(old.addNote())
+        old.flush()
+
+        // Unreadable, the way a locked or damaged file would be.
+        let trash = legacy.appendingPathComponent("trash.json")
+        try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: trash.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o600],
+                                                       ofItemAtPath: trash.path) }
+
+        #expect(!PosteightStore.migrateStore(from: legacy, to: container))
+        // Nothing half-copied is left to make the next launch think it is done.
+        for item in PosteightStore.migratedItems {
+            #expect(!FileManager.default.fileExists(
+                atPath: container.appendingPathComponent(item).path), "\(item)")
+        }
+
+        // With the cause gone, the retry completes.
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: trash.path)
+        #expect(PosteightStore.migrateStore(from: legacy, to: container))
+        let migrated = PosteightStore(directory: container)
+        #expect(migrated.notes.contains { $0.id == noteID })
+        #expect(migrated.trashedNotes.count == 1)
+    }
+
+    /// A file written by a build older than the permission change kept its 0644 forever, because
+    /// the mode was only ever stamped at creation.
+    @Test("A save narrows a file that was already too wide")
+    func saveNarrowsAnExistingWideFile() throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = PosteightStore(directory: directory)
+        store.flush()
+
+        let notes = directory.appendingPathComponent("notes.json")
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: notes.path)
+        #expect(try mode(notes) == 0o644)
+
+        store.addNote()
+        store.flush()
+        #expect(try mode(notes) == 0o600)
+    }
+
+    @Test("Nothing to migrate leaves the container untouched")
+    func migrationWithoutALegacyStore() throws {
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let container = root.appendingPathComponent("container")
+
+        #expect(!PosteightStore.migrateStore(from: root.appendingPathComponent("missing"), to: container))
+        #expect(!FileManager.default.fileExists(atPath: container.path))
+
+        // An empty but existing folder is not a store either.
+        let empty = root.appendingPathComponent("empty")
+        try FileManager.default.createDirectory(at: empty, withIntermediateDirectories: true)
+        #expect(!PosteightStore.migrateStore(from: empty, to: container))
+    }
+
+    /// An unsandboxed build resolves both paths to the same folder, and copying a store onto
+    /// itself would be a very bad way to find that out.
+    @Test("The legacy path is the real home, not the container")
+    func legacyPathPointsAtTheRealHome() throws {
+        let legacy = try #require(PosteightStore.legacyStoreDirectory)
+        #expect(legacy.path.hasSuffix("/Library/Application Support/Posteight"))
+        #expect(!legacy.path.contains("/Library/Containers/"))
+        // `swift test` is unbundled, so there is no container and the two coincide — which is
+        // exactly the condition `storeDirectory` uses to skip the migration entirely.
+        #expect(legacy == PosteightStore.storeDirectory)
+    }
+
+    /// `Data.write(options: .atomic)` replaces the file rather than writing through it, so this
+    /// pins down that the replacement keeps the mode stamped at creation.
+    @Test("Later saves do not widen the files again")
+    func modeSurvivesRewrite() throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = PosteightStore(directory: directory)
+        store.flush()
+
+        let noteID = store.addNote()
+        store.updateTabTitle(noteID: noteID, tabID: try memo(store, id: noteID).selectedTabID,
+                             title: "두 번째 저장")
+        store.flush()
+
+        #expect(try mode(directory.appendingPathComponent("notes.json")) == 0o600)
+    }
+
+    /// 오늘 기록이 걷혀서 `includeInNotionLog` 는 더 이상 모델에 없다. 그래도 저장할 때는
+    /// 계속 쓴다 — 예전 빌드의 디코더가 이 키를 `decode` 로 **필수** 취급하고, `loadNotes`
+    /// 는 디코딩 실패를 `try?` 로 삼켜 샘플 메모로 떨어지기 때문이다. 키가 빠진 파일을 예전
+    /// 빌드가 읽으면 사용자에게는 메모가 통째로 사라진 것처럼 보인다.
+    @Test("사라진 필드를 예전 빌드가 읽을 수 있도록 계속 써 둔다")
+    func theRemovedFieldIsStillWrittenForOlderBuilds() throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = PosteightStore(directory: directory)
+        _ = store.addNote()
+        store.flush()
+
+        let data = try Data(contentsOf: directory.appendingPathComponent("notes.json"))
+        let rows = try #require(
+            try JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+        )
+        #expect(!rows.isEmpty)
+        for row in rows {
+            #expect(row["includeInNotionLog"] as? Bool == false)
+        }
+    }
+
+    /// 반대 방향. 그 키가 들어 있는 예전 파일은 지금 디코더가 조용히 건너뛰고 읽어야 한다.
+    @Test("그 필드가 남아 있는 예전 파일도 그대로 읽는다")
+    func aFileStillCarryingTheRemovedFieldLoads() throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        let noteID = UUID()
+        let tabID = UUID()
+        let legacy: [[String: Any]] = [[
+            "id": noteID.uuidString,
+            "stickerSymbol": "tag",
+            "paperHex": "#FADDE5",
+            "penHex": "#B84A62",
+            "penStyle": "ballpoint",
+            "includeInNotionLog": true,
+            "position": ["x": 10, "y": 20],
+            "size": ["width": 320, "height": 300],
+            "selectedTabID": tabID.uuidString,
+            "tabs": [[
+                "id": tabID.uuidString,
+                "name": "메모 1",
+                "title": "남아 있어야 한다",
+                "stickerSymbol": "tag",
+                "items": []
+            ]]
+        ]]
+        try JSONSerialization.data(withJSONObject: legacy)
+            .write(to: directory.appendingPathComponent("notes.json"))
+
+        let store = PosteightStore(directory: directory)
+        #expect(try memo(store, id: noteID).selectedTab?.title == "남아 있어야 한다")
     }
 }

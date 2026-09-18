@@ -3,9 +3,8 @@ import SwiftUI
 struct PencilCaseView: View {
     @EnvironmentObject private var store: PosteightStore
     @ObservedObject private var settings = AppSettings.shared
+    @ObservedObject private var fonts = NoteFontLibrary.shared
     let note: StickyNote
-    /// Deleting lives here, away from the header, because an `✕` next to a memo reads as close.
-    let onDelete: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -14,17 +13,24 @@ struct PencilCaseView: View {
                 Text(L("필통"))
                     .font(.system(size: 12, weight: .bold, design: .rounded))
                 Spacer(minLength: 4)
-                Toggle(
-                    L("Notion 기록"),
-                    isOn: Binding(
-                        get: { note.includeInNotionLog },
-                        set: { store.updateNotionLog(note.id, include: $0) }
-                    )
-                )
-                .toggleStyle(.switch)
-                .controlSize(.mini)
+            }
+
+            toolRow(title: L("폰트")) {
+                // nil 은 "설정의 기본 폰트를 따른다" 는 뜻이다. 지운 폰트를 가리키던 메모도 실제로는 기본
+                // 폰트로 그려지므로 같은 항목에 선다.
+                NoteFontPicker(entries: fonts.entries, language: settings.language, selection: Binding(
+                    get: { note.fontID.flatMap { fonts.contains($0) ? $0 : nil } ?? NoteFontPicker.followsDefault },
+                    set: { store.updateFont(note.id, fontID: $0 == NoteFontPicker.followsDefault ? nil : $0) }
+                ), fontSize: 13, defaultEntryID: fonts.resolvedID(for: nil, defaultID: settings.defaultFontID))
                 .fixedSize()
-                .font(.system(size: 10, weight: .medium, design: .rounded))
+
+                FontImportButton()
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .controlSize(.regular)
+                    .fixedSize()
+
+                fontSizeButtons
+                Spacer(minLength: 0)
             }
 
             toolRow(title: L("종이")) {
@@ -47,7 +53,7 @@ struct PencilCaseView: View {
 
             // The colour wells are wide enough to squeeze the swatches off a narrow card, so
             // they share a row of their own.
-            toolRow(title: L("직접")) {
+            toolRow(title: L("색상")) {
                 customColorWell(systemImage: "doc", help: L("종이 색 직접 선택")) {
                     Binding(
                         get: { Color(hex: note.paperHex) },
@@ -65,61 +71,60 @@ struct PencilCaseView: View {
                 Spacer(minLength: 0)
             }
 
-            Picker(
-                L("펜촉"),
-                selection: Binding(
-                    get: { note.penStyle },
-                    set: { store.updatePenStyle(note.id, style: $0) }
-                )
-            ) {
-                ForEach(PenStyle.allCases) { style in
-                    Label(style.title(in: settings.language), systemImage: style.systemImage)
-                        .tag(style)
+            toolRow(title: L("펜촉")) {
+                Picker(
+                    L("펜촉"),
+                    selection: Binding(
+                        get: { note.penStyle },
+                        set: { store.updatePenStyle(note.id, style: $0) }
+                    )
+                ) {
+                    ForEach(PenStyle.allCases) { style in
+                        Label(style.title(in: settings.language), systemImage: style.systemImage)
+                            .tag(style)
+                    }
                 }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
+
             }
-            .pickerStyle(.segmented)
-            .font(.system(size: 11, weight: .semibold, design: .rounded))
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text(L("스티커"))
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .foregroundStyle(.black.opacity(0.48))
+            if let selectedTab = note.selectedTab {
+                VStack(alignment: .leading, spacing: 6) {
+                    toolLabel(L("탭 아이콘"))
 
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 26, maximum: 34), spacing: 5)], spacing: 5) {
-                    ForEach(DesignTokens.stickers) { sticker in
-                        Button {
-                            store.updateSticker(note.id, symbol: sticker.symbol)
-                        } label: {
-                            Image(systemName: sticker.symbol)
-                                .font(.system(size: 12, weight: .semibold))
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 22)
-                                .overlay {
-                                    Rectangle()
-                                        .stroke(
-                                            sticker.symbol == note.stickerSymbol
-                                                ? Color(hex: note.penHex).opacity(0.58)
-                                                : .black.opacity(0.06),
-                                            lineWidth: 1
-                                        )
-                                }
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 26, maximum: 34), spacing: 5)], spacing: 5) {
+                        ForEach(DesignTokens.stickers) { sticker in
+                            Button {
+                                store.updateTabSticker(
+                                    noteID: note.id,
+                                    tabID: selectedTab.id,
+                                    symbol: sticker.symbol
+                                )
+                            } label: {
+                                Image(systemName: sticker.symbol)
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 22)
+                                    .overlay {
+                                        Rectangle()
+                                            .stroke(
+                                                sticker.symbol == selectedTab.stickerSymbol
+                                                    ? Color(hex: note.penHex).opacity(0.58)
+                                                    : .black.opacity(0.06),
+                                                lineWidth: 1
+                                            )
+                                    }
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(Color(hex: note.penHex).opacity(0.86))
+                            .help(sticker.title(in: settings.language))
                         }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(Color(hex: note.penHex).opacity(0.86))
-                        .help(sticker.title(in: settings.language))
                     }
                 }
             }
 
-            Divider()
-
-            Button(role: .destructive, action: onDelete) {
-                Label(L("메모 삭제"), systemImage: "trash")
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.red.opacity(0.74))
-            .help(L("이 메모를 휴지통으로 보냅니다"))
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -127,6 +132,38 @@ struct PencilCaseView: View {
             Rectangle()
                 .stroke(.black.opacity(0.08), lineWidth: 1)
         }
+    }
+
+    private var fontSizeButtons: some View {
+        HStack(spacing: 0) {
+            ForEach(NoteFontSize.allCases) { size in
+                let selected = (note.fontSize ?? settings.defaultFontSize) == size
+                let diameter: CGFloat = size == .small ? 6 : (size == .medium ? 9 : 12)
+                Button {
+                    store.updateFontSize(note.id, size: size)
+                } label: {
+                    Circle()
+                        .fill(selected ? Color(hex: note.penHex) : .black.opacity(0.25))
+                        .frame(width: diameter, height: diameter)
+                        .frame(width: 24, height: 24)
+                        .background {
+                            RoundedRectangle(cornerRadius: 5)
+                                .fill(selected ? Color(hex: note.penHex).opacity(0.1) : .clear)
+                        }
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(Lf("글자 크기: %@", size.title(in: settings.language)))
+                .accessibilityLabel(Lf("글자 크기: %@", size.title(in: settings.language)))
+                .accessibilityAddTraits(selected ? .isSelected : [])
+                .contextMenu {
+                    Button(L("기본값 사용")) {
+                        store.updateFontSize(note.id, size: nil)
+                    }
+                }
+            }
+        }
+        .fixedSize()
     }
 
     private func customColorWell(
@@ -147,12 +184,17 @@ struct PencilCaseView: View {
         .help(help)
     }
 
+    private func toolLabel(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 10, weight: .bold, design: .rounded))
+            .foregroundStyle(.black.opacity(0.48))
+            .fixedSize(horizontal: true, vertical: false)
+    }
+
     private func toolRow<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
         HStack(spacing: 6) {
-            Text(title)
-                .font(.system(size: 10, weight: .bold, design: .rounded))
-                .foregroundStyle(.black.opacity(0.48))
-                .frame(width: 24, alignment: .leading)
+            toolLabel(title)
+                .frame(width: settings.language.resolved == .korean ? 24 : 32, alignment: .leading)
 
             content()
         }

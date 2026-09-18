@@ -1,13 +1,34 @@
 import Foundation
 import SwiftUI
 
+enum NoteFontSize: String, Codable, CaseIterable, Identifiable {
+    case small, medium, large
+    var id: String { rawValue }
+
+    var adjustment: CGFloat {
+        switch self {
+        case .small: -2
+        case .medium: 0
+        case .large: 3
+        }
+    }
+
+    func title(in language: AppLanguage) -> String {
+        switch self {
+        case .small: L("작게", language: language)
+        case .medium: L("보통", language: language)
+        case .large: L("크게", language: language)
+        }
+    }
+}
+
 struct StickyNote: Identifiable, Codable, Equatable {
     var id: UUID
-    var stickerSymbol: String
     var paperHex: String
     var penHex: String
     var penStyle: PenStyle
-    var includeInNotionLog: Bool
+    var fontID: String? = nil
+    var fontSize: NoteFontSize? = nil
     var position: NotePoint
     var size: NoteSize
     var tabs: [MemoTab]
@@ -19,7 +40,6 @@ struct StickyNote: Identifiable, Codable, Equatable {
         paperHex: String,
         penHex: String,
         penStyle: PenStyle = .ballpoint,
-        includeInNotionLog: Bool,
         position: NotePoint,
         size: NoteSize = DesignTokens.defaultNoteSize,
         tabs: [MemoTab],
@@ -28,20 +48,25 @@ struct StickyNote: Identifiable, Codable, Equatable {
         let safeTabs = tabs.isEmpty
             ? [MemoTab(name: "메모 1", title: "", items: [TodoItem(title: "")])]  // 손상된 데이터 복구용 기본값
             : tabs
+        let normalizedTabs = safeTabs.map { tab in
+            var tab = tab
+            if tab.stickerSymbol.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                tab.stickerSymbol = stickerSymbol
+            }
+            return tab
+        }
 
         self.id = id
-        self.stickerSymbol = stickerSymbol
         self.paperHex = paperHex
         self.penHex = penHex
         self.penStyle = penStyle
-        self.includeInNotionLog = includeInNotionLog
         self.position = position
         self.size = size
-        self.tabs = safeTabs
-        if let selectedTabID, safeTabs.contains(where: { $0.id == selectedTabID }) {
+        self.tabs = normalizedTabs
+        if let selectedTabID, normalizedTabs.contains(where: { $0.id == selectedTabID }) {
             self.selectedTabID = selectedTabID
         } else {
-            self.selectedTabID = safeTabs[0].id
+            self.selectedTabID = normalizedTabs[0].id
         }
     }
 
@@ -59,6 +84,8 @@ struct StickyNote: Identifiable, Codable, Equatable {
         case paperHex
         case penHex
         case penStyle
+        case fontID
+        case fontSize
         case includeInNotionLog
         case position
         case size
@@ -73,17 +100,24 @@ struct StickyNote: Identifiable, Codable, Equatable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
-        stickerSymbol = try container.decode(String.self, forKey: .stickerSymbol)
+        let legacyStickerSymbol = try container.decodeIfPresent(String.self, forKey: .stickerSymbol) ?? "tag"
         paperHex = try container.decode(String.self, forKey: .paperHex)
         penHex = try container.decode(String.self, forKey: .penHex)
+        fontSize = try container.decodeIfPresent(NoteFontSize.self, forKey: .fontSize)
+        fontID = try container.decodeIfPresent(String.self, forKey: .fontID)
         penStyle = try container.decodeIfPresent(PenStyle.self, forKey: .penStyle) ?? .ballpoint
-        includeInNotionLog = try container.decode(Bool.self, forKey: .includeInNotionLog)
         position = try container.decode(NotePoint.self, forKey: .position)
         size = try container.decodeIfPresent(NoteSize.self, forKey: .size) ?? DesignTokens.defaultNoteSize
 
         if let decodedTabs = try container.decodeIfPresent([MemoTab].self, forKey: .tabs),
            !decodedTabs.isEmpty {
-            tabs = decodedTabs
+            tabs = decodedTabs.map { tab in
+                var tab = tab
+                if tab.stickerSymbol.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    tab.stickerSymbol = legacyStickerSymbol
+                }
+                return tab
+            }
         } else {
             let legacyTitle = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
             let legacyItems = try container.decodeIfPresent([TodoItem].self, forKey: .items) ?? []
@@ -101,6 +135,7 @@ struct StickyNote: Identifiable, Codable, Equatable {
                 MemoTab(
                     name: wasRenamed ? legacyLabel! : "메모 1",
                     title: legacyTitle,
+                    stickerSymbol: legacyStickerSymbol,
                     items: legacyItems
                 )
             ]
@@ -117,11 +152,18 @@ struct StickyNote: Identifiable, Codable, Equatable {
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
-        try container.encode(stickerSymbol, forKey: .stickerSymbol)
+        // Older builds still read this field, so mirror the selected tab while the per-tab field
+        // becomes the source of truth in current builds.
+        try container.encode(selectedTab?.stickerSymbol ?? "tag", forKey: .stickerSymbol)
         try container.encode(paperHex, forKey: .paperHex)
         try container.encode(penHex, forKey: .penHex)
+        try container.encodeIfPresent(fontID, forKey: .fontID)
+        try container.encodeIfPresent(fontSize, forKey: .fontSize)
         try container.encode(penStyle, forKey: .penStyle)
-        try container.encode(includeInNotionLog, forKey: .includeInNotionLog)
+        // 이 기능은 사라졌지만 키는 계속 쓴다. 예전 빌드의 디코더는 이 키를 `decode` 로
+        // **필수** 취급하고, `loadNotes` 는 디코딩 실패를 `try?` 로 삼켜 샘플 메모로 떨어진다.
+        // 빼면 이 버전을 썼다가 되돌아간 사용자에게 메모가 통째로 사라진 것처럼 보인다.
+        try container.encode(false, forKey: .includeInNotionLog)
         try container.encode(position, forKey: .position)
         try container.encode(size, forKey: .size)
         try container.encode(tabs, forKey: .tabs)
@@ -133,18 +175,47 @@ struct MemoTab: Identifiable, Codable, Equatable {
     var id: UUID
     var name: String
     var title: String
+    var stickerSymbol: String
     var items: [TodoItem]
+    var completionGroupingOriginalOrder: [UUID]?
 
     init(
         id: UUID = UUID(),
         name: String,
         title: String,
-        items: [TodoItem] = []
+        stickerSymbol: String = "",
+        items: [TodoItem] = [],
+        completionGroupingOriginalOrder: [UUID]? = nil
     ) {
         self.id = id
         self.name = name
         self.title = title
+        self.stickerSymbol = stickerSymbol
         self.items = items
+        self.completionGroupingOriginalOrder = completionGroupingOriginalOrder
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case title
+        case stickerSymbol
+        case items
+        case completionGroupingOriginalOrder
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        title = try container.decode(String.self, forKey: .title)
+        // StickyNote fills this from its legacy note-level icon after decoding the tabs.
+        stickerSymbol = try container.decodeIfPresent(String.self, forKey: .stickerSymbol) ?? ""
+        items = try container.decodeIfPresent([TodoItem].self, forKey: .items) ?? []
+        completionGroupingOriginalOrder = try container.decodeIfPresent(
+            [UUID].self,
+            forKey: .completionGroupingOriginalOrder
+        )
     }
 }
 
@@ -164,10 +235,12 @@ struct TrashedMemoTab: Identifiable, Codable, Equatable {
     var paperHex: String
     var penHex: String
     var stickerSymbol: String
-    /// Optional so trash written before this field existed still decodes — dropping it would
-    /// empty the tab trash on the first launch after an upgrade.
-    var includeInNotionLog: Bool?
     var deletedAt: Date
+    // 펜촉과 글꼴도 메모에 속한 모양이라 같이 옮긴다. 이것들이 생기기 전에 쓴 파일에는 키가 없으므로
+    // 선택형이고, 합성된 디코더가 없는 키를 nil 로 읽는다.
+    var penStyle: PenStyle? = nil
+    var fontID: String? = nil
+    var fontSize: NoteFontSize? = nil
 }
 
 struct TodoItem: Identifiable, Codable, Equatable {
@@ -178,6 +251,17 @@ struct TodoItem: Identifiable, Codable, Equatable {
     var isDone: Bool
     var createdAt: Date
     var completedAt: Date?
+    var reminderAt: Date?
+    var isPinned: Bool
+
+    var hasTitle: Bool {
+        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Keep details readable in Trash even if the item's title was cleared before deletion.
+    var hasContent: Bool {
+        hasTitle || !(detail ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 
     init(
         id: UUID = UUID(),
@@ -185,7 +269,9 @@ struct TodoItem: Identifiable, Codable, Equatable {
         detail: String? = nil,
         isDone: Bool = false,
         createdAt: Date = Date(),
-        completedAt: Date? = nil
+        completedAt: Date? = nil,
+        reminderAt: Date? = nil,
+        isPinned: Bool = false
     ) {
         self.id = id
         self.title = title
@@ -193,6 +279,40 @@ struct TodoItem: Identifiable, Codable, Equatable {
         self.isDone = isDone
         self.createdAt = createdAt
         self.completedAt = completedAt
+        self.reminderAt = reminderAt
+        self.isPinned = isPinned
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, title, detail, isDone, createdAt, completedAt, reminderAt, isPinned, isPositionLocked
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        detail = try container.decodeIfPresent(String.self, forKey: .detail)
+        isDone = try container.decode(Bool.self, forKey: .isDone)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        completedAt = try container.decodeIfPresent(Date.self, forKey: .completedAt)
+        reminderAt = try container.decodeIfPresent(Date.self, forKey: .reminderAt)
+        // Builds that briefly offered a separate position lock wrote this key. Treat those rows
+        // as ordinary top pins so removing that mode never leaves an invisible lock behind.
+        let storedTopPin = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
+        let storedPositionLock = try container.decodeIfPresent(Bool.self, forKey: .isPositionLocked) ?? false
+        isPinned = storedTopPin || storedPositionLock
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(title, forKey: .title)
+        try container.encodeIfPresent(detail, forKey: .detail)
+        try container.encode(isDone, forKey: .isDone)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encodeIfPresent(completedAt, forKey: .completedAt)
+        try container.encodeIfPresent(reminderAt, forKey: .reminderAt)
+        try container.encode(isPinned, forKey: .isPinned)
     }
 }
 
@@ -274,6 +394,8 @@ struct StickerOption: Identifiable {
 }
 
 enum DesignTokens {
+    static let rowDeleteButtonSize: CGFloat = 28
+
     /// A row spends 102pt on chrome — 26 padding, a 20 checkbox, two 16 buttons, three 8 gaps —
     /// so the title only gets `width - 102`. Measured at 15pt medium, a typical Korean title
     /// needs about 230pt of note and an English one up to 304pt: 244 was picked when the app

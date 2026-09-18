@@ -1,10 +1,11 @@
 import AppKit
 import SwiftUI
 
-/// What the menu bar icon counts. Both forms show progress against the day's total.
+/// Controls the optional count beside the menu bar progress icon.
 enum MenuBarCountStyle: String, CaseIterable, Identifiable {
     case remaining
     case done
+    case hidden
 
     var id: String { rawValue }
 
@@ -12,6 +13,7 @@ enum MenuBarCountStyle: String, CaseIterable, Identifiable {
         switch self {
         case .remaining: L("남은 일", language: language)
         case .done: L("완료", language: language)
+        case .hidden: L("표시 없음", language: language)
         }
     }
 }
@@ -22,10 +24,20 @@ enum MenuBarCountStyle: String, CaseIterable, Identifiable {
 final class AppSettings: ObservableObject {
     static let shared = AppSettings()
 
+    @Published var defaultFontSize: NoteFontSize {
+        didSet { UserDefaults.standard.set(defaultFontSize.rawValue, forKey: "posteight.defaultFontSize") }
+    }
+
+    @Published var defaultFontID: String {
+        didSet { UserDefaults.standard.set(defaultFontID, forKey: "posteight.defaultFontID") }
+    }
+
     private enum Key {
         static let dockIcon = "posteight.showsDockIcon"
         static let countStyle = "posteight.menuBarCountStyle"
         static let notesOnTop = "posteight.keepsNotesOnTop"
+        static let hidesFromCapture = "posteight.hidesNotesFromScreenCapture"
+        static let reminderPreview = "posteight.showsReminderPreview"
         static let language = "posteight.language"
     }
 
@@ -62,6 +74,28 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    /// On by default: a memo the user keeps on the desktop all day should not walk into a
+    /// screen share by accident. Turning it off is for the times a memo is the thing being
+    /// shown — a demo, a stream, a screenshot for documentation.
+    @Published var hidesNotesFromScreenCapture: Bool {
+        didSet {
+            guard hidesNotesFromScreenCapture != oldValue else { return }
+            UserDefaults.standard.set(hidesNotesFromScreenCapture, forKey: Key.hidesFromCapture)
+        }
+    }
+
+    /// Off by default, on the same reasoning as the screen capture exclusion: a notification is
+    /// drawn on the lock screen and kept in the system notification database, both outside this
+    /// app's reach. No API lets an app force the preview policy, so the only control left is to
+    /// keep the task's own words out of the body. Turning it on is for people who would rather
+    /// read the task than unlock the Mac.
+    @Published var showsReminderPreview: Bool {
+        didSet {
+            guard showsReminderPreview != oldValue else { return }
+            UserDefaults.standard.set(showsReminderPreview, forKey: Key.reminderPreview)
+        }
+    }
+
     /// Bumped when the Dock icon is clicked, so the menu bar label can bring the card back.
     @Published private(set) var showAllNotesRequests = 0
 
@@ -69,10 +103,18 @@ final class AppSettings: ObservableObject {
         keepsNotesOnTop ? .floating : .normal
     }
 
+    var noteWindowSharingType: NSWindow.SharingType {
+        hidesNotesFromScreenCapture ? .none : .readOnly
+    }
+
     private init() {
         let defaults = UserDefaults.standard
+        defaultFontSize = defaults.string(forKey: "posteight.defaultFontSize").flatMap(NoteFontSize.init(rawValue:)) ?? .medium
+        defaultFontID = defaults.string(forKey: "posteight.defaultFontID") ?? "system"
         showsDockIcon = defaults.object(forKey: Key.dockIcon) as? Bool ?? true
         keepsNotesOnTop = defaults.object(forKey: Key.notesOnTop) as? Bool ?? true
+        hidesNotesFromScreenCapture = defaults.object(forKey: Key.hidesFromCapture) as? Bool ?? true
+        showsReminderPreview = defaults.object(forKey: Key.reminderPreview) as? Bool ?? false
         menuBarCountStyle = (defaults.string(forKey: Key.countStyle)
             .flatMap(MenuBarCountStyle.init(rawValue:))) ?? .remaining
         language = (defaults.string(forKey: Key.language)

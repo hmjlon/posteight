@@ -1,0 +1,375 @@
+import Foundation
+import Testing
+@testable import Posteight
+
+@Suite("Storage recovery", .serialized)
+@MainActor
+struct StorageRecoveryTests {
+    private func directory() -> URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("posteight-recovery-\(UUID())")
+    }
+
+    @Test("Unreadable JSON is preserved, including on termination flush")
+    func corruptNotes() throws {
+        let root = directory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let file = root.appendingPathComponent("notes.json")
+        let corrupt = Data("not JSON".utf8)
+        try corrupt.write(to: file)
+        let store = PosteightStore(directory: root)
+        #expect(store.isStorageBlocked)
+        #expect(store.storageError == .read)
+        #expect(store.notes.isEmpty)
+        store.flush()
+        #expect(try Data(contentsOf: file) == corrupt)
+        #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("trash.json").path))
+    }
+
+    @Test("A corrupt trash file blocks all writes, not only trash writes")
+    func corruptTrash() throws {
+        let root = directory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let original = PosteightStore(directory: root)
+        original.flush()
+        let notes = try Data(contentsOf: root.appendingPathComponent("notes.json"))
+        let corrupt = Data("[".utf8)
+        try corrupt.write(to: root.appendingPathComponent("trashed-tabs.json"))
+        let loaded = PosteightStore(directory: root)
+        #expect(loaded.isStorageBlocked)
+        loaded.flush()
+        #expect(try Data(contentsOf: root.appendingPathComponent("notes.json")) == notes)
+        #expect(try Data(contentsOf: root.appendingPathComponent("trashed-tabs.json")) == corrupt)
+    }
+
+    @Test("Failed migration remains retryable after the app loads and flushes")
+    func failedMigrationThenRetry() throws {
+        let root = directory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let legacy = root.appendingPathComponent("legacy")
+        let destination = root.appendingPathComponent("container")
+        let old = PosteightStore(directory: legacy)
+        let id = old.addNote()
+        old.flush()
+        let trash = legacy.appendingPathComponent("trash.json")
+        try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: trash.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: trash.path) }
+        let store = PosteightStore(directory: destination, legacyDirectory: legacy)
+        #expect(store.storageError == .migration)
+        #expect(store.isStorageBlocked)
+        store.flush()
+        for name in PosteightStore.migratedItems {
+            #expect(!FileManager.default.fileExists(atPath: destination.appendingPathComponent(name).path))
+        }
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: trash.path)
+        store.retryLoading()
+        #expect(!store.isStorageBlocked)
+        #expect(store.notes.contains { $0.id == id })
+        store.flush()
+        #expect(PosteightStore(directory: destination).notes.contains { $0.id == id })
+    }
+
+    @Test("Interrupted migration marker takes precedence over partially copied data")
+    func interruptedMigration() throws {
+        let root = directory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = PosteightStore(directory: root)
+        store.flush()
+        try Data().write(to: root.appendingPathComponent(PosteightStore.migrationMarker))
+        let blocked = PosteightStore(directory: root, legacyDirectory: root.appendingPathComponent("legacy"))
+        #expect(blocked.storageError == .migration)
+        #expect(blocked.isStorageBlocked)
+    }
+
+    @Test("Save errors are visible and retry keeps edits in memory")
+    func failedSave() throws {
+        let root = directory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = PosteightStore(directory: root)
+        let id = store.addNote()
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let file = root.appendingPathComponent("notes.json")
+        // A directory at a file destination reliably fails even when tests run privileged.
+        try FileManager.default.createDirectory(at: file, withIntermediateDirectories: true)
+        store.flush()
+        #expect(store.storageError == .save)
+        #expect(store.notes.contains { $0.id == id })
+        try FileManager.default.removeItem(at: file)
+        store.flush()
+        #expect(store.storageError == nil)
+        #expect(PosteightStore(directory: root).notes.contains { $0.id == id })
+    }
+
+    @Test("A save that cannot write every file replaces none of them")
+    func partialSaveReplacesNothing() throws {
+        let root = directory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = PosteightStore(directory: root)
+        let id = store.addNote()
+        store.flush()
+        let trash = root.appendingPathComponent("trash.json")
+        try FileManager.default.removeItem(at: trash)
+        try FileManager.default.createDirectory(at: trash, withIntermediateDirectories: true)
+
+        store.moveNoteToTrash(id)
+        store.flush()
+
+        #expect(store.storageError == .save)
+        // 휴지통 쪽을 쓰지 못했으니 notes.json 도 그대로다. 하나씩 쓰던 때는 메모가 notes.json 에서
+        // 먼저 빠지고 trash.json 에는 들어가지 못해, 이대로 종료하면 어느 파일에도 없었다.
+        let onDisk = try JSONDecoder().decode(
+            [StickyNote].self, from: Data(contentsOf: root.appendingPathComponent("notes.json")))
+        #expect(onDisk.contains { $0.id == id })
+        #expect(try FileManager.default.contentsOfDirectory(atPath: root.path)
+            .allSatisfy { !$0.hasSuffix(".saving") })
+    }
+
+    @Test("Automatic backup preserves the previous session, even after repeated flushes")
+    func automaticBackup() throws {
+        let root = directory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let original = PosteightStore(directory: root)
+        let id = original.addNote()
+        original.flush()
+        let next = PosteightStore(directory: root)
+        next.moveNoteToTrash(id)
+        next.flush()
+        next.flush()
+        #expect(next.backupDate != nil)
+        try next.restoreBackup()
+        #expect(next.notes.contains { $0.id == id })
+        #expect(!next.trashedNotes.contains { $0.id == id })
+        #expect(!next.canUndo)
+    }
+
+    @Test("Restore recovers corrupt live data and archives the exact original bytes")
+    func restoreCorruptStore() throws {
+        let root = directory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let original = PosteightStore(directory: root)
+        let id = original.addNote()
+        original.flush()
+        try original.createBackup()
+        let corrupt = Data("broken".utf8)
+        try corrupt.write(to: root.appendingPathComponent("notes.json"))
+        let broken = PosteightStore(directory: root)
+        #expect(broken.isStorageBlocked)
+        try broken.restoreBackup()
+        #expect(!broken.isStorageBlocked)
+        #expect(broken.notes.contains { $0.id == id })
+        let archive = try #require(FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
+            .first { $0.lastPathComponent.hasPrefix("BeforeRestore-") })
+        #expect(try Data(contentsOf: archive.appendingPathComponent("notes.json")) == corrupt)
+        let attributes = try FileManager.default.attributesOfItem(atPath: root.appendingPathComponent("backup.json").path)
+        #expect((attributes[.posixPermissions] as? NSNumber)?.intValue == 0o600)
+    }
+
+    @Test("Restore archives an edit that was still waiting for the debounced save")
+    func restoreArchivesPendingEdit() throws {
+        let root = directory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = PosteightStore(directory: root)
+        store.flush()
+        try store.createBackup()
+        let pending = store.addNote()
+
+        try store.restoreBackup()
+
+        let archive = try #require(FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
+            .first { $0.lastPathComponent.hasPrefix("BeforeRestore-") })
+        let archived = try JSONDecoder().decode(
+            [StickyNote].self, from: Data(contentsOf: archive.appendingPathComponent("notes.json")))
+        #expect(archived.contains { $0.id == pending })
+        #expect(!store.notes.contains { $0.id == pending })
+    }
+
+    @Test("Restore refuses to run while edits cannot be saved, keeping them in memory")
+    func restoreRefusesDuringSaveFailure() throws {
+        let root = directory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = PosteightStore(directory: root)
+        store.flush()
+        try store.createBackup()
+        let unsaved = store.addNote()
+        // A directory at a file destination reliably fails even when tests run privileged.
+        let trash = root.appendingPathComponent("trash.json")
+        try FileManager.default.removeItem(at: trash)
+        try FileManager.default.createDirectory(at: trash, withIntermediateDirectories: true)
+
+        #expect(throws: StorageFailure.save) { try store.restoreBackup() }
+        #expect(store.notes.contains { $0.id == unsaved })
+        #expect(try FileManager.default.contentsOfDirectory(atPath: root.path)
+            .allSatisfy { !$0.hasPrefix("BeforeRestore-") })
+    }
+
+    /// 메뉴 막대 30pt, 왼쪽 Dock 50pt 인 화면에서 옛 기준(visibleFrame)과 새 기준(frame).
+    private let legacyAnchor = NSRect(x: 50, y: 0, width: 1870, height: 1050)
+    private let anchor = NSRect(x: 0, y: 0, width: 1920, height: 1080)
+
+    private func withIsolatedDefaults(_ body: (UserDefaults) throws -> Void) throws {
+        let name = "PosteightTests.Rebase.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        try body(defaults)
+    }
+
+    @Test("The one-time position rebase also moves trashed notes and this session's backup")
+    func rebaseCoversTrashAndSessionBackup() throws {
+        try withIsolatedDefaults { defaults in
+            let root = directory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let original = PosteightStore(directory: root, defaults: defaults)
+            let kept = original.addNote()
+            let trashed = original.addNote()
+            original.moveNoteToTrash(trashed)
+            original.flush()
+            let keptBefore = try #require(original.notes.first { $0.id == kept }).position
+            let trashedBefore = try #require(original.trashedNotes.first { $0.id == trashed }).note.position
+            let movedKept = NotePoint(x: keptBefore.x + 50, y: keptBefore.y + 30)
+            let movedTrashed = NotePoint(x: trashedBefore.x + 50, y: trashedBefore.y + 30)
+
+            let store = PosteightStore(directory: root, defaults: defaults)
+            store.rebaseNotePositions(from: legacyAnchor, to: anchor)
+            store.flush()
+
+            #expect(store.notes.first { $0.id == kept }?.position == movedKept)
+            #expect(store.trashedNotes.first { $0.id == trashed }?.note.position == movedTrashed)
+            let backup = try JSONDecoder().decode(
+                StoreBackup.self, from: Data(contentsOf: root.appendingPathComponent("backup.json")))
+            #expect(backup.notes.first { $0.id == kept }?.position == movedKept)
+            #expect(backup.trashedNotes.first { $0.id == trashed }?.note.position == movedTrashed)
+        }
+    }
+
+    @Test("A rebase asked for while storage is blocked waits for the retry that loads the notes")
+    func rebaseWaitsForSuccessfulRetry() throws {
+        try withIsolatedDefaults { defaults in
+            let root = directory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let original = PosteightStore(directory: root, defaults: defaults)
+            let id = original.addNote()
+            original.flush()
+            let before = try #require(original.notes.first { $0.id == id }).position
+            let notesFile = root.appendingPathComponent("notes.json")
+            let intact = try Data(contentsOf: notesFile)
+            try Data("broken".utf8).write(to: notesFile)
+
+            let store = PosteightStore(directory: root, defaults: defaults)
+            #expect(store.isStorageBlocked)
+            store.rebaseNotePositions(from: legacyAnchor, to: anchor)
+            #expect(!defaults.bool(forKey: "posteight.notePositionsRebased"))
+
+            try intact.write(to: notesFile)
+            store.retryLoading()
+
+            #expect(!store.isStorageBlocked)
+            #expect(store.notes.first { $0.id == id }?.position == NotePoint(x: before.x + 50, y: before.y + 30))
+            #expect(defaults.bool(forKey: "posteight.notePositionsRebased"))
+        }
+    }
+
+    @Test("Invalid backup never changes current data")
+    func invalidBackup() throws {
+        let root = directory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = PosteightStore(directory: root)
+        store.flush()
+        let original = try Data(contentsOf: root.appendingPathComponent("notes.json"))
+        var snapshot = StoreBackup(notes: store.notes, trashedNotes: [], trashedTabs: [])
+        snapshot.formatVersion = 99
+        try JSONEncoder().encode(snapshot).write(to: root.appendingPathComponent("backup.json"))
+        #expect(throws: StorageFailure.self) { try store.restoreBackup() }
+        #expect(try Data(contentsOf: root.appendingPathComponent("notes.json")) == original)
+    }
+    @Test("Interrupted restore completes all collections before loading")
+    func interruptedRestore() throws {
+        let root = directory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let original = PosteightStore(directory: root)
+        let id = original.addNote()
+        original.flush()
+        let snapshot = StoreBackup(notes: original.notes, trashedNotes: [], trashedTabs: [])
+        try JSONEncoder().encode(snapshot).write(to: root.appendingPathComponent("pending-restore.json"))
+        try Data("broken".utf8).write(to: root.appendingPathComponent("notes.json"))
+        let loaded = PosteightStore(directory: root)
+        #expect(!loaded.isStorageBlocked)
+        #expect(loaded.notes.contains { $0.id == id })
+        #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("pending-restore.json").path))
+        loaded.flush()
+    }
+
+    @Test("A failed restore remains resumable rather than exposing partially restored data")
+    func failedRestoreRetry() throws {
+        let root = directory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = PosteightStore(directory: root)
+        let id = store.addNote()
+        store.flush()
+        try store.createBackup()
+        store.moveNoteToTrash(id)
+        // 복원 도중의 쓰기 실패를 본다. 휴지통 이동이 디스크에 없으면 복원은 그 편집부터 저장하다
+        // 실패해 시작조차 하지 않는다 — 그 경로는 restoreRefusesDuringSaveFailure 가 본다.
+        store.flush()
+        let trash = root.appendingPathComponent("trash.json")
+        try FileManager.default.removeItem(at: trash)
+        try FileManager.default.createDirectory(at: trash, withIntermediateDirectories: true)
+        #expect(throws: (any Error).self) { try store.restoreBackup() }
+        #expect(store.isStorageBlocked)
+        #expect(FileManager.default.fileExists(atPath: root.appendingPathComponent("pending-restore.json").path))
+        try FileManager.default.removeItem(at: trash)
+        store.retryLoading()
+        #expect(!store.isStorageBlocked)
+        #expect(store.notes.contains { $0.id == id })
+        #expect(!store.trashedNotes.contains { $0.id == id })
+        store.flush()
+    }
+
+    @Test("Manual backup is not immediately overwritten by the session backup")
+    func manualBackup() throws {
+        let root = directory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let original = PosteightStore(directory: root)
+        original.flush()
+        let store = PosteightStore(directory: root)
+        let id = store.addNote()
+        try store.createBackup()
+        store.flush()
+        store.moveNoteToTrash(id)
+        try store.restoreBackup()
+        #expect(store.notes.contains { $0.id == id })
+    }
+
+    @Test("A new installation with no legacy folder can save normally")
+    func noLegacyFolder() {
+        let root = directory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = PosteightStore(directory: root.appendingPathComponent("container"),
+                                  legacyDirectory: root.appendingPathComponent("missing"))
+        #expect(!store.isStorageBlocked)
+        store.flush()
+        #expect(store.storageError == nil)
+    }
+
+    @Test("Interrupted migration preserves partial bytes and retries from the original")
+    func resumeMigration() throws {
+        let root = directory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let legacy = root.appendingPathComponent("legacy")
+        let destination = root.appendingPathComponent("container")
+        let original = PosteightStore(directory: legacy)
+        let id = original.addNote()
+        original.flush()
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        let partial = Data("incomplete copy".utf8)
+        try partial.write(to: destination.appendingPathComponent("notes.json"))
+        try Data().write(to: destination.appendingPathComponent(PosteightStore.migrationMarker))
+        let store = PosteightStore(directory: destination, legacyDirectory: legacy)
+        #expect(!store.isStorageBlocked)
+        #expect(store.notes.contains { $0.id == id })
+        let archive = try #require(FileManager.default.contentsOfDirectory(at: destination, includingPropertiesForKeys: nil)
+            .first { $0.lastPathComponent.hasPrefix("InterruptedMigration-") })
+        #expect(try Data(contentsOf: archive.appendingPathComponent("notes.json")) == partial)
+        store.flush()
+    }
+
+}

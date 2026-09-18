@@ -1,175 +1,304 @@
-# Posteight Contributor Guide
+# Posteight 기여자 가이드
 
-## Project Overview
+Posteight 는 macOS 메뉴 막대 포스트잇 체크리스트 앱이다. 노트는 전부 로컬에 저장되고,
+계정도 네트워크도 텔레메트리도 없다.
 
-Posteight is a macOS SwiftUI sticky-note checklist app. It keeps today's work visible on screen and stores notes locally for the current prototype.
+제품 방향은 [docs/PRODUCT.md](docs/PRODUCT.md) 가 담지만 지금은 비어 있는 상태다. 다시 채워지기
+전까지는 현재 동작 자체가 명세다. 제품 동작을 바꾸기 전에 물어본다.
 
-## Product and Design Direction
+## 스택
 
-Before changing product behavior, UX, or visual design, read [docs/PRODUCT.md](docs/PRODUCT.md).
-Treat it as the current source of truth for product positioning, experience principles, menu bar
-behavior, design direction, priorities, and non-goals. When those decisions change, update that
-file in the same change.
+| | |
+| --- | --- |
+| 언어 | Swift 6 (`swift-tools-version: 6.0`) |
+| UI | SwiftUI. SwiftUI 로 닿지 않는 곳은 AppKit (`NSWindow`, `NSViewRepresentable`) 으로 내려간다 |
+| 테스트 | swift-testing (`import Testing`). XCTest 가 아니다 |
+| 최소 버전 | macOS 14 (Sonoma) |
+| 아키텍처 | Apple silicon 전용. `ARCHS` 가 `arm64` 로 고정되어 있다 |
+| 의존성 | 없음 |
 
-## Repository Structure
+## 빌드와 실행
 
-- `Sources/Posteight/`: SwiftUI views, models, and local persistence
-- `Tests/PosteightTests/`: unit tests for the store's pure logic and its save path
-- `Posteight.xcodeproj`: Xcode app target; builds the real `.app` bundle
-- `Package.swift`: Swift Package Manager configuration, for fast command-line builds
-- `Packaging/Info.plist`: macOS app bundle metadata, shared by both build paths
-- `docs/PRODUCT.md`: product and design direction — the source of truth for behaviour decisions
-- `docs/images/`: README screenshots
-- `README.md` / `README.ko.md`: for people installing the app, not for people building it
-
-The landing page is not in this repository and does not exist yet; when it does, link it here.
-
-## Development Commands
-
-There are two build paths. Use Xcode when you touch anything the bundle owns
-(`Info.plist`, entitlements, signing, the app icon); use SwiftPM for a fast
-compile check.
-
-Open the app project in Xcode:
+빌드 경로가 두 개다. 번들이 소유한 것(`Info.plist`, entitlements, 서명, 앱 아이콘)을 건드릴
+때는 Xcode 를 쓰고, 빠른 컴파일 확인에는 SwiftPM 을 쓴다.
 
 ```bash
 xed Posteight.xcodeproj
 ```
 
-Build the real `.app` from the command line:
-
 ```bash
 xcodebuild -project Posteight.xcodeproj -scheme Posteight -configuration Debug build
 ```
-
-Fast compile check, no bundle:
 
 ```bash
 swift build
 ```
 
-Run the tests:
-
 ```bash
 swift test
 ```
 
-A distributable dmg comes from pushing a `v*` tag on `release`; see `Releasing` below.
+빌드 설정은 전부 `Posteight.xcodeproj` 안에 둔다. 실제 앱을 만드는 것은 이것뿐이고, 빌드 경로가
+둘로 갈리면 설정이 어긋난다. `Sources/Posteight` 는 file system synchronized group 이라 Swift
+파일을 추가하거나 지워도 `project.pbxproj` 를 고칠 필요가 없다.
 
-`swift run` still works, but it launches an unbundled binary: `Bundle.main.bundleIdentifier`
-is `nil`, so macOS logs `linkd`/Process Instance Registry XPC failures and window positions
-are saved separately. Those messages are noise, not app bugs. Run the Xcode target when the
-bundle matters.
+`swift run` 도 되지만 번들 없는 바이너리가 뜬다. `Bundle.main.bundleIdentifier` 가 `nil` 이라
+macOS 가 `linkd` / Process Instance Registry XPC 실패를 로그에 남기고, 창 위치도 따로 저장된다.
+그 메시지는 잡음이지 앱 버그가 아니다. 번들이 중요한 작업이면 Xcode 타깃으로 실행한다.
 
-The project targets macOS 14 or later on Apple silicon only; `ARCHS` is pinned to `arm64`,
-so the app does not run on Intel Macs. `Sources/Posteight` is a file system synchronized
-group, so adding or deleting a Swift file needs no `project.pbxproj` change.
+## 진입점과 씬 구성
 
-Keep every build setting in `Posteight.xcodeproj`. It is the only thing that builds the
-app, and a second build path drifts out of sync with it.
+`@main struct PosteightApp: App` 이 [`Sources/Posteight/PosteightApp.swift`](Sources/Posteight/PosteightApp.swift)
+에 있다. 메인 창은 없다. 씬 구성은 이렇다.
 
-## Implementation Notes
+- **`MenuBarExtra`** (`.menuBarExtraStyle(.window)`) — 상태 아이템에 `MenuBarLabel`, 팝오버에
+  `MenuBarPanelView`. 유일한 상설 표면이다.
+- **`WindowGroup("Posteight", for: UUID.self)`** — 노트 ID 하나당 메모 창 하나. 타이틀 바는 숨긴다.
+- **`Window(id:)`** — `WindowID.search` 와 `WindowID.trash`. `openWindow` 로 여는 단일 창이다.
+- **설정은 씬이 아니다.** 앱에 시트를 붙일 창이 없어서 `SettingsModal.present` 가 자기
+  `NSWindow` 를 띄운다. `NSApp.runModal` 은 일부러 피했다. 모달 세션이 `terminate` 를 삼켜서
+  설정이 열려 있는 동안 Command-Q 가 통째로 먹통이 됐다.
 
-- Keep the visible product name as `Posteight`.
-- Preserve the current local note and trash behavior unless a change is intentional.
-- Notes live in `~/Library/Application Support/Posteight/`. Writes are debounced, so any new
-  quit or sleep path must call `PosteightStore.flush()` or it drops the last half second of edits.
-- The store still reads the legacy `UserDefaults` and `Posteat` keys so older installs migrate
-  on first launch; do not remove that fallback without a migration plan.
-- Title migration rewrites what users typed, so it is covered by tests. Change
-  `legacyTitleDate` only with a test proving current-style titles stay untouched.
-- Keep interactive changes focused and test text editing, checklist completion, note movement, resizing, trash, and persistence when those areas change.
+`AppDelegate.applicationWillFinishLaunching` 은 SwiftUI 가 `MenuBarExtra` 를 설치하기 **전에**
+activation policy 를 정한다. 나중에 바꾸면 씬이 다시 만들어지면서 한 프로세스에 상태 아이템이
+둘 살아남을 수 있다.
 
-## Language
+### 창 라우팅
 
-Posteight draws its own UI in Korean or English, switched in Settings with no relaunch. Korean is
-the source language, and the Korean string itself is the lookup key.
+`WindowGroup` 은 같은 값으로 `openWindow` 를 불러도 매번 새 창을 만든다. 그래서 메모 창은
+`NoteWindowCoordinator.shared` 를 거친다.
 
-- Every user-visible string goes through `L("한국어")`, or `Lf("메모 %d", n)` when it has a
-  placeholder. String literals left bare ship untranslated.
-- Add the English entry to `englishStrings` in `Sources/Posteight/Strings.swift` **in the same
-  change**. A missing key falls back to the Korean text, so an untranslated string does not fail
-  the build, does not crash, and does not announce itself — it just shows up in Korean in an
-  English window.
-- `Tests/PosteightTests/LocalizationTests.swift` checks that every entry is non-empty, differs
-  from its key, and keeps the same `%d`/`%@` count in both languages. It cannot see a string you
-  never added to the table, so the entry is on you.
-- Pure and `nonisolated` code — `PosteightStore`, the model types, anything static — takes
-  `language: AppLanguage` as a parameter and defaults to `.korean`. It must never reach for
-  `AppSettings.shared`; that is what made `addNote` name new tabs after the machine's system
-  language instead of the app's setting.
-- Views may call the `@MainActor` `L(_:)`, which does read `AppSettings.shared`. That only works
-  because **every window's root view holds `@ObservedObject var settings = AppSettings.shared`**
-  — `MenuBarPanelView`, `StickyNoteWindowView`, `TrashView`, `DailyLogPreviewView`,
-  `PencilCaseView`, `SettingsView`, `MenuBarLabel`. A new root that forgets it keeps the language
-  it was first drawn in. Child views inherit the rebuild from their root and need nothing.
-- A value SwiftUI has to diff — a `Picker` option label, anything inside a `ForEach` — takes the
-  language explicitly through `title(in:)` on `PenStyle`, `MenuBarCountStyle`, `StickerOption`,
-  or `AppLanguage`. Reading the singleton there is invisible to SwiftUI and the label sticks at
-  whatever it was first built with.
-- Never localize a string that is compared against saved data. `"새 포스트잇"` in
-  `PosteightStore.compacted` is what older builds actually wrote to disk; translating it breaks
-  the migration. Note text, tab names, and titles are the user's own words and stay as typed.
-- The menus macOS draws itself (File, Edit, Window) are AppKit's, not Posteight's. They follow
-  the system language against `CFBundleLocalizations` in `Packaging/Info.plist`, which lists
-  `en` and `ko` — drop a language from that list and its menus fall back to English. They can
-  never follow the in-app setting, because AppKit picks them once at launch.
+- `present(_:openWindow:)` — 몇 번을 불러도 결과가 같은 표시 경로. 살아 있는 창을 재사용하고,
+  최소화된 창은 되돌리고, 화면 밖으로 밀려난 창에는 `moveOnScreenIfNeeded()` 를 부른다.
+- `register(_:for:)` — 각 `StickyNoteWindowView` 가 뜰 때 자기 `NSWindow` 를 넘겨준다.
+- `hideAll()` — 모든 메모 창을 내린다. 만들어지는 중이던 창도 숨김으로 기록해서, 숨기기 직후에
+  생성이 끝난 창이 도로 튀어나오지 못하게 한다.
 
-### A local green run is not proof
+이걸 굴리는 쪽은 `MenuBarLabel` 이다. 실행할 때 모든 노트를 복원하고, 새로 생긴 노트를 열고,
+`AppSettings.showAllNotesRequests`(Dock 아이콘 클릭이 올린다) 변화에 반응한다.
 
-This project is developed on a Korean Mac and CI runs on an English runner. Anything that reads
-the system language behaves differently in the two places, so a locale bug passes locally and
-only fails after a push — that is exactly how `addNote` shipped naming new tabs `Memo 1` on the
-runner and `메모 1` here.
+## 코드 구조
 
-Reproduce the runner before pushing anything that touches language:
+```
+Sources/Posteight/
+  PosteightApp.swift         @main, 씬, NoteWindowCoordinator, AppDelegate, MenuBarLabel
+  PosteightStore.swift       @MainActor ObservableObject — 모든 변경, 저장, 마이그레이션,
+                             백업·복원, 편집 이력, 탭 복사
+  Models.swift               StickyNote, MemoTab, TodoItem, 휴지통 타입, PenStyle,
+                             ColorOption, StickerOption, DesignTokens
+  AppSettings.swift          설정 싱글턴(UserDefaults 기반), activation policy
+  AppLock.swift              macOS 본인 인증, 잠금 설정과 현재 잠금 상태
+  AppLockView.swift          잠금 화면, 시스템 인증 창 연결, 설정 UI
+  Strings.swift              AppLanguage, L(), Lf(), englishStrings 테이블
+  MenuBarPanelView.swift     팝오버 내용
+  FoldedCardSurface.swift    종이 도형과 질감, 상태 아이템 글리프 MenuBarProgressCard
+  StickyNoteWindowView.swift 메모 창 껍데기: 탭 바, NSWindow 설정, 프레임 저장과 복원
+  StickyNoteView.swift       메모 본문
+  TodoItemRow.swift          체크리스트 행과 펜 줄 긋기
+  TrashView.swift, NoteSearchView.swift, SettingsView.swift, SettingsModal.swift,
+  PencilCaseView.swift       보조 화면들
+  PlainEditableTextField.swift, WindowMoveHandle.swift   NSViewRepresentable 브리지
+  Color+Hex.swift
+  Assets.xcassets/           앱 아이콘. SwiftPM 타깃에서는 제외된다
+
+Tests/PosteightTests/        스토어 로직, 저장, 창 표시 상태, 메뉴 막대 글리프, 로컬라이제이션
+Packaging/Info.plist         두 빌드 경로가 공유하는 번들 메타데이터
+.github/workflows/           ci.yml, release.yml
+docs/                        PRODUCT.md, README 이미지
+```
+
+`README.md` / `README.ko.md` 는 앱을 설치하는 사람을 위한 문서지 빌드하는 사람을 위한 문서가 아니다.
+
+README 이미지를 다시 찍을 때는 **설정 → 노트** 의 "화면 공유와 스크린샷에서 노트 감추기" 를 먼저
+끈다. 켜져 있으면 노트 창이 스크린샷에 아예 안 찍혀서 빈 바탕화면만 남는다.
+
+## UI 규약
+
+- 뷰는 얇게 유지한다. 테스트할 수 있는 것 — 개수, 정렬, 마이그레이션, Markdown — 은
+  `PosteightStore` 나 모델 타입에 순수 함수나 `nonisolated` 코드로 둔다.
+- 사용자에게 보이는 문자열은 전부 `L()` / `Lf()` 를 거친다. [언어](#언어) 를 본다.
+- 메모 표면은 `FoldedCardSurface`(`MemoCardShape`, `MemoTabShape`, `MemoCardSurface`,
+  `PaperGrain`) 에서 가져온다. 뷰 안에서 종이 도형이나 색을 다시 만들지 않는다.
+- 크기, 프레임 한계, 종이·펜 팔레트, 스티커는 `Models.swift` 의 `DesignTokens` 에 있다.
+  `minimumNoteSize` 는 건드리면 파장이 크다. 값을 올리면 저장된 모든 노트가 `clamped` 를 지나며
+  넓어져서, 사용자가 직접 잡아 둔 배치를 덮어쓴다.
+- 상태 아이템 글리프는 단일 template `NSImage` 로 래스터화한다(`MenuBarProgressCard`). 메뉴 막대
+  렌더러가 여러 뷰로 조립한 그림의 일부를 떨어뜨리기 때문이다. `MenuBarGlyphTests` 가 지킨다.
+- AppKit 은 `NSViewRepresentable` 을 통해 만진다. SwiftUI 의 리치 텍스트 동작 없이 순수 텍스트를
+  편집하려면 `PlainEditableTextField`, 타이틀 바 없는 창을 끌려면 `WindowMoveHandle`. 뷰 여기저기에
+  `NSWindow` 접근을 흩뿌리지 않는다.
+
+## 데이터와 환경
+
+- 노트는 샌드박스 컨테이너의 Application Support 아래 `Posteight/` 에 `notes.json`,
+  `trash.json`, `trashed-tabs.json` 으로 저장된다(`PosteightStore.storeDirectory`). 임포트한
+  폰트와 그 매니페스트는 같은 자리의 `Fonts/` 다. 파일은 `0600`, 디렉터리는 `0700` 으로 만든다.
+  테스트는 자기 `directory` 를 넘기기 때문에 실제 노트를 건드리지 않는다.
+- 샌드박스 이전 설치는 `~/Library/Application Support/Posteight/` 에 저장했다.
+  `PosteightStore.migrateStore(from:to:)` 가 첫 실행에 한 번 컨테이너로 복사하고 원본은
+  남긴다. 호출 지점이 `storeDirectory` 의 1회성 초기화 안에 있는 것은 의도다 — 스토어와
+  `NoteFontLibrary` 중 어느 쪽이 먼저 만들어질지 정해져 있지 않아서, 그 바깥에서 부르면
+  폰트 라이브러리가 먼저 컨테이너에 닿아 마이그레이션이 통째로 건너뛰어진다.
+- 설정은 `UserDefaults` 의 `posteight.*` 키에 있다. 컨테이너로는 macOS 가 알아서 옮긴다.
+- entitlements 는 `Packaging/Posteight.entitlements` 에 있고 App Sandbox, 파일 선택 패널용
+  `files.user-selected.read-only`, 그리고 위 마이그레이션을 위한 예전 경로 읽기 임시 예외
+  셋뿐이다. **임시 예외는 한 릴리스용이다. 마이그레이션이 한 바퀴 돌고 나면 지운다.**
+  Release 는 `CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO` 다 — 빼면 Xcode 가 ad-hoc 서명을
+  배포 신원으로 보지 않아 `get-task-allow` 를 배포 빌드에까지 주입한다.
+- 네트워크 호출도, 계정도, API 키도 없다. 밖으로 나가는 경로는 메모 창에서 Command-A →
+  Command-C 로 현재 탭을 클립보드에 복사하는 것 하나뿐이고, 그것도 명시적인 동작이다.
+- 환경변수는 `POSTEIGHT_SYSTEM_LANGUAGE` 하나뿐이고 테스트 전용이다.
+
+## 작업 시 주의할 점
+
+### 저장
+
+- 저장은 500ms 디바운스된다. **새로 만드는 종료·절전 경로는 반드시 `PosteightStore.flush()` 를
+  불러야 한다.** 안 그러면 마지막 0.5초의 편집이 날아간다. `willTerminate` 옵저버는 이미 부르고 있다.
+- 메모 창의 위치는 `note.position` 하나가 정한다. `NSWindow Frame ...` 자동저장 값이 있어도
+  `configureWindow` 가 덮어쓴다. 기준은 **`NSScreen.noteAnchorFrame`** — 메뉴 막대가 있는 화면의
+  `frame` 이다. 여기에 `NSScreen.main` 이나 `visibleFrame` 을 쓰면 안 된다. 전자는 주 디스플레이가
+  아니라 포커스를 가진 창이 있는 화면이고, 후자는 Dock 과 메뉴 막대를 따라 움직인다. 둘 중 하나라도
+  기준이 되면 저장값이 절대 좌표가 아니게 되어, 기준이 달라진 다음 실행에 메모가 그만큼 밀린다.
+  저장된 값의 뜻을 바꾸는 변경에는 `rebaseNotePositions` 같은 1회성 이전이 따라붙는다.
+- 스토어는 아직 예전 `UserDefaults` 도메인과 그보다 더 오래된 `Posteat` 키를 읽는다. 기존 설치가
+  첫 실행에 넘어오게 하는 경로다. 마이그레이션 계획 없이 걷어내지 않는다.
+- 제목 마이그레이션은 사용자가 직접 쓴 글자를 고쳐 쓰는 동작이라 테스트로 덮여 있다.
+  `legacyTitleDate` 를 바꿀 때는 지금 형식의 제목이 그대로 남는다는 걸 증명하는 테스트를 같이 넣는다.
+- 저장된 데이터와 비교되는 문자열은 절대 번역하지 않는다. `PosteightStore.compacted` 의
+  `"새 포스트잇"` 은 예전 빌드가 실제로 디스크에 쓴 값이라, 번역하면 마이그레이션이 깨진다. 노트
+  본문, 탭 이름, 제목은 사용자의 말이므로 입력한 그대로 둔다.
+
+### 언어
+
+Posteight 는 자기가 그리는 UI 를 한국어나 영어로 보여 주고, 설정에서 바꾸면 재시작 없이 바뀐다.
+한국어가 원본 언어이고, 한국어 문자열 자체가 조회 키다.
+
+- 사용자에게 보이는 문자열은 전부 `L("한국어")` 를 거치고, 자리 표시자가 있으면
+  `Lf("메모 %d", n)` 을 쓴다. 그냥 둔 리터럴은 번역되지 않은 채 나간다.
+- 영어 항목은 `Sources/Posteight/Strings.swift` 의 `englishStrings` 에 **같은 변경 안에서** 넣는다.
+  키가 없으면 한국어로 조용히 대체된다. 빌드가 깨지지도, 크래시가 나지도, 티가 나지도 않는다.
+- `LocalizationTests` 는 모든 항목이 비어 있지 않고, 키와 다르고, `%d`/`%@` 개수가 양쪽에서 같은지
+  검사한다. 테이블에 아예 넣지 않은 문자열은 이 테스트가 볼 수 없다.
+- 순수 함수와 `nonisolated` 코드 — `PosteightStore`, 모델 타입, static 인 것 전부 — 는
+  `language: AppLanguage` 를 파라미터로 받고 기본값은 `.korean` 이다. `AppSettings.shared` 를
+  절대 직접 읽지 않는다. 그것 때문에 `addNote` 가 앱 설정이 아니라 기기의 시스템 언어로 새 탭
+  이름을 지었다.
+- 뷰는 `@MainActor` 인 `L(_:)` 를 불러도 된다. 이건 실제로 `AppSettings.shared` 를 읽는다. 그런데도
+  동작하는 이유는 **모든 창의 루트 뷰가 `@ObservedObject var settings = AppSettings.shared` 를
+  들고 있기 때문**이다 — `MenuBarPanelView`, `StickyNoteWindowView`, `TrashView`,
+  `NoteSearchView`, `PencilCaseView`, `SettingsView`, `MenuBarLabel`. 이걸 빠뜨린 새 루트는
+  처음 그려진 언어에 그대로 멈춘다. 자식 뷰는 루트가 다시 그려질 때 따라오므로 아무것도 필요 없다.
+- SwiftUI 가 값을 비교해야 하는 자리 — `Picker` 옵션 라벨, `ForEach` 안의 것 — 는 언어를 명시적으로
+  넘긴다. `PenStyle`, `MenuBarCountStyle`, `StickerOption`, `AppLanguage` 의 `title(in:)` 을 쓴다.
+  거기서 싱글턴을 읽으면 SwiftUI 눈에 보이지 않아서, 라벨이 처음 만들어진 값에 그대로 붙어 버린다.
+- macOS 가 직접 그리는 메뉴(File, Edit, Window) 는 AppKit 것이다. `Packaging/Info.plist` 의
+  `CFBundleLocalizations`(`en`, `ko`) 를 기준으로 시스템 언어를 따른다. AppKit 이 실행 시점에 한 번
+  정하기 때문에 앱 안의 설정을 따를 수 없다.
+- **번들로 띄운 앱이 한국어 맥에서 영어로 나오면, 코드를 뒤지기 전에 앱별 언어 설정을 본다.**
+  `AppLanguage.resolved` 는 `Locale.preferredLanguages` 를 읽는데, 그 값은 시스템 언어가 아니라
+  **이 앱에 대한** 언어다. 앱 도메인에 `AppleLanguages` 가 있으면 그것이 이긴다 — 샌드박스에서는
+  `~/Library/Containers/<번들id>/Data/Library/Preferences/<번들id>.plist` 다. 시스템 설정 →
+  일반 → 언어 및 지역 → 응용 프로그램 이 쓰는 그 키이고, **Posteight 는 이 키를 쓰지 않는다**
+  (앱이 쓰는 키는 전부 `posteight.` 로 시작한다). 그래서 이 상태는 앱의 결함이 아니라 기계의
+  설정이며, 앱이 영어로 그리는 것이 맞는 동작이다.
+
+  ```bash
+  plutil -p ~/Library/Containers/com.younjiyoung.posteight/Data/Library/Preferences/com.younjiyoung.posteight.plist | grep -i applelanguages
+  ```
+
+  헷갈리는 이유는 AppKit 이 그리는 메뉴(`닫기`, `모두 닫기`)는 그대로 한국어로 남아서, 한 화면에
+  두 언어가 섞여 보이기 때문이다. 그 둘은 서로 다른 경로로 언어를 정한다. 새로 만들어진 컨테이너는
+  `ko-KR` 로 정상 해석된다 — 확인해 봤다.
+
+#### 로컬에서 초록불이 났다고 통과가 아니다
+
+이 프로젝트는 한국어 Mac 에서 개발하고 CI 는 영어 러너에서 돈다. 그래서 로케일 버그는 로컬에서
+멀쩡히 통과하고 푸시한 뒤에야 터진다. `addNote` 가 러너에서는 새 탭을 `Memo 1` 로, 여기서는
+`메모 1` 로 짓던 게 정확히 이 경우였다. 언어에 닿는 변경을 푸시하기 전에 러너를 재현한다.
 
 ```bash
 POSTEIGHT_SYSTEM_LANGUAGE=en swift test
 ```
 
-`AppLanguage.resolved` honours that variable in place of `Locale.preferredLanguages`, so the
-whole suite runs as if the machine were English. Run it plain as well — both have to pass.
+`AppLanguage.resolved` 가 `Locale.preferredLanguages` 대신 이 변수를 보기 때문에, 기기가 영어인
+것처럼 전체 스위트가 돈다. 그냥도 한 번 돌린다. 둘 다 통과해야 한다.
 
-The variable is a reproduction aid, not a fix. The fix is that nothing outside a view reads the
-current language at all: `PosteightStore` and the model types take `language:` as a parameter
-and default to `.korean`, which is what keeps the test suite deterministic in the first place.
+이 변수는 재현 수단이지 해결책이 아니다. 해결책은 뷰 바깥의 어떤 코드도 현재 언어를 읽지 않는 것이다.
 
-## Releasing
+### 테스트
 
-Releases are built by CI, not by hand. Pushing a `v*` tag runs
-[`release.yml`](.github/workflows/release.yml), which stamps the version from the
-tag, builds the Release configuration, packages a `.dmg`, and publishes it to
-GitHub Releases with its checksum:
+- 커밋 전마다 `swift test` 를 돌린다.
+- 텍스트 편집, 체크리스트 완료, 노트 이동, 크기 조절, 휴지통, 저장을 건드렸다면 그 영역을 테스트한다.
+- 여러 디스플레이·Space·절전 복귀에서의 창 배치는 테스트로 덮이지 않는다. 릴리스 전에 손으로 확인한다.
+- 메모 창은 하나마다 전역 이벤트 모니터를 두 개 단다(`Coordinator` 의 드래그·키보드 모니터).
+  창 N 개면 클릭과 키 입력 한 번에 N 쌍이 돌고, 각자 `event.window === self.window` 만 보고
+  빠진다. 지금 규모에서는 재지 않아도 되는 비용이다. 메모가 수십 개인 사용자가 입력이 늦다고
+  하면, 그때 앱 수준 모니터 하나로 모으고 창은 id 로 찾는다 — 그 전에 옮기면 IME·실행 취소
+  라우팅만 건드리고 얻는 것이 없다.
+- 테스트가 만든 스토어에는 **샘플 메모 두 개가 이미 들어 있다**. 빈 디렉터리에서는 `loadNotes`
+  가 `sampleNotes` 로 떨어지고 `addNote` 는 그 뒤에 붙는다. 그래서 `store.notes.first` 는 방금
+  만든 메모가 아니다. 항상 `store.notes.first { $0.id == noteID }` 로 집는다.
+
+## 릴리스
+
+### 머지 전에 확인할 것
+
+- [ ] **`Packaging/Posteight.entitlements` 의 임시 예외를 지웠는가.**
+      `com.apple.security.temporary-exception.files.home-relative-path.read-only` 는 샌드박스
+      이전에 만들어진 설치의 노트를 컨테이너로 한 번 복사해 오기 위한 것이다. 그 이전은
+      **샌드박스가 처음 나가는 릴리스 한 번**에 끝난다. 그 다음 릴리스부터는 지운다. 남겨 두면
+      앱이 사용자 홈의 `Library/Application Support/Posteight/` 를 계속 읽을 수 있고, 샌드박스가
+      막으라고 있는 자리에 구멍이 하나 열린 채로 배포된다. App Store 심사도 임시 예외를 받지
+      않는다. 지울 때 `PosteightStore.migrateStore` 와 `legacyStoreDirectory` 도 같이 걷는다
+      — 읽을 수 없는 경로를 읽으려 드는 코드만 남는다.
+
+      샌드박스는 a6b8f71 에서 들어왔고 아직 `release` 에 없다. 즉 **다음 릴리스가 그 한 번**이고,
+      지우는 것은 그 다음 릴리스다.
+
+릴리스는 손이 아니라 CI 가 만든다. `dev` 를 `release` 로 머지하면
+[`release.yml`](.github/workflows/release.yml) 이 돌면서 직전 릴리스에서 마이너를 하나 올린
+버전을 정하고, Release 구성으로 빌드하고, `.dmg` 로 묶어 체크섬과 함께 GitHub Releases 에
+올린 다음, [homebrew-tap](https://github.com/hmjlon/homebrew-tap) 의 cask 까지 갱신한다.
 
 ```bash
 git switch release
-git tag v0.2.0
-git push origin v0.2.0
+git merge dev
+git push origin release
 ```
 
-The tag is the only source of truth for the version. `Packaging/Info.plist` reads
-`$(MARKETING_VERSION)`, so never hardcode a version there.
+버전을 직접 정해야 하면 태그를 밀면 된다. 마이너 자동 증가로는 못 가는 자리 — 메이저 승격이나
+패치 릴리스 — 에 쓴다.
 
-Day-to-day work happens on `dev`; `release` only receives merges from `dev`, and
-tags are cut there. [`ci.yml`](.github/workflows/ci.yml) runs `swift test` for the
-unit tests and `xcodebuild` for the real `.app` bundle, on every push to `dev` or
-`release` and on every pull request into `release`. Documentation-only commits are
-skipped.
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
 
-`Product > Archive` in Xcode still works for a local one-off build.
+버전의 원본은 태그다. 자동 경로에서는 CI 가 그 태그를 만들어 빌드한 커밋에 붙인다.
+`Packaging/Info.plist` 는 `$(MARKETING_VERSION)` 을 읽으므로 거기에 버전을 박아 넣지 않는다.
+dmg 는 서명도 공증도 되어 있지 않아서, 설치하는 사람마다 Gatekeeper 를 손으로 넘어야 한다.
 
-## Git Workflow
+cask 갱신에는 `TAP_TOKEN` 시크릿(`homebrew-tap` 의 Contents 쓰기 권한)이 필요하다. 없거나
+만료됐으면 경고만 남고 릴리스 자체는 그대로 게시된다. 그때는 작업 요약에 찍힌 값으로 cask 를
+손으로 고친다.
 
-- Commit to `dev` directly. This project does not use per-feature branches.
-- `release` only receives merges from `dev`. Version tags are cut on `release`.
-- Keep commits focused on one feature or change.
-- Run `swift test` before every commit.
-- Do not commit `.build/` or `dist/`; both are generated locally and ignored by Git.
+[`ci.yml`](.github/workflows/ci.yml) 은 `dev` 나 `release` 로 푸시할 때마다, 그리고 `release` 로
+들어오는 모든 PR 에서 `swift test` 와 실제 `.app` 번들의 `xcodebuild` 를 돌린다. 문서만 바뀐
+커밋은 건너뛴다.
 
-## Commit Messages
+한 번짜리 로컬 빌드는 Xcode 의 `Product > Archive` 로도 된다.
 
-An English Conventional Commit prefix, everything else in Korean.
+## Git 작업 방식
+
+- `dev` 에 바로 커밋한다. 기능별 브랜치는 쓰지 않는다.
+- `release` 는 `dev` 에서 오는 머지만 받는다. 버전 태그는 `release` 에서 자른다.
+- 커밋 하나에는 기능이나 변경 하나만 담는다.
+- `.build/` 와 `dist/` 는 커밋하지 않는다. 둘 다 로컬에서 생성되고 Git 이 무시한다.
+
+## 커밋 메시지
+
+Conventional Commit 접두사만 영어고 나머지는 한국어다.
 
 ```
 type(scope): 무엇을 바꿨는지 한 줄
@@ -177,17 +306,20 @@ type(scope): 무엇을 바꿨는지 한 줄
 왜 그랬는지, 무엇이 어긋나 있었는지, 어떻게 확인했는지.
 ```
 
-- Subject: `type(scope):` plus a Korean summary. Types are `feat`, `fix`, `docs`,
-  `test`, `chore`, `refactor`, `ci`; the scope is optional and lowercase
-  (`fix(menubar):`). One line, no trailing period. Prefer noun endings
-  (`... 수정`, `... 추가`) over `~한다`, and join two changes with `+` or `—`
-  instead of blurring them into one vague phrase.
-- Body: Korean prose, separated from the subject by a blank line. Open with the
-  defect or motivation and its reach — what was wrong, on which path, what the
-  user saw. Then what changed, as `-` bullets when there is more than one thing.
-  Close with the evidence: the measurement, the test that fails without the
-  change, `swift test` results, related commit hashes and dates.
-- The body explains why, not a file-by-file diff summary. Record the traps and
-  the roads not taken (SwiftUI rendering limits, ordering constraints) so the
-  next change does not walk back into them.
-- Keep the `Co-Authored-By:` trailer when an agent wrote the change.
+
+- 제목: `type(scope):` 뒤에 한국어 요약. 타입은 `feat`, `fix`, `docs`, `test`, `chore`,
+  `refactor`, `ci`. scope 는 선택이고 소문자로 쓴다(`fix(menubar):`). 한 줄, 마침표 없음.
+  `~한다` 보다 명사형(`... 수정`, `... 추가`) 을 쓰고, 두 가지 변경은 뭉뚱그리지 말고 `+` 나 `—`
+  로 잇는다.
+- 본문: 제목과 빈 줄로 띄우고 한국어 산문으로 쓴다. 결함이나 동기와 그 파장으로 연다 — 무엇이
+  잘못됐고, 어느 경로에서, 사용자에게 무엇이 보였는지. 그다음 무엇을 바꿨는지, 두 개 이상이면
+  `-` 불릿으로. 마지막은 근거다. 이 변경 없이는 실패하는 테스트, `swift test` 결과, 관련 커밋
+  해시와 날짜.
+- 본문은 파일별 diff 요약이 아니라 이유를 적는 자리다. 함정과 가지 않은 길(SwiftUI 렌더링 한계,
+  순서 제약)을 남겨서 다음 변경이 같은 자리로 되돌아가지 않게 한다.
+- 에이전트가 작성한 변경이면 본문 맨 끝에 `Co-Authored-By: {서비스} {모델명} {Effort수준} <{noreply@도메인}>` 형식으로 트레일러를 남긴다.
+  - Effort 수준은 `Low`, `Medium`, `High`, `Extra-High` 등으로 표기한다.
+  - 예시:
+    - `Co-Authored-By: Claude Opus 5 High <noreply@anthropic.com>`
+    - `Co-Authored-By: Claude Opus 5 extra-High <noreply@anthropic.com>`
+    - `Co-Authored-By: Codex GPT 6 Astra High <noreply@openai.com>`

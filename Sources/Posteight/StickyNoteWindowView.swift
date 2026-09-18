@@ -3,6 +3,7 @@ import SwiftUI
 
 struct StickyNoteWindowView: View {
     @EnvironmentObject private var store: PosteightStore
+    @ObservedObject private var lock = AppLock.shared
     @ObservedObject private var settings = AppSettings.shared
     @Environment(\.dismissWindow) private var dismissWindow
 
@@ -12,9 +13,13 @@ struct StickyNoteWindowView: View {
     @State private var resizeStartFrame: NSRect?
     @State private var isMovingToTrash = false
     @State private var isPencilCaseOpen = false
+    @State private var showsDeleteConfirmation = false
+    @State private var pendingDeleteTabID: UUID?
     @State private var isCardHovered = false
     @State private var editingTabID: UUID?
     @State private var hoveredTabID: UUID?
+    @State private var lastMergeAttempt = Date.distantPast
+    @State private var isAllContentSelected = false
 
     var body: some View {
         Group {
@@ -25,7 +30,7 @@ struct StickyNoteWindowView: View {
                 Color.clear
                     .frame(width: 1, height: 1)
                     .onAppear {
-                        closeCard()
+                        discardCard()
                     }
             }
         }
@@ -35,28 +40,40 @@ struct StickyNoteWindowView: View {
         ZStack {
             MemoCardSurface(paperColor: Color(hex: note.paperHex))
 
-            VStack(spacing: 0) {
-                memoTabBar(note: note, selectedTab: selectedTab)
+            if lock.isLocked {
+                LockedContentView().clipShape(MemoCardShape())
+            } else if store.isStorageBlocked {
+                StorageStatusView()
+            } else {
+                VStack(spacing: 0) {
+                    memoTabBar(note: note, selectedTab: selectedTab)
 
-                StickyNoteView(
-                    note: note,
-                    tab: selectedTab,
-                    onResizeChanged: { translation in
-                        resizeWindow(translation: translation)
-                    },
-                    onResizeEnded: { translation in
-                        finishResizingWindow(translation: translation)
-                    },
-                    onDelete: { moveToTrash(note) },
-                    isPencilCaseOpen: $isPencilCaseOpen
-                )
-                .id(selectedTab.id)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    StickyNoteView(
+                        note: note,
+                        tab: selectedTab,
+                        onResizeChanged: { translation in
+                            resizeWindow(translation: translation)
+                        },
+                        onResizeEnded: { translation in
+                            finishResizingWindow(translation: translation)
+                        },
+                        onDelete: { if !store.isStorageBlocked { requestDeleteSelectedTab() } },
+                        isAllContentSelected: isAllContentSelected,
+                        isPencilCaseOpen: $isPencilCaseOpen
+                    )
+                    .id(selectedTab.id)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                .clipShape(MemoCardShape())
             }
-            .clipShape(MemoCardShape())
 
             MemoCardSheen()
                 .clipShape(MemoCardShape())
+        }
+        .overlay(alignment: .bottom) {
+            if store.storageError != nil && !store.isStorageBlocked && !lock.isLocked {
+                StorageStatusView().background(.regularMaterial)
+            }
         }
         // The card fills the window instead of declaring its own size: a fixed size makes
         // SwiftUI resize the window under the drag, which is what made resizing stutter and
@@ -67,18 +84,86 @@ struct StickyNoteWindowView: View {
         .rotationEffect(isMovingToTrash ? .degrees(12) : .zero)
         .opacity(isMovingToTrash ? 0 : 1)
         .allowsHitTesting(!isMovingToTrash)
+        .onAppear {
+            // SwiftUI can retain this scene after dismissal and reuse it on restore.
+            isMovingToTrash = false
+            window?.alphaValue = 1
+        }
         .onHover { isCardHovered = $0 }
         .environment(\.colorScheme, .light)
         .background {
-            NoteWindowConfigurator(note: note, windowTitle: selectedTab.title) { configuredWindow in
+            NoteWindowConfigurator(
+                note: note,
+                windowTitle: NoteWindowTitle.make(isLocked: lock.isLocked, tabName: selectedTab.name),
+                onEscape: closeCard,
+                onDelete: { if !store.isStorageBlocked { requestDeleteSelectedTab() } },
+                onSelectAll: {
+                    guard !store.isStorageBlocked else { return }
+                    isAllContentSelected = true
+                },
+                onCopyAll: {
+                    guard isAllContentSelected, !store.isStorageBlocked else { return false }
+                    store.copyTabToClipboard(noteID: note.id, tabID: selectedTab.id)
+                    return true
+                },
+                onClearSelection: {
+                    guard isAllContentSelected else { return false }
+                    isAllContentSelected = false
+                    return true
+                },
+                onMoveEnded: { if !store.isStorageBlocked { mergeAtDropLocation() } },
+                onAddTab: {
+                    guard !store.isStorageBlocked else { return }
+                    editingTabID = nil
+                    _ = store.addTab(to: noteID, language: settings.language)
+                }
+            ) { configuredWindow in
                 NoteWindowCoordinator.shared.register(configuredWindow, for: noteID)
                 if window !== configuredWindow {
                     window = configuredWindow
                 }
             }
         }
+        .alert(L("현재 탭을 삭제할까요?"), isPresented: $showsDeleteConfirmation) {
+            Button(L("취소"), role: .cancel) { pendingDeleteTabID = nil }
+            Button(L("확인"), role: .destructive) { confirmDeleteTab() }
+        } message: {
+            Text(L("삭제한 탭은 휴지통에서 복구할 수 있어요."))
+        }
+        .environment(\.editingStore, store)
         .onChange(of: settings.keepsNotesOnTop) { _, _ in
             window?.level = settings.noteWindowLevel
+        }
+        .onChange(of: settings.hidesNotesFromScreenCapture) { _, _ in
+            window?.sharingType = settings.noteWindowSharingType
+        }
+        .onChange(of: lock.isLocked) { _, locked in
+            if locked {
+                store.searchFocusRequest = nil
+                isPencilCaseOpen = false
+                showsDeleteConfirmation = false
+                pendingDeleteTabID = nil
+                editingTabID = nil
+                isAllContentSelected = false
+                window?.makeFirstResponder(nil)
+            }
+        }
+        .task(id: store.searchFocusRequest?.id) {
+            guard let request = store.searchFocusRequest,
+                  request.noteID == note.id, request.tabID == selectedTab.id else { return }
+            isAllContentSelected = false
+            if request.target == .tabName { editingTabID = selectedTab.id }
+        }
+        .onChange(of: selectedTab.id) { _, _ in
+            isAllContentSelected = false
+        }
+        // 창이 key 를 잃으면 전체 선택을 내린다. 이게 없으면 다른 앱에 갔다가 ⌘` 로
+        // 돌아왔을 때 — 마우스 클릭이 없으니 해제 경로를 하나도 지나지 않는다 — 여전히
+        // 전체가 선택된 채라, 사용자가 방금 고른 줄 아는 것 대신 ⌘C 가 탭 전체를
+        // 클립보드에 넣는다.
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { notification in
+            guard isAllContentSelected, (notification.object as? NSWindow) === window else { return }
+            isAllContentSelected = false
         }
     }
 
@@ -87,10 +172,20 @@ struct StickyNoteWindowView: View {
             let controlsWidth = MemoSurfaceMetrics.trailingControlsWidth
             let addButtonWidth = MemoSurfaceMetrics.addTabButtonWidth
             let availableTabWidth = max(0, geometry.size.width - controlsWidth - addButtonWidth)
+            // Once tabs reach their maximum width, spare space belongs after the add button.
+            let occupiedTabWidth = min(
+                availableTabWidth,
+                CGFloat(note.tabs.count) * MemoSurfaceMetrics.maximumTabWidth
+            )
 
             HStack(alignment: .bottom, spacing: 0) {
-                memoTabs(note: note, selectedTab: selectedTab, availableWidth: availableTabWidth)
-                    .frame(width: availableTabWidth)
+                memoTabs(
+                    note: note,
+                    selectedTab: selectedTab,
+                    availableWidth: occupiedTabWidth,
+                    isAtMinimumWidth: geometry.size.width <= CGFloat(DesignTokens.minimumNoteSize.width)
+                )
+                    .frame(width: occupiedTabWidth)
 
                 let canAddTab = note.tabs.count < MemoSurfaceMetrics.maximumTabCount
 
@@ -106,8 +201,10 @@ struct StickyNoteWindowView: View {
                 .buttonStyle(.plain)
                 .disabled(!canAddTab)
                 .foregroundStyle(Color.black.opacity(canAddTab ? 0.48 : 0.18))
-                .help(canAddTab ? L("이 메모에 새 탭 추가") : L("탭은 이 메모에 최대 5개까지 둘 수 있어요"))
+                .help(canAddTab ? L("이 메모에 새 탭 추가") : Lf("탭은 이 메모에 최대 %d개까지 둘 수 있어요", MemoSurfaceMetrics.maximumTabCount))
                 .padding(.bottom, 3)
+
+                Spacer(minLength: 0)
 
                 tabBarControls
                     .frame(width: controlsWidth)
@@ -116,32 +213,96 @@ struct StickyNoteWindowView: View {
         .frame(height: MemoSurfaceMetrics.tabBarHeight, alignment: .bottom)
         .background {
             Color(hex: note.paperHex)
-                .overlay(Color.black.opacity(0.055))
+                .overlay {
+                    // Inactive tabs sit 3pt above the body. Keep that gap paper-colored
+                    // so the darker tab-bar background does not form a horizontal stripe.
+                    Color.black.opacity(0.055)
+                        .padding(.bottom, 3)
+                }
         }
     }
 
+    @ViewBuilder
     private func memoTabs(
         note: StickyNote,
         selectedTab: MemoTab,
-        availableWidth: CGFloat
+        availableWidth: CGFloat,
+        isAtMinimumWidth: Bool
     ) -> some View {
-        let tabCount = max(note.tabs.count, 1)
-        let dividedWidth = availableWidth / CGFloat(tabCount)
-        let tabWidth = min(MemoSurfaceMetrics.maximumTabWidth, max(MemoSurfaceMetrics.minimumTabWidth, dividedWidth))
+        let dividedWidth = availableWidth / CGFloat(max(note.tabs.count, 1))
 
-        return HStack(alignment: .bottom, spacing: 0) {
-            ForEach(note.tabs) { tab in
+        if MemoSurfaceMetrics.collapsesTabs(
+            count: note.tabs.count, stripWidth: availableWidth, isAtMinimumWidth: isAtMinimumWidth
+        ) {
+            HStack(alignment: .bottom, spacing: 0) {
                 memoTab(
                     note,
-                    tab: tab,
-                    isSelected: tab.id == selectedTab.id,
-                    width: tabWidth
+                    tab: selectedTab,
+                    isSelected: true,
+                    width: max(0, availableWidth - MemoSurfaceMetrics.tabListButtonWidth),
+                    allowsClosing: false
                 )
-                .id(tab.id)
+                .modifier(TodoItemDropTarget(noteID: note.id, tabID: selectedTab.id, selectsTab: true))
+
+                Menu {
+                    ForEach(note.tabs) { tab in
+                        Button {
+                            editingTabID = nil
+                            store.selectTab(noteID: note.id, tabID: tab.id)
+                        } label: {
+                            if tab.id == selectedTab.id {
+                                Label(tab.name, systemImage: "checkmark")
+                            } else {
+                                Text(tab.name)
+                            }
+                        }
+                    }
+                } label: {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                        .frame(
+                            width: MemoSurfaceMetrics.tabListButtonWidth,
+                            height: MemoSurfaceMetrics.activeTabHeight
+                        )
+                        .contentShape(Rectangle())
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .frame(height: MemoSurfaceMetrics.activeTabHeight)
+                // Inset the arrow from the top and right without shifting the tab surface.
+                .offset(x: -3)
+                // AppKit can replace a menu label's symbol styling. Fade the rendered
+                // control instead, matching the adjacent controls even for template images.
+                .compositingGroup()
+                .opacity(0.48 * (isCardHovered || isPencilCaseOpen ? 1 : 0.42))
+                .animation(.easeOut(duration: 0.14), value: isCardHovered)
+                .animation(.easeOut(duration: 0.14), value: isPencilCaseOpen)
+                .help(L("탭 목록"))
+                .accessibilityLabel(L("탭 목록"))
             }
+            // Paint the entire allocated tab width, including any space left by the
+            // native menu's intrinsic sizing, rather than only the HStack's content.
+            .frame(width: availableWidth, height: MemoSurfaceMetrics.activeTabHeight, alignment: .leading)
+            .background {
+                MemoTabShape(roundsLeadingCorner: false)
+                    .fill(Color(hex: note.paperHex))
+            }
+            .frame(width: availableWidth, height: MemoSurfaceMetrics.tabBarHeight, alignment: .bottom)
+        } else {
+            HStack(alignment: .bottom, spacing: 0) {
+                ForEach(note.tabs) { tab in
+                    memoTab(
+                        note,
+                        tab: tab,
+                        isSelected: tab.id == selectedTab.id,
+                        width: dividedWidth
+                    )
+                    .modifier(TodoItemDropTarget(noteID: note.id, tabID: tab.id, selectsTab: true))
+                }
+            }
+            .frame(width: availableWidth, height: MemoSurfaceMetrics.tabBarHeight, alignment: .bottomLeading)
         }
-        .frame(width: availableWidth, height: MemoSurfaceMetrics.tabBarHeight, alignment: .bottomLeading)
-        .clipped()
     }
 
     @ViewBuilder
@@ -149,12 +310,13 @@ struct StickyNoteWindowView: View {
         _ note: StickyNote,
         tab: MemoTab,
         isSelected: Bool,
-        width: CGFloat
+        width: CGFloat,
+        allowsClosing: Bool = true
     ) -> some View {
         let showsSticker = width >= 54
         let horizontalPadding: CGFloat = width >= 74 ? 10 : 5
         let isHovered = hoveredTabID == tab.id
-        let showsClose = editingTabID != tab.id && (isSelected || isHovered)
+        let showsClose = allowsClosing && editingTabID != tab.id && (isSelected || isHovered)
         let onHover: (Bool) -> Void = { hovering in
             hoveredTabID = hovering ? tab.id : (hoveredTabID == tab.id ? nil : hoveredTabID)
         }
@@ -182,6 +344,10 @@ struct StickyNoteWindowView: View {
                             fontWeight: .semibold,
                             textOpacity: 0.68,
                             isFocused: true,
+                            searchFocus: store.searchFocusRequest.flatMap {
+                                $0.noteID == note.id && $0.tabID == tab.id && $0.target == .tabName ? $0 : nil
+                            },
+                            onSearchFocusApplied: { store.finishSearchFocus($0) },
                             onEditingChanged: { isEditing in
                                 if !isEditing, editingTabID == tab.id {
                                     editingTabID = nil
@@ -255,10 +421,11 @@ struct StickyNoteWindowView: View {
             .padding(.bottom, 3)
             .clipped()
             .overlay(alignment: .trailing) {
-                Rectangle()
-                    .fill(Color.black.opacity(0.08))
-                    .frame(width: 0.5, height: 14)
-                    .padding(.bottom, 8)
+                Capsule()
+                    .fill(Color.black.opacity(0.06))
+                    .frame(width: 0.5, height: 12)
+                    .offset(y: -1.5)
+                    .allowsHitTesting(false)
             }
             .onHover(perform: onHover)
         }
@@ -274,7 +441,8 @@ struct StickyNoteWindowView: View {
         } label: {
             Image(systemName: "xmark")
                 .font(.system(size: 8, weight: .bold))
-                .frame(width: 15, height: 15)
+                // Keep the glyph quiet, but do not make the pointer hunt for its thin strokes.
+                .frame(width: 18, height: 20)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -294,11 +462,11 @@ struct StickyNoteWindowView: View {
         HStack(spacing: showsSticker ? 6 : 0) {
             if showsSticker {
                 ZStack {
-                    Image(systemName: note.stickerSymbol)
+                    Image(systemName: tab.stickerSymbol)
                         .font(.system(size: isSelected ? 10 : 9, weight: .semibold))
 
                     if isSelected {
-                        WindowMoveHandle(onDragEnded: saveWindowPosition)
+                        WindowMoveHandle(onDragEnded: saveWindowPosition, onDragCompleted: mergeAtDropLocation)
                     }
                 }
                 .frame(width: 15, height: 18)
@@ -313,7 +481,7 @@ struct StickyNoteWindowView: View {
         }
         .foregroundStyle(Color(hex: note.penHex).opacity(isSelected ? 0.72 : 0.58))
         // Room for the close button sitting on top, so the truncated name doesn't run under it.
-        .padding(.trailing, reservesCloseSpace ? 15 : 0)
+        .padding(.trailing, reservesCloseSpace ? 18 : 0)
         .clipped()
     }
 
@@ -334,12 +502,13 @@ struct StickyNoteWindowView: View {
     }
 
     private var tabBarControls: some View {
-        HStack(spacing: 1) {
+        HStack(spacing: 0) {
             Button {
                 isPencilCaseOpen.toggle()
             } label: {
                 Image(systemName: "slider.horizontal.3")
-                    .frame(width: 24, height: 28)
+                    .frame(width: 28, height: 32)
+                    .contentShape(Rectangle())
             }
             .help(L("메모 꾸미기"))
 
@@ -347,7 +516,9 @@ struct StickyNoteWindowView: View {
                 closeCard()
             } label: {
                 Image(systemName: "xmark")
-                    .frame(width: 24, height: 28)
+                    // The visible x stays small; its entire 28×32pt cell closes the memo.
+                    .frame(width: 28, height: 32)
+                    .contentShape(Rectangle())
             }
             .help(L("닫기 — 메모는 그대로 있어요"))
         }
@@ -387,29 +558,19 @@ struct StickyNoteWindowView: View {
         resizeStartFrame = nil
     }
 
+    /// 저장하는 쪽과 같은 식을 쓴다. 끄는 동안의 창 크기와 저장되는 크기가 갈리면 놓는 순간
+    /// 창이 한 번 튄다.
     private func clampedSize(startFrame: NSRect, translation: CGSize) -> NoteSize {
-        NoteSize(
-            width: min(
-                max(startFrame.width + translation.width, DesignTokens.minimumNoteSize.width),
-                DesignTokens.maximumNoteSize.width
-            ),
-            height: min(
-                max(startFrame.height + translation.height, DesignTokens.minimumNoteSize.height),
-                DesignTokens.maximumNoteSize.height
-            )
+        PosteightStore.clamped(
+            NoteSize(width: startFrame.width + translation.width,
+                     height: startFrame.height + translation.height),
+            within: window?.screen?.visibleFrame
         )
     }
 
     private func saveWindowPosition() {
-        guard let window else { return }
-        let referenceFrame = NSScreen.main?.visibleFrame ?? NSScreen.screens.first?.visibleFrame ?? .zero
-        store.updateNotePosition(
-            noteID,
-            position: NotePoint(
-                x: window.frame.midX - referenceFrame.minX,
-                y: referenceFrame.maxY - window.frame.midY
-            )
-        )
+        guard let position = window?.notePosition else { return }
+        store.updateNotePosition(noteID, position: position)
     }
 
     /// The tab's own × closes just that tab — unless it is the only one left, in which case a
@@ -425,8 +586,53 @@ struct StickyNoteWindowView: View {
         store.moveTabToTrash(noteID: note.id, tabID: tab.id)
     }
 
-    /// Closing only hides this window; the memo comes back with 메모 보기.
+    private func requestDeleteSelectedTab() {
+        guard let note = store.notes.first(where: { $0.id == noteID }),
+              let tab = note.selectedTab else { return }
+        pendingDeleteTabID = tab.id
+        showsDeleteConfirmation = true
+    }
+
+    private func confirmDeleteTab() {
+        defer { pendingDeleteTabID = nil }
+        guard let tabID = pendingDeleteTabID,
+              let note = store.notes.first(where: { $0.id == noteID }),
+              note.tabs.contains(where: { $0.id == tabID }) else { return }
+        editingTabID = nil
+        if note.tabs.count == 1 {
+            moveToTrash(note)
+        } else {
+            store.moveTabToTrash(noteID: noteID, tabID: tabID)
+        }
+    }
+
+    private func mergeAtDropLocation() {
+        guard store.notes.contains(where: { $0.id == noteID }),
+              Date().timeIntervalSince(lastMergeAttempt) > 0.3 else { return }
+        lastMergeAttempt = Date()
+        saveWindowPosition()
+        guard let targetID = NoteWindowCoordinator.shared.dropTarget(at: NSEvent.mouseLocation, excluding: noteID) else { return }
+        if store.mergeNotes(from: noteID, into: targetID) {
+            discardCard()
+        } else {
+            let alert = NSAlert()
+            alert.messageText = Lf("탭은 이 메모에 최대 %d개까지 둘 수 있어요", MemoSurfaceMetrics.maximumTabCount)
+            if let window {
+                // The sheet is its own AppKit window, so the card's exclusion does not cover it.
+                alert.window.sharingType = AppSettings.shared.noteWindowSharingType
+                alert.beginSheetModal(for: window)
+            }
+        }
+    }
+
     private func closeCard() {
+        store.recordClosedWindow(noteID)
+        NoteWindowCoordinator.shared.hide(noteID)
+    }
+
+    /// Removing the memo itself also tears down its SwiftUI scene; unlike a normal close, there
+    /// is no card left for 메모 보기 to restore.
+    private func discardCard() {
         NoteWindowCoordinator.shared.remove(noteID)
         dismissWindow(value: noteID)
     }
@@ -447,15 +653,48 @@ struct StickyNoteWindowView: View {
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.38) {
             store.moveNoteToTrash(note.id)
-            closeCard()
+            discardCard()
+            // Dismissal does not guarantee destruction of the scene or its state.
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) { isMovingToTrash = false }
+            window?.alphaValue = 1
         }
     }
 }
 
 
+/// 메모 창의 `NSWindow.title` 로 내보낼 값.
+///
+/// 이 값은 타이틀 바에는 안 보이지만(`titleVisibility = .hidden`) 거기서 끝나지 않는다.
+/// `kCGWindowName`, Mission Control 과 App Exposé 의 창 라벨, Window 메뉴, 접근성 트리의
+/// `AXTitle` 로 전부 나간다. 화면 캡처 제외(`sharingType = .none`)는 픽셀만 막고 이 경로는
+/// 하나도 막지 못한다 — 캡처에서 검게 가려진 창 옆에서 제목만 그대로 읽히게 된다.
+///
+/// 그래서 사용자가 쓴 본문 제목(`MemoTab.title`)은 절대 여기 들어오지 않는다. 탭
+/// 이름(`MemoTab.name`)만 쓴다. 기본값이 `메모 1` 이라 Window 메뉴에서 창을 구분할 수는
+/// 있고, 사용자가 탭 이름을 직접 바꾸면 그 이름까지는 나간다는 것은 받아들인 절충이다.
+enum NoteWindowTitle {
+    /// 잠금 중이거나 내보낼 이름이 없을 때 쓰는 이름. 앱 이름이라 아무것도 알려 주지 않는다.
+    static let fallback = "Posteight"
+
+    static func make(isLocked: Bool, tabName: String) -> String {
+        guard !isLocked else { return fallback }
+        let trimmed = tabName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? fallback : trimmed
+    }
+}
+
 private struct NoteWindowConfigurator: NSViewRepresentable {
     let note: StickyNote
     let windowTitle: String
+    let onEscape: () -> Void
+    let onDelete: () -> Void
+    let onSelectAll: () -> Void
+    let onCopyAll: () -> Bool
+    let onClearSelection: () -> Bool
+    let onMoveEnded: () -> Void
+    let onAddTab: () -> Void
     let onWindowAvailable: (NSWindow) -> Void
 
     func makeCoordinator() -> Coordinator {
@@ -475,10 +714,19 @@ private struct NoteWindowConfigurator: NSViewRepresentable {
     private func configureWindow(for view: NSView, coordinator: Coordinator) {
         DispatchQueue.main.async {
             guard let window = view.window else { return }
+            coordinator.onEscape = onEscape
+            coordinator.onAddTab = onAddTab
+            coordinator.onDelete = onDelete
+            coordinator.onSelectAll = onSelectAll
+            coordinator.onCopyAll = onCopyAll
+            coordinator.onClearSelection = onClearSelection
+            coordinator.onMoveEnded = onMoveEnded
+            coordinator.window = window
             onWindowAvailable(window)
             window.title = windowTitle
             guard !coordinator.didConfigure else { return }
             coordinator.didConfigure = true
+            coordinator.installEscapeMonitor()
 
             // A window can be recycled for another note after a delete faded this one out.
             window.alphaValue = 1
@@ -492,6 +740,7 @@ private struct NoteWindowConfigurator: NSViewRepresentable {
             window.backgroundColor = .clear
             window.isOpaque = false
             window.hasShadow = true
+            window.sharingType = AppSettings.shared.noteWindowSharingType
             window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
             window.contentMinSize = NSSize(
                 width: DesignTokens.minimumNoteSize.width,
@@ -504,31 +753,217 @@ private struct NoteWindowConfigurator: NSViewRepresentable {
             window.standardWindowButton(.closeButton)?.isHidden = true
             window.standardWindowButton(.miniaturizeButton)?.isHidden = true
             window.standardWindowButton(.zoomButton)?.isHidden = true
-            window.setContentSize(NSSize(width: note.size.width, height: note.size.height))
+            // 화면에 안 들어가는 크기로 열면 손잡이가 화면 밖이라 줄일 수 없다. 저장값은 건드리지
+            // 않는다 — 큰 화면으로 돌아가면 사용자가 고른 크기가 그대로 살아난다.
+            let fitted = PosteightStore.clamped(
+                note.size, within: NSScreen.holding(note.position)?.visibleFrame)
+            window.setContentSize(NSSize(width: fitted.width, height: fitted.height))
 
-            let referenceFrame = NSScreen.main?.visibleFrame ?? NSScreen.screens.first?.visibleFrame ?? .zero
-            window.setFrameOrigin(
-                NSPoint(
-                    x: referenceFrame.minX + note.position.x - window.frame.width * 0.5,
-                    y: referenceFrame.maxY - note.position.y - window.frame.height * 0.5
-                )
-            )
+            window.placeNote(at: note.position)
             window.moveOnScreenIfNeeded()
         }
     }
 
+    @MainActor
     final class Coordinator {
         var didConfigure = false
+        weak var window: NSWindow?
+        var onEscape: (() -> Void)?
+        var onAddTab: (() -> Void)?
+        var onDelete: (() -> Void)?
+        var onSelectAll: (() -> Void)?
+        var onCopyAll: (() -> Bool)?
+        var onClearSelection: (() -> Bool)?
+        var onMoveEnded: (() -> Void)?
+        private var dragStartFrame: NSRect?
+        nonisolated(unsafe) private var dragMonitor: Any?
+        nonisolated(unsafe) private var escapeMonitor: Any?
+
+        /// 종이의 빈 곳을 클릭하면 편집을 끝낸다.
+        ///
+        /// AppKit 은 필드 편집을 스스로 끝내지 않는다. 필드 편집 중에 다른 곳을 눌러도 창의
+        /// field editor 는 그 필드에 그대로 남는다. 그래서 이게 없으면 ⌘A 가 항상 필드에
+        /// 양보하게 되어 — 한 번이라도 할 일을 편집한 뒤에는 — 탭 전체 선택에 영영 닿지
+        /// 못한다. 겸사겸사 다른 앱들이 하는 동작과도 같아진다.
+        ///
+        /// 텍스트를 맞고 들어온 클릭은 건드리지 않는다. 그건 AppKit 이 field editor 를 그
+        /// 필드로 옮기는 정상 경로다.
+        private func endEditingIfClickMissedAField(_ event: NSEvent) {
+            guard let window = self.window, window.firstResponder is NSTextView else { return }
+            var view = window.contentView?.hitTest(event.locationInWindow)
+            while let candidate = view {
+                if candidate is NSTextField || candidate is NSTextView { return }
+                view = candidate.superview
+            }
+            window.makeFirstResponder(nil)
+        }
+
+        func installEscapeMonitor() {
+            guard escapeMonitor == nil else { return }
+
+            dragMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseUp]) { [weak self] event in
+                guard let self, !AppLock.shared.isLocked else { return event }
+                if event.type == .leftMouseDown {
+                    if event.window === self.window {
+                        _ = self.onClearSelection?()
+                        self.endEditingIfClickMissedAField(event)
+                    }
+                    self.dragStartFrame = event.window === self.window ? self.window?.frame : nil
+                } else if let start = self.dragStartFrame {
+                    self.dragStartFrame = nil
+                    if let frame = self.window?.frame, frame.origin != start.origin, frame.size == start.size {
+                        self.onMoveEnded?()
+                    }
+                }
+                return event
+            }
+            escapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard
+                    let self,
+                    event.window === self.window
+                else { return event }
+
+                if AppLock.shared.isLocked {
+                    if NoteKeyboardShortcut(event: event) == .close { self.onEscape?(); return nil }
+                    return event
+                }
+                switch NoteKeyboardShortcut(event: event) {
+                case .selectAll:
+                    // 편집 중인 필드가 있으면 그 필드의 전체 선택이 먼저다. 로컬 모니터는 메뉴
+                    // key equivalent 보다 먼저 돌기 때문에, 여기서 삼키면 이벤트가 텍스트
+                    // 필드에도 Edit 메뉴에도 도달하지 못한다. 할 일 제목을 편집하다가 ⌘A 로
+                    // 전체를 골라 갈아끼우는 표준 동작이 그래서 사라져 있었다.
+                    // 탭 전체 선택은 아무 필드도 편집 중이 아닐 때만 걸린다.
+                    if self.window?.firstResponder is NSTextView { return event }
+                    self.onSelectAll?()
+                    return nil
+                case .copy:
+                    return self.onCopyAll?() == true ? nil : event
+                case .addTab:
+                    self.onAddTab?()
+                    return nil
+                case .deleteTab:
+                    self.onDelete?()
+                    return nil
+                case .close:
+                    // 전체 선택 중이면 선택만 푼다. 창은 그대로 둔다 — 선택을 취소하려고
+                    // 누른 Esc 로 메모가 닫혀 버리면 되돌릴 방법이 마땅치 않다.
+                    if self.onClearSelection?() == true { return nil }
+                    self.onEscape?()
+                    return nil
+                case .undo, .redo:
+                    // Document history is routed once at app level, including hidden windows.
+                    return event
+                case nil:
+                    // ⌘·⌃ 없는 키 입력은 전체 선택 표시를 내린다. macOS 의 모든 텍스트 입력은
+                    // ⌘A 다음 입력을 교체로 처리하는데 여기서는 교체가 아니라 캐럿 자리에
+                    // 삽입되고, Backspace 도 한 글자만 지운다. 표시를 남겨 두면 화면이
+                    // 사용자에게 거짓말을 한다. 표시만 내리고 이벤트는 그대로 흘려보낸다.
+                    if !event.modifierFlags.contains(.command),
+                       !event.modifierFlags.contains(.control) {
+                        _ = self.onClearSelection?()
+                    }
+                }
+                return event
+            }
+        }
+
+        deinit {
+            if let dragMonitor { NSEvent.removeMonitor(dragMonitor) }
+            if let escapeMonitor {
+                NSEvent.removeMonitor(escapeMonitor)
+            }
+        }
+    }
+}
+
+extension NSScreen {
+    /// 메모 위치를 재는 기준. `note.position` 은 이 프레임의 좌상단에서 잰 값이다.
+    ///
+    /// 여기에 `NSScreen.main` 이나 `visibleFrame` 을 쓰면 안 된다. `NSScreen.main` 은 주
+    /// 디스플레이가 아니라 **키보드 포커스를 가진 창이 있는 화면**이고, `visibleFrame` 은 Dock 과
+    /// 메뉴 막대를 따라 움직인다. 둘 중 하나라도 기준이 되면 저장한 좌표가 절대 위치가 아니라
+    /// "그때 그 화면의 여백 기준 오프셋" 이 되어, 기준이 달라진 다음 실행에 메모가 그 차이만큼
+    /// 밀린다 — Dock 을 옆으로 옮기면 Dock 폭만큼, 화면이 두 대면 아예 다른 모니터로.
+    ///
+    /// 메뉴 막대가 있는 화면의 `frame` 은 원점이 늘 (0, 0) 이고 여백을 타지 않는다.
+    ///
+    /// 디스플레이가 전부 떨어진 순간에는 기준이 아예 없다. 예전에는 그때 `.zero` 로 떨어졌는데,
+    /// 그 값으로 위치를 적으면 `y` 가 통째로 음수가 되어 다음 실행에 메모가 화면 위로 튀어나간다.
+    /// 기준이 없다는 것을 타입으로 말하게 해서, 부르는 쪽이 적지 않기로 고르게 한다.
+    static var noteAnchor: NSRect? {
+        screens.first?.frame ?? main?.frame
+    }
+
+    /// 새 메모가 뜰 화면의 좌상단을 메모 좌표로 돌려준다. 주 디스플레이면 (0, 0) 이라 기존
+    /// 동작 그대로다.
+    ///
+    /// 쓰고 있던 메모 창이 있으면 그 화면, 없으면 마우스가 있는 화면이다. 키보드로 ⌘N 을 누르면
+    /// 쓰던 메모 옆에 뜨고, 메뉴 막대에서 누르면 그 막대가 있는 화면에 뜬다.
+    ///
+    /// `NSScreen.main` 은 여기서도 쓸 수 없다. 이 앱의 창이 아니라 **아무 앱이든** 포커스를 가진
+    /// 창이 있는 화면이라, 이 앱이 활성이 아닌 순간에 읽으면 남의 창을 따라간다.
+    /// `NSApp.keyWindow` 는 이 앱의 창만 본다 — 그 대신 `NSApp` 을 읽느라 이 하나만 MainActor 다.
+    @MainActor
+    static var noteSpawnOrigin: NotePoint {
+        let target = NSApp.keyWindow?.screen
+            ?? screens.first { $0.frame.contains(NSEvent.mouseLocation) }
+            ?? screens.first
+        guard let anchor = noteAnchor, let frame = target?.frame else { return NotePoint(x: 0, y: 0) }
+        return NotePoint(x: frame.minX - anchor.minX, y: anchor.maxY - frame.maxY)
+    }
+
+    /// 이 자리의 메모가 놓일 화면. 중심이 들어가는 디스플레이가 없으면 주 디스플레이다.
+    static func holding(_ position: NotePoint) -> NSScreen? {
+        guard let anchor = noteAnchor else { return nil }
+        let center = NSPoint(x: anchor.minX + position.x, y: anchor.maxY - position.y)
+        return screens.first { $0.frame.contains(center) } ?? screens.first
+    }
+
+    /// 메모가 아직 손에 닿는가. 창 중심이 어느 디스플레이 안에 있으면 닿는다.
+    ///
+    /// 예전 판정은 "어느 한 화면의 `visibleFrame` 이 창을 통째로 품는가" 였고 두 가지가 걸렸다.
+    /// 모니터 두 대 경계에 걸쳐 둔 메모는 어느 쪽도 통째로 품지 못해 실행할 때마다 한쪽으로
+    /// 끌려갔다. 그리고 `visibleFrame` 은 Dock 과 메뉴 막대를 뺀 넓이라, Dock 에 걸친 메모가
+    /// 실행할 때마다 Dock 높이만큼 위로 당겨졌다 — 당겨진 자리는 저장되지 않으므로 Dock 을
+    /// 자동 숨김으로 바꾸면 같은 메모가 또 다른 자리에 떴다.
+    ///
+    /// 그래서 기준이 `visibleFrame` 이 아니라 `frame` 이다. Dock 아래나 메뉴 막대 밑에 창을 두는
+    /// 것은 macOS 가 허락하는 배치이고, 무엇보다 사용자가 끌어다 놓은 자리다. 구해 낼 대상은
+    /// 가려진 창이 아니라 **이제 없는 화면에 남은 창** 하나뿐이다.
+    nonisolated static func showsNote(_ frame: NSRect, on displays: [NSRect]) -> Bool {
+        displays.contains { $0.contains(NSPoint(x: frame.midX, y: frame.midY)) }
     }
 }
 
 extension NSWindow {
+    /// 창의 지금 자리를 메모 좌표로 옮긴다. 기준이 없으면 `nil` — 적을 수 있는 값이 아니다.
+    var notePosition: NotePoint? {
+        guard let anchor = NSScreen.noteAnchor else { return nil }
+        return NotePoint(x: frame.midX - anchor.minX, y: anchor.maxY - frame.midY)
+    }
+
+    /// `notePosition` 의 역. 저장하는 식과 복원하는 식이 갈리지 않게 나란히 둔다.
+    func placeNote(at position: NotePoint) {
+        guard let anchor = NSScreen.noteAnchor else { return }
+        // 정수로 떨어뜨린다. 자리를 중심으로 저장하므로 폭이 홀수면 원점이 .5 로 남고, 배율이
+        // 1x 인 외장 모니터에서 그 반 픽셀만큼 글자가 번진다.
+        setFrameOrigin(
+            NSPoint(
+                x: (anchor.minX + position.x - frame.width * 0.5).rounded(),
+                y: (anchor.maxY - position.y - frame.height * 0.5).rounded()
+            )
+        )
+    }
+
     /// A note placed while a second display was attached keeps that position after the display
     /// is gone, which opens the window where nobody can see or reach it.
     func moveOnScreenIfNeeded() {
         let screens = NSScreen.screens
-        guard !screens.contains(where: { $0.visibleFrame.contains(frame) }) else { return }
+        guard !NSScreen.showsNote(frame, on: screens.map(\.frame)) else { return }
 
+        // 구해 내는 자리는 `visibleFrame` 이다. 판정과 기준이 다른 것은 일부러다 — 사용자가 둔
+        // 자리는 Dock 아래라도 그대로 두지만, 앱이 대신 옮길 때는 가리는 것 없는 자리로 옮긴다.
         // Clamp into whichever screen already shows most of the card, so a card living on a
         // second display does not jump to the main one.
         let shownArea: (NSScreen) -> CGFloat = { screen in

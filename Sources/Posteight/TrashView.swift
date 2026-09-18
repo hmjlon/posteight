@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct TrashView: View {
@@ -8,6 +9,12 @@ struct TrashView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             header
+
+            // Items leave on their own, so say so. A trash that quietly empties itself is worse
+            // than one that never does.
+            Text(Lf("삭제한 항목은 %d일이 지나면 자동으로 사라집니다", PosteightStore.trashRetentionDays))
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
 
             if store.trashedNotes.isEmpty && store.trashedTabs.isEmpty {
                 emptyState
@@ -84,7 +91,7 @@ private struct TrashNoteRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: trashedNote.note.stickerSymbol)
+            Image(systemName: trashedNote.note.selectedTab?.stickerSymbol ?? "tag")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(Color(hex: trashedNote.note.penHex))
                 .frame(width: 32, height: 32)
@@ -99,7 +106,7 @@ private struct TrashNoteRow: View {
                     .font(.system(size: 14, weight: .bold, design: .rounded))
                     .lineLimit(1)
 
-                Text(Lf("탭 %ld개 · 할 일 %ld개", trashedNote.note.tabs.count, trashedNote.note.allItems.count))
+                Text(Lf("탭 %ld개 · 할 일 %ld개", trashedNote.note.tabs.count, trashedNote.note.allItems.filter(\.hasTitle).count))
                     .font(.system(size: 11, weight: .medium, design: .rounded))
                     .foregroundStyle(.secondary)
             }
@@ -128,6 +135,7 @@ private struct TrashNoteRow: View {
             Rectangle()
                 .stroke(.black.opacity(0.06), lineWidth: 1)
         }
+        .modifier(TrashHoverPreview(tabs: trashedNote.note.tabs))
     }
 }
 
@@ -137,7 +145,9 @@ private struct TrashTabRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: trashedTab.stickerSymbol)
+            Image(systemName: trashedTab.tab.stickerSymbol.isEmpty
+                ? trashedTab.stickerSymbol
+                : trashedTab.tab.stickerSymbol)
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(Color(hex: trashedTab.penHex))
                 .frame(width: 32, height: 32)
@@ -152,7 +162,7 @@ private struct TrashTabRow: View {
                     .font(.system(size: 14, weight: .bold, design: .rounded))
                     .lineLimit(1)
 
-                Text(Lf("탭 · 할 일 %ld개", trashedTab.tab.items.count))
+                Text(Lf("탭 · 할 일 %ld개", trashedTab.tab.items.filter(\.hasTitle).count))
                     .font(.system(size: 11, weight: .medium, design: .rounded))
                     .foregroundStyle(.secondary)
             }
@@ -160,7 +170,7 @@ private struct TrashTabRow: View {
             Spacer()
 
             Button {
-                store.restoreTab(trashedTab.id)
+                store.restoreTab(trashedTab.id, origin: NSScreen.noteSpawnOrigin)
             } label: {
                 Label(L("복구"), systemImage: "arrow.uturn.backward")
             }
@@ -181,5 +191,83 @@ private struct TrashTabRow: View {
             Rectangle()
                 .stroke(.black.opacity(0.06), lineWidth: 1)
         }
+        .modifier(TrashHoverPreview(tabs: [trashedTab.tab]))
+    }
+}
+
+/// Keep the preview open while the pointer crosses into it to scroll longer notes.
+private struct TrashHoverPreview: ViewModifier {
+    let tabs: [MemoTab]
+    @State private var isRowHovered = false
+    @State private var isPreviewHovered = false
+    @State private var isPresented = false
+
+    private var isHovered: Bool { isRowHovered || isPreviewHovered }
+
+    func body(content: Content) -> some View {
+        content
+            .contentShape(Rectangle())
+            .onHover { isRowHovered = $0 }
+            .popover(isPresented: $isPresented, arrowEdge: .trailing) {
+                TrashContentsPreview(tabs: tabs)
+                    .onHover { isPreviewHovered = $0 }
+                    .onDisappear { isPreviewHovered = false }
+                    .excludedFromScreenCapture()
+            }
+            .task(id: isHovered) {
+                let shouldPresent = isHovered
+                do {
+                    try await Task.sleep(for: .milliseconds(shouldPresent ? 350 : 250))
+                    guard !Task.isCancelled else { return }
+                    isPresented = shouldPresent
+                } catch {
+                    // Pointer moved again; the new task owns presentation.
+                }
+            }
+    }
+}
+
+private struct TrashContentsPreview: View {
+    let tabs: [MemoTab]
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                ForEach(tabs) { tab in
+                    let previewItems = tab.items.filter(\.hasContent)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(tab.name)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text(tab.title)
+                            .font(.headline)
+                        if previewItems.isEmpty {
+                            Text(L("내용이 없어요"))
+                                .foregroundStyle(.secondary)
+                        }
+                        ForEach(previewItems) { item in
+                            HStack(alignment: .top, spacing: 8) {
+                                Image(systemName: item.isDone ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(.secondary)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(item.hasTitle ? item.title : L("세부사항 보기"))
+                                        .strikethrough(item.isDone)
+                                    if let detail = item.detail, !detail.isEmpty {
+                                        Text(detail)
+                                            .font(.callout)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .textSelection(.enabled)
+            .padding(16)
+        }
+        .frame(width: 340, height: 320)
     }
 }
