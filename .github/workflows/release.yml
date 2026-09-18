@@ -140,7 +140,10 @@ jobs:
         run: |
           # 서명하지 않은 빌드라 첫 실행에 Gatekeeper 가 막는다. 릴리스 노트에
           # 여는 방법을 항상 적어 둔다.
-          cat > notes.md <<EOF
+          # 배포할 변경 내역을 설치 안내 앞에 붙인다. 릴리스 후에는 CHANGELOG의
+          # Unreleased 항목을 해당 버전 항목으로 옮기고 다음 변경을 새로 적는다.
+          awk '/^## \[Unreleased\]/{printing=1; next} /^## /{printing=0} printing' CHANGELOG.md > notes.md
+          cat >> notes.md <<EOF
           ## 설치
 
           ### Homebrew (권장)
@@ -189,6 +192,7 @@ jobs:
             "dist/$DMG" \
             "dist/$DMG.sha256" \
             --title "Posteight $V" \
+            --generate-notes \
             --notes-file notes.md
 
       # 릴리스가 게시된 뒤 tap 의 cask 를 새 버전으로 갱신한다. GITHUB_TOKEN 은
