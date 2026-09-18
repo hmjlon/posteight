@@ -89,6 +89,22 @@ Dock icon. The Dock icon is on by default, so a running Posteight can be reached
 Dock and Command-Tab, and clicking it brings the memo windows back. Turning it off leaves
 a menu-bar-only app.
 
+### Search and organize
+
+- Choose **Search Notes…** in the menu bar to search names, titles, tasks, and details across all tabs. Click a result to open the matching location in its memo.
+- Drag task handles to reorder, or use the context menu to move tasks to another memo. Pin tasks to the top or sort by completion state.
+- Use Command-Z to undo and Shift-Command-Z to redo. Command-A and Command-C select and copy a whole tab when you are not editing a text field; active fields keep their own selection behavior.
+- Schedule reminders for individual tasks. Notifications require permission in the installed app, and task previews are hidden by default.
+- Choose a font and text size in Settings, or import your own font files.
+
+### Storage errors and backups
+
+If saved files cannot be read or previous notes cannot be migrated, editing and saving pause to protect the originals. The menu bar and **Settings → Storage and Backup** show the error. Resolve the cause and select **Try Again**. Edits that fail to save remain in memory while the app is open; resolve save errors before quitting.
+
+Successfully loaded notes are backed up to `backup.json` before the first save after launch. **Back Up Current Notes** replaces that backup with the current contents. **Restore Backup…** replaces notes and trash with the backup, archiving the original files in a `BeforeRestore-…` folder. A restore interrupted by quitting resumes on the next launch.
+
+Backups contain notes and trash, but not settings or font files. They stay in the same storage folder on this Mac and do not replace an external backup against disk failure. Backups and archived originals can retain deleted content beyond the trash's 30-day retention period. Delete unneeded `backup.json` and `BeforeRestore-…` folders through **Settings → App → Open folder**.
+
 ### Language
 
 <img src="docs/images/posteight-settings-en.png" alt="Posteight settings, with the language options at the top" width="380">
@@ -105,7 +121,7 @@ The menus macOS draws itself — File, Edit, Window — still follow the system 
 
 Posteight runs in the App Sandbox, so your notes live inside its own container —
 `~/Library/Containers/com.younjiyoung.posteight/Data/Library/Application Support/Posteight/`.
-Nothing else on the Mac can reach in, and the files are written readable by you alone.
+File permissions restrict reading and writing to your user account. Files are not encrypted; these permissions do not prevent access by other programs running as the same user.
 Settings → App → Open folder takes you there. Notes from versions before the sandbox are
 copied over once, on first launch, and the old folder is left untouched.
 
