@@ -1044,6 +1044,14 @@ final class PosteightStore: ObservableObject {
         guard storageError != .migration else { throw StorageFailure.migration }
         let snapshot = try JSONDecoder().decode(StoreBackup.self, from: Data(contentsOf: backupURL))
         try snapshot.validate()
+        // 아직 디스크에 없는 편집 — 디바운스에 걸렸거나 직전 저장이 실패한 것 — 을 먼저 쓴다.
+        // 취소만 하면 그 편집은 복원된 데이터에도 BeforeRestore 사본에도 남지 않는다. 설정의 복원
+        // 버튼은 편집 중인 필드를 끝내자마자 이 함수를 부르므로 마지막 편집은 늘 이 창 안에 있다.
+        // 그 쓰기가 실패하면 메모리에만 있는 편집을 복원이 지워 버리게 되므로 여기서 멈춘다.
+        if !isStorageBlocked, saveTask != nil || storageError == .save {
+            flush()
+            if storageError == .save { throw StorageFailure.save }
+        }
         saveTask?.cancel()
         let archive = directory.appendingPathComponent("BeforeRestore-" + UUID().uuidString, isDirectory: true)
         let manager = FileManager.default

@@ -140,6 +140,44 @@ struct StorageRecoveryTests {
         #expect((attributes[.posixPermissions] as? NSNumber)?.intValue == 0o600)
     }
 
+    @Test("Restore archives an edit that was still waiting for the debounced save")
+    func restoreArchivesPendingEdit() throws {
+        let root = directory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = PosteightStore(directory: root)
+        store.flush()
+        try store.createBackup()
+        let pending = store.addNote()
+
+        try store.restoreBackup()
+
+        let archive = try #require(FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
+            .first { $0.lastPathComponent.hasPrefix("BeforeRestore-") })
+        let archived = try JSONDecoder().decode(
+            [StickyNote].self, from: Data(contentsOf: archive.appendingPathComponent("notes.json")))
+        #expect(archived.contains { $0.id == pending })
+        #expect(!store.notes.contains { $0.id == pending })
+    }
+
+    @Test("Restore refuses to run while edits cannot be saved, keeping them in memory")
+    func restoreRefusesDuringSaveFailure() throws {
+        let root = directory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = PosteightStore(directory: root)
+        store.flush()
+        try store.createBackup()
+        let unsaved = store.addNote()
+        // A directory at a file destination reliably fails even when tests run privileged.
+        let trash = root.appendingPathComponent("trash.json")
+        try FileManager.default.removeItem(at: trash)
+        try FileManager.default.createDirectory(at: trash, withIntermediateDirectories: true)
+
+        #expect(throws: StorageFailure.save) { try store.restoreBackup() }
+        #expect(store.notes.contains { $0.id == unsaved })
+        #expect(try FileManager.default.contentsOfDirectory(atPath: root.path)
+            .allSatisfy { !$0.hasPrefix("BeforeRestore-") })
+    }
+
     @Test("Invalid backup never changes current data")
     func invalidBackup() throws {
         let root = directory()
@@ -179,6 +217,9 @@ struct StorageRecoveryTests {
         store.flush()
         try store.createBackup()
         store.moveNoteToTrash(id)
+        // 복원 도중의 쓰기 실패를 본다. 휴지통 이동이 디스크에 없으면 복원은 그 편집부터 저장하다
+        // 실패해 시작조차 하지 않는다 — 그 경로는 restoreRefusesDuringSaveFailure 가 본다.
+        store.flush()
         let trash = root.appendingPathComponent("trash.json")
         try FileManager.default.removeItem(at: trash)
         try FileManager.default.createDirectory(at: trash, withIntermediateDirectories: true)
