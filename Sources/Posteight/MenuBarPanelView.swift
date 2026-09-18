@@ -28,6 +28,7 @@ struct MenuBarPanelView: View {
                 StorageStatusView()
             } else {
                 StorageStatusView()
+                ReminderStatusView()
                 PanelRow(title: L("새 메모"), systemImage: "plus", shortcut: "⌘N") {
                     showNote(store.addNote(language: settings.language,
                                            origin: NSScreen.noteSpawnOrigin))
@@ -182,5 +183,37 @@ private struct PanelRow: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
+    }
+}
+
+/// 예약 알림을 자동으로 맞추다 실패한 것을 알린다. 알림 권한을 나중에 끈 경우처럼 사용자가 알림 창을
+/// 열지 않은 경로에서는 이것 말고 알 길이 없고, 할 일의 종은 채워진 채 아무 알림도 오지 않는다.
+private struct ReminderStatusView: View {
+    @EnvironmentObject private var store: PosteightStore
+    @ObservedObject private var reminders = ReminderService.shared
+
+    var body: some View {
+        if let message = reminders.errorMessage {
+            VStack(alignment: .leading, spacing: 8) {
+                Label(L(message), systemImage: "bell.slash")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                HStack(spacing: 12) {
+                    // 권한을 아직 묻지 않은 Mac 이면 여기서 묻는다. 거절된 권한은 설정에서만 켤 수 있다.
+                    Button(L("다시 시도")) {
+                        Task {
+                            try? await reminders.authorize()
+                            _ = await reminders.retrySynchronization(for: store.notes)
+                        }
+                    }
+                    if message == ReminderFailure.permissionDenied.messageKey {
+                        Link(L("알림 설정 열기"),
+                             destination: URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension")!)
+                    }
+                }
+                .font(.caption)
+            }
+            .padding(8)
+        }
     }
 }
