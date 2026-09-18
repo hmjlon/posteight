@@ -65,7 +65,7 @@ final class NoteWindowCoordinator {
     func installHistoryShortcuts(store: PosteightStore) {
         guard historyMonitor == nil else { return }
         historyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak store] event in
-            guard !AppLock.shared.isLocked else { return event }
+            guard !AppLock.shared.isLocked, store?.isStorageBlocked == false else { return event }
             guard let store, let shortcut = NoteKeyboardShortcut(event: event),
                   shortcut == .undo || shortcut == .redo else { return event }
             if let editor = (event.window ?? NSApp.keyWindow)?.firstResponder as? NSTextView {
@@ -310,7 +310,7 @@ struct PosteightApp: App {
                                   origin: NSScreen.noteSpawnOrigin)
                 }
                 .keyboardShortcut("n", modifiers: [.command])
-                .disabled(lock.isLocked)
+                .disabled(lock.isLocked || store.isStorageBlocked)
             }
 
             CommandGroup(replacing: .appSettings) {
@@ -322,14 +322,20 @@ struct PosteightApp: App {
         }
 
         Window("Posteight", id: WindowID.search) {
-            AppLockGate { NoteSearchView().environmentObject(store) }
+            AppLockGate {
+                if store.isStorageBlocked { StorageStatusView().environmentObject(store) }
+                else { NoteSearchView().environmentObject(store) }
+            }
                 .excludedFromScreenCapture()
         }
         .defaultSize(width: 500, height: 460)
         .defaultPosition(.center)
 
         Window("휴지통", id: WindowID.trash) {
-            AppLockGate { TrashView().environmentObject(store) }
+            AppLockGate {
+                if store.isStorageBlocked { StorageStatusView().environmentObject(store) }
+                else { TrashView().environmentObject(store) }
+            }
                 .frame(minWidth: 440, minHeight: 350)
                 .excludedFromScreenCapture()
         }

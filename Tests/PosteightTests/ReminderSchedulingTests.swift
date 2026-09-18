@@ -234,4 +234,21 @@ struct ReminderSchedulingTests {
         let trigger = try #require(client.requests[i.uuidString]?.trigger as? UNCalendarNotificationTrigger)
         #expect(trigger.nextTriggerDate() == date)
     }
+    @Test("Loading failure does not cancel already scheduled notifications")
+    func unreadableStoreKeepsNotifications() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Data("broken".utf8).write(to: directory.appendingPathComponent("notes.json"))
+        let store = PosteightStore(directory: directory)
+        #expect(store.isStorageBlocked)
+        let client = FakeReminderClient()
+        let id = UUID().uuidString
+        client.requests[id] = UNNotificationRequest(identifier: id, content: UNMutableNotificationContent(), trigger: nil)
+        let service = ReminderService(client: client)
+        service.connect(to: store)
+        #expect(await service.retrySynchronization(for: store.notes) != nil)
+        #expect(client.requests[id] != nil)
+    }
+
 }

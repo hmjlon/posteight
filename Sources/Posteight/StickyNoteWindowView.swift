@@ -42,6 +42,8 @@ struct StickyNoteWindowView: View {
 
             if lock.isLocked {
                 LockedContentView().clipShape(MemoCardShape())
+            } else if store.isStorageBlocked {
+                StorageStatusView()
             } else {
                 VStack(spacing: 0) {
                     memoTabBar(note: note, selectedTab: selectedTab)
@@ -55,7 +57,7 @@ struct StickyNoteWindowView: View {
                         onResizeEnded: { translation in
                             finishResizingWindow(translation: translation)
                         },
-                        onDelete: requestDeleteSelectedTab,
+                        onDelete: { if !store.isStorageBlocked { requestDeleteSelectedTab() } },
                         isAllContentSelected: isAllContentSelected,
                         isPencilCaseOpen: $isPencilCaseOpen
                     )
@@ -67,6 +69,11 @@ struct StickyNoteWindowView: View {
 
             MemoCardSheen()
                 .clipShape(MemoCardShape())
+        }
+        .overlay(alignment: .bottom) {
+            if store.storageError != nil && !store.isStorageBlocked && !lock.isLocked {
+                StorageStatusView().background(.regularMaterial)
+            }
         }
         // The card fills the window instead of declaring its own size: a fixed size makes
         // SwiftUI resize the window under the drag, which is what made resizing stutter and
@@ -89,12 +96,13 @@ struct StickyNoteWindowView: View {
                 note: note,
                 windowTitle: NoteWindowTitle.make(isLocked: lock.isLocked, tabName: selectedTab.name),
                 onEscape: closeCard,
-                onDelete: requestDeleteSelectedTab,
+                onDelete: { if !store.isStorageBlocked { requestDeleteSelectedTab() } },
                 onSelectAll: {
+                    guard !store.isStorageBlocked else { return }
                     isAllContentSelected = true
                 },
                 onCopyAll: {
-                    guard isAllContentSelected else { return false }
+                    guard isAllContentSelected, !store.isStorageBlocked else { return false }
                     store.copyTabToClipboard(noteID: note.id, tabID: selectedTab.id)
                     return true
                 },
@@ -103,8 +111,9 @@ struct StickyNoteWindowView: View {
                     isAllContentSelected = false
                     return true
                 },
-                onMoveEnded: mergeAtDropLocation,
+                onMoveEnded: { if !store.isStorageBlocked { mergeAtDropLocation() } },
                 onAddTab: {
+                    guard !store.isStorageBlocked else { return }
                     editingTabID = nil
                     _ = store.addTab(to: noteID, language: settings.language)
                 }

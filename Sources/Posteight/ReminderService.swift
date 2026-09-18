@@ -7,6 +7,7 @@ import UserNotifications
 final class ReminderService: NSObject, ObservableObject, UNUserNotificationCenterDelegate {
     static let shared = ReminderService()
     @Published var errorMessage: String?
+    private weak var connectedStore: PosteightStore?
     private var subscription: AnyCancellable?
     private var lockSubscription: AnyCancellable?
     private var synchronization: Task<String?, Never>?
@@ -38,17 +39,20 @@ final class ReminderService: NSObject, ObservableObject, UNUserNotificationCente
 
     func connect(to store: PosteightStore) {
         guard subscription == nil, client != nil else { return }
+        connectedStore = store
         if injectedClient == nil { systemClient?.center.delegate = self }
         lockSubscription = AppLock.shared.$isEnabled.dropFirst().sink { [weak self, weak store] _ in
             Task { @MainActor in
-                guard let self, let store else { return }
+                guard let self, let store, !store.isStorageBlocked else { return }
                 _ = await self.retrySynchronization(for: store.notes)
             }
         }
         subscription = store.$notes
+            .filter { [weak store] _ in store?.isStorageBlocked == false }
             .map { Self.reminders(in: $0, now: .distantPast) }
             .removeDuplicates()
-            .sink { [weak self] reminders in
+            .sink { [weak self, weak store] reminders in
+                guard store?.isStorageBlocked == false else { return }
                 self?.enqueue(reminders)
             }
     }
@@ -114,9 +118,11 @@ final class ReminderService: NSObject, ObservableObject, UNUserNotificationCente
     }
 
     func saveReminder(store: PosteightStore, noteID: UUID, tabID: UUID, itemID: UUID, date: Date) async throws -> Date {
+        guard !store.isStorageBlocked else { throw ReminderFailure.itemUnavailable }
         let date = Self.minuteDate(date)
         guard date > Date() else { throw ReminderFailure.invalidDate }
         try await authorize()
+        guard !store.isStorageBlocked else { throw ReminderFailure.itemUnavailable }
         guard date > Date() else { throw ReminderFailure.invalidDate }
         guard let item = store.notes.first(where: { $0.id == noteID })?.tabs.first(where: { $0.id == tabID })?
             .items.first(where: { $0.id == itemID }), !item.isDone,
@@ -140,7 +146,9 @@ final class ReminderService: NSObject, ObservableObject, UNUserNotificationCente
     }
 
     private func synchronize(_ scheduled: [Reminder]) async -> String? {
-        guard let client else { return ReminderFailure.unavailable.messageKey }
+        guard let client, connectedStore?.isStorageBlocked != true else {
+            return ReminderFailure.unavailable.messageKey
+        }
         errorMessage = nil
         let reminders = scheduled.filter { $0.date > Date() }
         let desiredIDs = Set(reminders.map { $0.id.uuidString })

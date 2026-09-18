@@ -93,6 +93,9 @@ struct SettingsView: View {
             AppLockSettingsSection()
 
             FontSettingsSection()
+                .disabled(store.storageError == .migration)
+
+            StorageRecoverySection()
 
             Section(L("앱")) {
                 Toggle(L("Dock 아이콘 표시"), isOn: $settings.showsDockIcon)
@@ -115,7 +118,10 @@ struct SettingsView: View {
     }
 
     private func rebuildScheduledReminders() {
-        Task { _ = await ReminderService.shared.retrySynchronization(for: store.notes) }
+        Task {
+            guard !store.isStorageBlocked else { return }
+            _ = await ReminderService.shared.retrySynchronization(for: store.notes)
+        }
     }
 
     private var previewCount: Int? {

@@ -141,6 +141,8 @@ final class PosteightStore: ObservableObject {
         return UserDefaults(suiteName: "com.younjiyoung.posteight") ?? .standard
     }()
 
+    static private(set) var migrationIsBlocked = false
+
     static let storeDirectory: URL = {
         let directory = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -151,7 +153,8 @@ final class PosteightStore: ObservableObject {
         // font library that got there first would write an empty manifest and the notes
         // migration would then see a populated container and skip.
         if let legacy = legacyStoreDirectory, legacy != directory {
-            migrateStore(from: legacy, to: directory)
+            do { try prepareMigration(from: legacy, to: directory) }
+            catch { migrationIsBlocked = true }
         }
         return directory
     }()
@@ -174,39 +177,73 @@ final class PosteightStore: ObservableObject {
     /// Copies, never moves: leaving the originals in place keeps a way back if this release has
     /// to be rolled back. Runs once — anything already in the container means this has either
     /// run before or the install started life there, and in both cases the container wins.
+    /// A marker survives interrupted copies. Archive partial files and retry from the untouched
+    /// source rather than mistaking their existence for a completed migration.
+    nonisolated static let migrationMarker = ".migration-in-progress"
+
+    nonisolated static func prepareMigration(from source: URL, to destination: URL) throws {
+        let manager = FileManager.default
+        let marker = destination.appendingPathComponent(migrationMarker)
+        if manager.fileExists(atPath: marker.path) {
+            // A terminated copy may have left an incomplete file or Fonts directory. Keep those
+            // bytes for inspection, then retry from the untouched source instead of adopting them.
+            let sourceItems = try manager.contentsOfDirectory(atPath: source.path)
+            guard migratedItems.contains(where: sourceItems.contains) else { throw StorageFailure.migration }
+            let archive = destination.appendingPathComponent("InterruptedMigration-" + UUID().uuidString)
+            try manager.createDirectory(at: archive, withIntermediateDirectories: true,
+                                        attributes: [.posixPermissions: 0o700])
+            for item in migratedItems {
+                let partial = destination.appendingPathComponent(item)
+                if manager.fileExists(atPath: partial.path) {
+                    try manager.moveItem(at: partial, to: archive.appendingPathComponent(item))
+                }
+            }
+            narrowPermissions(of: archive)
+            try manager.removeItem(at: marker)
+        }
+        if migratedItems.contains(where: {
+            manager.fileExists(atPath: destination.appendingPathComponent($0).path)
+        }) { return }
+        let contents: [String]
+        do { contents = try manager.contentsOfDirectory(atPath: source.path) }
+        catch let error as CocoaError where error.code == .fileReadNoSuchFile { return }
+        guard migratedItems.contains(where: contents.contains) else { return }
+        guard migrateStore(from: source, to: destination) else { throw StorageFailure.migration }
+    }
+
     @discardableResult
     nonisolated static func migrateStore(from source: URL, to destination: URL) -> Bool {
         let manager = FileManager.default
-        func path(_ directory: URL, _ item: String) -> String {
-            directory.appendingPathComponent(item).path
-        }
-        guard manager.fileExists(atPath: source.path),
-              !migratedItems.contains(where: { manager.fileExists(atPath: path(destination, $0)) }),
-              (try? manager.createDirectory(at: destination, withIntermediateDirectories: true,
-                                            attributes: [.posixPermissions: 0o700])) != nil
-        else { return false }
-
-        // All or nothing. A partial copy is worse than none: the guard above only asks whether
-        // *any* item is already in the container, so one item landing would make every later
-        // launch skip the rest, and whatever failed — a locked `trash.json`, a full disk — would
-        // stay invisible to the app forever with only an NSLog to say why. Undoing our own
-        // copies leaves the container empty so the next launch tries again. The source is never
-        // touched, so there is nothing to lose by retrying.
-        var copied: [URL] = []
-        for item in migratedItems where manager.fileExists(atPath: path(source, item)) {
-            let target = destination.appendingPathComponent(item)
-            do {
+        let marker = destination.appendingPathComponent(migrationMarker)
+        guard !manager.fileExists(atPath: marker.path),
+              manager.fileExists(atPath: source.path),
+              !migratedItems.contains(where: {
+                  manager.fileExists(atPath: destination.appendingPathComponent($0).path)
+              }) else { return false }
+        var attempted: [URL] = []
+        do {
+            try manager.createDirectory(at: destination, withIntermediateDirectories: true,
+                                        attributes: [.posixPermissions: 0o700])
+            try Data().write(to: marker, options: .atomic)
+            for item in migratedItems where manager.fileExists(atPath: source.appendingPathComponent(item).path) {
+                let target = destination.appendingPathComponent(item)
+                // Include an incomplete directory copy in rollback, too.
+                attempted.append(target)
                 try manager.copyItem(at: source.appendingPathComponent(item), to: target)
-                copied.append(target)
-            } catch {
-                NSLog("Posteight: failed to migrate \(item), rolling back: \(error)")
-                for done in copied { try? manager.removeItem(at: done) }
-                return false
             }
+            narrowPermissions(of: destination)
+            try manager.removeItem(at: marker)
+            return !attempted.isEmpty
+        } catch {
+            NSLog("Posteight: migration failed: \(error)")
+            var rolledBack = true
+            for target in attempted where manager.fileExists(atPath: target.path) {
+                do { try manager.removeItem(at: target) }
+                catch { rolledBack = false }
+            }
+            if rolledBack { try? manager.removeItem(at: marker) }
+            return false
         }
-        // A copy carries the old 0644 over, and `write(_:to:)` only stamps a mode on creation.
-        narrowPermissions(of: destination)
-        return !copied.isEmpty
     }
 
     /// `0700` for directories, `0600` for files, all the way down.
@@ -265,19 +302,34 @@ final class PosteightStore: ObservableObject {
     private let trashedTabsURL: URL
 
     private var saveTask: Task<Void, Never>?
+    @Published private(set) var storageError: StorageFailure?
+    @Published private(set) var isStorageBlocked = false
+    @Published private(set) var backupDate: Date?
+    private var isLoading = false
+    private var needsSessionBackup = false
+    private var loadedSnapshot: StoreBackup?
+    private let migrationSource: URL?
+    private let usesDefaultDirectory: Bool
+    private var backupURL: URL { directory.appendingPathComponent("backup.json") }
+    private var pendingRestoreURL: URL { directory.appendingPathComponent("pending-restore.json") }
+
 
     /// `directory` is only overridden by tests, so they never touch the real notes on disk.
     /// `language` is what the first load names things in — sample notes and any tab whose name
     /// has to be filled in. It defaults to the source language so tests do not depend on the
     /// language of the machine running them.
-    init(directory: URL = PosteightStore.storeDirectory, language: AppLanguage = .korean) {
+    init(directory: URL? = nil, language: AppLanguage = .korean, legacyDirectory: URL? = nil) {
+        let resolvedDirectory = directory ?? Self.storeDirectory
+        self.usesDefaultDirectory = directory == nil
+        self.migrationSource = directory == nil ? Self.legacyStoreDirectory : legacyDirectory
+        let directory = resolvedDirectory
         self.directory = directory
         self.loadLanguage = language
         self.notesURL = directory.appendingPathComponent("notes.json")
         self.trashURL = directory.appendingPathComponent("trash.json")
         self.trashedTabsURL = directory.appendingPathComponent("trashed-tabs.json")
 
-        load()
+        retryLoading()
 
         // A debounced save loses up to `saveDelay` of work if the app quits first.
         NotificationCenter.default.addObserver(
@@ -865,11 +917,67 @@ final class PosteightStore: ObservableObject {
         }
     }
 
-    private func load() {
-        loadNotes()
-        loadTrashedNotes()
-        loadTrashedTabs()
-        purgeExpiredTrash()
+    func retryLoading() {
+        saveTask?.cancel()
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            if let migrationSource, migrationSource != directory {
+                do { try Self.prepareMigration(from: migrationSource, to: directory) }
+                catch { throw StorageFailure.migration }
+            }
+            if usesDefaultDirectory { Self.migrationIsBlocked = false }
+            try finishPendingRestore()
+            let loadedNotes: [StickyNote]? = try read(notesURL, key: storageKey, legacy: legacyStorageKey)
+            let loadedTrash: [TrashedStickyNote]? = try read(trashURL, key: trashStorageKey, legacy: legacyTrashStorageKey)
+            let loadedTabs: [TrashedMemoTab]? = try read(trashedTabsURL)
+            let snapshot = StoreBackup(notes: loadedNotes ?? Self.sampleNotes(language: loadLanguage),
+                                       trashedNotes: loadedTrash ?? [], trashedTabs: loadedTabs ?? [])
+            try snapshot.validate()
+            loadedSnapshot = loadedNotes == nil && loadedTrash == nil && loadedTabs == nil ? nil : snapshot
+            needsSessionBackup = loadedSnapshot != nil
+            clearEditingHistory()
+            historyRevision += 1
+            presentedDetailItemID = nil
+            searchFocusRequest = nil
+            isStorageBlocked = false
+            apply(snapshot)
+            storageError = nil
+            refreshBackupDate()
+            purgeExpiredTrash()
+            // Persist migrations and trash expiry as before, but only after all files decode.
+            isLoading = false
+            scheduleSave()
+        } catch {
+            isStorageBlocked = true
+            storageError = (error as? StorageFailure) ?? .read
+            refreshBackupDate()
+        }
+    }
+
+    private func apply(_ snapshot: StoreBackup) {
+        notes = Self.compacted(snapshot.notes, language: loadLanguage)
+        trashedNotes = snapshot.trashedNotes.map {
+            var entry = $0
+            entry.note = Self.compacted([entry.note], language: loadLanguage)[0]
+            return entry
+        }
+        trashedTabs = snapshot.trashedTabs
+    }
+
+    /// Only a genuinely absent file may fall back to legacy defaults. Read/decoding failures
+    /// leave every on-disk file untouched and keep editing disabled until recovery.
+    private func read<T: Decodable>(_ url: URL, key: String? = nil, legacy: String? = nil) throws -> T? {
+        let data: Data?
+        do { data = try Data(contentsOf: url) }
+        catch let error as CocoaError where error.code == .fileReadNoSuchFile {
+            if let key, let legacy {
+                data = defaults.data(forKey: key) ?? defaults.data(forKey: legacy)
+                    ?? UserDefaults.standard.data(forKey: key) ?? UserDefaults.standard.data(forKey: legacy)
+            } else { data = nil }
+        }
+        guard let data else { return nil }
+        return try JSONDecoder().decode(T.self, from: data)
     }
 
     /// The trash is a way back from a mistake, not an archive. Without this, everything a user
@@ -887,62 +995,12 @@ final class PosteightStore: ObservableObject {
         trashedTabs.removeAll { $0.deletedAt < cutoff }
     }
 
-    /// Application Support first, then the two `UserDefaults` domains notes used to live in
-    /// (bundled and unbundled), then the `Posteat` keys from before the rename.
-    private func storedData(_ url: URL, key: String, legacy: String) -> Data? {
-        (try? Data(contentsOf: url))
-            ?? defaults.data(forKey: key) ?? defaults.data(forKey: legacy)
-            ?? UserDefaults.standard.data(forKey: key)
-            ?? UserDefaults.standard.data(forKey: legacy)
-    }
-
-    private func loadNotes() {
-        guard
-            let data = storedData(notesURL, key: storageKey, legacy: legacyStorageKey),
-            let decoded = try? JSONDecoder().decode([StickyNote].self, from: data)
-        else {
-            notes = Self.sampleNotes(language: loadLanguage)
-            return
-        }
-
-        notes = Self.compacted(decoded, language: loadLanguage)
-    }
-
-    private func loadTrashedNotes() {
-        guard
-            let data = storedData(trashURL, key: trashStorageKey, legacy: legacyTrashStorageKey),
-            let decoded = try? JSONDecoder().decode([TrashedStickyNote].self, from: data)
-        else {
-            trashedNotes = []
-            return
-        }
-
-        trashedNotes = decoded.map { trashedNote in
-            var migrated = trashedNote
-            migrated.note = Self.compacted([trashedNote.note], language: loadLanguage)[0]
-            return migrated
-        }
-    }
-
-    /// No legacy home to fall back to — closing a tab on its own is new, so this file either
-    /// holds what a previous launch wrote or doesn't exist yet.
-    private func loadTrashedTabs() {
-        guard
-            let data = try? Data(contentsOf: trashedTabsURL),
-            let decoded = try? JSONDecoder().decode([TrashedMemoTab].self, from: data)
-        else {
-            trashedTabs = []
-            return
-        }
-
-        trashedTabs = decoded
-    }
-
     private static let saveDelay = Duration.milliseconds(500)
 
     /// Every keystroke mutates `notes`, so coalesce the writes instead of re-encoding the
     /// whole store per character.
     private func scheduleSave() {
+        guard !isLoading, !isStorageBlocked else { return }
         saveTask?.cancel()
         saveTask = Task { [weak self] in
             try? await Task.sleep(for: Self.saveDelay)
@@ -955,36 +1013,95 @@ final class PosteightStore: ObservableObject {
     func flush() {
         saveTask?.cancel()
         saveTask = nil
-        write(notes, to: notesURL)
-        write(trashedNotes, to: trashURL)
-        write(trashedTabs, to: trashedTabsURL)
+        guard !isStorageBlocked, !isLoading else { return }
+        do {
+            if needsSessionBackup, let loadedSnapshot {
+                try write(loadedSnapshot, to: backupURL)
+                needsSessionBackup = false
+                refreshBackupDate()
+            }
+            try write(notes, to: notesURL)
+            try write(trashedNotes, to: trashURL)
+            try write(trashedTabs, to: trashedTabsURL)
+            storageError = nil
+        } catch {
+            storageError = .save
+            NSLog("Posteight: failed to save: \(error)")
+        }
     }
 
-    /// Notes live as plain JSON at a fixed path, so the file mode is the only thing standing
-    /// between them and every other process running as this user. Default creation is `0755`
-    /// for the directory and `0644` for the files; both are narrowed here.
-    private func write(_ value: some Encodable, to url: URL) {
-        do {
-            let data = try JSONEncoder().encode(value)
-            let manager = FileManager.default
-            try manager.createDirectory(at: directory, withIntermediateDirectories: true,
-                                        attributes: [.posixPermissions: 0o700])
-            // `createDirectory` ignores its attributes for a directory that already exists, so
-            // installs that predate this narrow the mode on their next save instead.
-            try? manager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
+    func createBackup() throws {
+        guard !isStorageBlocked else { throw storageError ?? StorageFailure.read }
+        let snapshot = StoreBackup(notes: notes, trashedNotes: trashedNotes, trashedTabs: trashedTabs)
+        try write(snapshot, to: backupURL)
+        needsSessionBackup = false
+        refreshBackupDate()
+    }
 
-            if !manager.fileExists(atPath: url.path) {
-                manager.createFile(atPath: url.path, contents: nil,
-                                   attributes: [.posixPermissions: 0o600])
+    /// Validate before touching the live store. Preserve the original bytes, including corrupt
+    /// files, before replacing anything. A failed restore leaves backup.json available for retry.
+    func restoreBackup() throws {
+        guard storageError != .migration else { throw StorageFailure.migration }
+        let snapshot = try JSONDecoder().decode(StoreBackup.self, from: Data(contentsOf: backupURL))
+        try snapshot.validate()
+        saveTask?.cancel()
+        let archive = directory.appendingPathComponent("BeforeRestore-" + UUID().uuidString, isDirectory: true)
+        let manager = FileManager.default
+        try manager.createDirectory(at: archive, withIntermediateDirectories: true,
+                                    attributes: [.posixPermissions: 0o700])
+        for name in ["notes.json", "trash.json", "trashed-tabs.json"] {
+            let source = directory.appendingPathComponent(name)
+            if manager.fileExists(atPath: source.path) {
+                try manager.copyItem(at: source, to: archive.appendingPathComponent(name))
             }
-            try data.write(to: url, options: .atomic)
-            // Stamped on every save, not just creation. An atomic replacement carries the old
-            // file's mode across, which is what keeps 0600 once it is set — but it is also what
-            // left a file written by a build older than this one at 0644 for good.
-            try? manager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
-        } catch {
-            NSLog("Posteight: failed to save \(url.lastPathComponent): \(error)")
         }
+        Self.narrowPermissions(of: archive)
+        do {
+            // This journal is removed only after every collection is restored. On a crash or
+            // partial write, the next load finishes the same restore before exposing any data.
+            try write(snapshot, to: pendingRestoreURL)
+            try finishPendingRestore()
+        } catch {
+            isStorageBlocked = true
+            storageError = .save
+            throw error
+        }
+        isLoading = true
+        clearEditingHistory()
+        historyRevision += 1
+        presentedDetailItemID = nil
+        searchFocusRequest = nil
+        isStorageBlocked = false
+        apply(snapshot)
+        purgeExpiredTrash()
+        loadedSnapshot = snapshot
+        needsSessionBackup = false
+        storageError = nil
+        isLoading = false
+        flush()
+    }
+
+    private func finishPendingRestore() throws {
+        guard let snapshot: StoreBackup = try read(pendingRestoreURL) else { return }
+        try snapshot.validate()
+        try write(snapshot.notes, to: notesURL)
+        try write(snapshot.trashedNotes, to: trashURL)
+        try write(snapshot.trashedTabs, to: trashedTabsURL)
+        try FileManager.default.removeItem(at: pendingRestoreURL)
+    }
+
+    private func refreshBackupDate() {
+        backupDate = (try? JSONDecoder().decode(StoreBackup.self, from: Data(contentsOf: backupURL)))?.createdAt
+    }
+
+    private func write(_ value: some Encodable, to url: URL) throws {
+        let data = try JSONEncoder().encode(value)
+        let manager = FileManager.default
+        try manager.createDirectory(at: directory, withIntermediateDirectories: true,
+                                    attributes: [.posixPermissions: 0o700])
+        try manager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
+        try data.write(to: url, options: .atomic)
+        try manager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
     }
 
     nonisolated static func compacted(

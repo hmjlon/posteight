@@ -62,6 +62,24 @@ enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
 /// Xcode build paths — two places to drift. Move to `.lproj` when a third language or a
 /// translator shows up.
 private let englishStrings: [String: String] = [
+    "저장된 메모를 읽지 못했어요. 원본을 보호하기 위해 편집과 저장을 멈췄어요.": "Unable to read saved notes. Editing and saving are paused to protect the original files.",
+    "메모를 저장하지 못했어요. 저장 공간과 폴더 권한을 확인한 뒤 다시 시도해 주세요.": "Unable to save notes. Check free disk space and folder permissions, then try again.",
+    "이전 메모를 가져오지 못했어요. 원본은 그대로 있어요. 저장 폴더를 확인한 뒤 다시 시도해 주세요.": "Unable to migrate your previous notes. The originals are unchanged. Check the storage folder and try again.",
+    "다시 시도": "Try Again",
+    "저장과 백업": "Storage and Backup",
+    "최근 백업": "Latest backup",
+    "현재 메모 백업": "Back Up Current Notes",
+    "백업 복원…": "Restore Backup…",
+    "백업을 저장했어요.": "Backup saved.",
+    "백업을 저장하지 못했어요. 저장 공간과 폴더 권한을 확인해 주세요.": "Unable to save a backup. Check free disk space and folder permissions.",
+    "앱을 연 뒤 첫 저장 전에 이전 메모를 자동 백업해요. 직접 백업하면 기존 백업을 교체해요. 메모와 휴지통만 포함하며, 설정과 폰트 파일은 포함하지 않아요.": "Previous notes are backed up automatically before the first save after launch. A manual backup replaces this backup. It includes notes and trash, but not settings or font files.",
+    "백업은 같은 Mac에 저장돼요. 복원 전 원본은 BeforeRestore 폴더에 보관하며, 필요 없어진 백업과 원본은 저장 폴더에서 직접 지울 수 있어요.": "Backups stay on this Mac. Original files are kept in a BeforeRestore folder before restoring. You can delete unneeded backups and originals from the storage folder.",
+    "백업으로 메모를 복원할까요?": "Restore notes from the backup?",
+    "백업 복원": "Restore Backup",
+    "백업을 복원했어요.": "Backup restored.",
+    "백업을 복원하지 못했어요. 백업과 복원 전 원본은 저장 폴더에 보관되어 있어요.": "Unable to restore the backup. The backup and any archived originals remain in the storage folder.",
+    "현재 메모와 휴지통을 최근 백업으로 바꿉니다. 복원 전 파일은 별도로 보관하며, 복원은 실행 취소할 수 없어요.": "This replaces current notes and trash with the latest backup. Original files are archived first. Restoring cannot be undone.",
+
     "메모 검색…": "Search Notes…",
     "메모 검색": "Search Notes",
     "모든 메모에서 검색": "Search all notes",

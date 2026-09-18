@@ -24,7 +24,10 @@ struct MenuBarPanelView: View {
                     showNotes(store.notes.map(\.id))
                     AppUnlockWindow.present()
                 }
+            } else if store.isStorageBlocked {
+                StorageStatusView()
             } else {
+                StorageStatusView()
                 PanelRow(title: L("새 메모"), systemImage: "plus", shortcut: "⌘N") {
                     showNote(store.addNote(language: settings.language,
                                            origin: NSScreen.noteSpawnOrigin))

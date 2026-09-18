@@ -37,6 +37,7 @@ final class NoteFontLibrary: ObservableObject {
     static let shared = NoteFontLibrary()
     @Published private(set) var entries: [NoteFontEntry] = []
     let directory: URL
+    private let usesDefaultDirectory: Bool
 
     static var bundledFontURL: URL? {
         #if SWIFT_PACKAGE
@@ -48,14 +49,20 @@ final class NoteFontLibrary: ObservableObject {
             ?? bundle.url(forResource: "HanaHandwriting", withExtension: "ttf", subdirectory: "Resources")
     }
 
-    init(directory: URL = PosteightStore.storeDirectory.appendingPathComponent("Fonts", isDirectory: true),
+    init(directory: URL? = nil,
          bundledURL: URL? = NoteFontLibrary.bundledFontURL) {
-        self.directory = directory
+        self.usesDefaultDirectory = directory == nil
+        self.directory = directory ?? PosteightStore.storeDirectory.appendingPathComponent("Fonts", isDirectory: true)
         entries = [NoteFontEntry(id: "system", name: "", postScriptName: nil)]
         if let url = bundledURL, let descriptor = Self.descriptor(at: url) {
             CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
             entries.append(NoteFontEntry(id: "hana", name: "", postScriptName: descriptor.postScriptName))
         }
+        loadImportedFonts()
+    }
+
+    func reloadAfterMigration() {
+        entries.removeAll { $0.fileURL != nil }
         loadImportedFonts()
     }
 
@@ -87,6 +94,7 @@ final class NoteFontLibrary: ObservableObject {
     }
 
     private func saveManifest(_ manifest: [FontManifestEntry]) throws {
+        guard !usesDefaultDirectory || !PosteightStore.migrationIsBlocked else { throw StorageFailure.migration }
         let manager = FileManager.default
         try manager.createDirectory(at: directory, withIntermediateDirectories: true,
                                     attributes: [.posixPermissions: 0o700])
@@ -140,6 +148,7 @@ final class NoteFontLibrary: ObservableObject {
     /// somewhere the folder's writer cannot reach — a Keychain-held key to sign it with — and the
     /// sandbox container (WP-4) is what actually narrowed who can write there at all.
     private func loadImportedFonts() {
+        guard !usesDefaultDirectory || !PosteightStore.migrationIsBlocked else { return }
         guard let manifest = loadManifest() else {
             // Unreadable rather than absent. Registering nothing is the safe side, and `add()`
             // refuses to overwrite it, so the rows already on disk are not lost.
@@ -245,6 +254,7 @@ final class NoteFontLibrary: ObservableObject {
     enum ImportError: Error { case invalidFont, duplicate, registration, unreadableManifest }
 
     func add(_ source: URL) throws {
+        guard !usesDefaultDirectory || !PosteightStore.migrationIsBlocked else { throw StorageFailure.migration }
         guard Self.importableExtensions.contains(source.pathExtension.lowercased()) else {
             throw ImportError.invalidFont
         }
@@ -297,6 +307,7 @@ final class NoteFontLibrary: ObservableObject {
     }
 
     func remove(_ entry: NoteFontEntry) throws {
+        guard !usesDefaultDirectory || !PosteightStore.migrationIsBlocked else { throw StorageFailure.migration }
         guard let url = entry.fileURL, !Self.reservedIDs.contains(entry.id) else { return }
         try FileManager.default.removeItem(at: url)
         CTFontManagerUnregisterFontsForURL(url as CFURL, .process, nil)
