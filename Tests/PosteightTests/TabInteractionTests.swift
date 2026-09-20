@@ -5,6 +5,60 @@ import Testing
 @Suite("Tab merging and quick delete", .serialized)
 @MainActor
 struct TabInteractionTests {
+    @Test("Detaching a merged tab preserves contents, appearance, persistence and undo")
+    func detachMergedTab() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = PosteightStore(directory: directory)
+        let targetID = store.addNote()
+        let sourceID = store.addNote()
+        let tab = try #require(store.notes.first { $0.id == sourceID }?.selectedTab)
+        let item = try #require(tab.items.first)
+        store.updateItemTitle(noteID: sourceID, tabID: tab.id, itemID: item.id, title: "분리할 메모")
+        store.setReminder(noteID: sourceID, tabID: tab.id, itemID: item.id, date: Date(timeIntervalSince1970: 2_000_000_000))
+        #expect(store.mergeNotes(from: sourceID, into: targetID))
+        let before = store.notes
+        let merged = try #require(before.first { $0.id == targetID })
+        let position = NotePoint(x: 600, y: 400)
+        let detachedID = try #require(store.detachTab(noteID: targetID, tabID: tab.id, position: position))
+        let detached = try #require(store.notes.first { $0.id == detachedID })
+        var expected = merged
+        expected.id = detachedID
+        expected.tabs = [try #require(merged.tabs.first { $0.id == tab.id })]
+        expected.selectedTabID = tab.id
+        expected.position = position
+        #expect(detached == expected)
+        let remaining = try #require(store.notes.first { $0.id == targetID })
+        #expect(remaining.tabs.count == 1)
+        #expect(remaining.selectedTabID == remaining.tabs[0].id)
+        #expect(store.trashedTabs.isEmpty)
+        #expect(store.trashedNotes.isEmpty)
+        let after = store.notes
+        #expect(PosteightStore(directory: directory).notes == after)
+        #expect(store.undo())
+        #expect(store.notes == before)
+        #expect(store.redo())
+        #expect(store.notes == after)
+    }
+
+    @Test("Detaching an inactive tab keeps selection and invalid detach leaves notes untouched")
+    func detachValidation() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = PosteightStore(directory: directory)
+        let id = store.addNote()
+        let first = try #require(store.notes.first { $0.id == id }?.selectedTabID)
+        let selected = try #require(store.addTab(to: id))
+        let position = NotePoint(x: 100, y: 100)
+        #expect(store.detachTab(noteID: id, tabID: first, position: position) != nil)
+        #expect(store.notes.first { $0.id == id }?.selectedTabID == selected)
+        let before = store.notes
+        #expect(store.detachTab(noteID: id, tabID: selected, position: position) == nil)
+        #expect(store.detachTab(noteID: id, tabID: UUID(), position: position) == nil)
+        #expect(store.detachTab(noteID: UUID(), tabID: first, position: position) == nil)
+        #expect(store.notes == before)
+    }
+
     @Test("The tab bar collapses before equal division makes a tab unselectable")
     func tabsCollapseBeforeTheyGetTooNarrow() {
         func strip(_ noteWidth: CGFloat) -> CGFloat {

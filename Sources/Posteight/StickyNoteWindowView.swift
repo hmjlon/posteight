@@ -18,6 +18,8 @@ struct StickyNoteWindowView: View {
     @State private var isCardHovered = false
     @State private var editingTabID: UUID?
     @State private var hoveredTabID: UUID?
+    @GestureState private var draggedTabID: UUID?
+    @State private var tabDetachPreview = TabDetachPreview()
     @State private var lastMergeAttempt = Date.distantPast
     @State private var isAllContentSelected = false
 
@@ -139,6 +141,7 @@ struct StickyNoteWindowView: View {
         }
         .onChange(of: lock.isLocked) { _, locked in
             if locked {
+                tabDetachPreview.dismiss()
                 store.searchFocusRequest = nil
                 isPencilCaseOpen = false
                 showsDeleteConfirmation = false
@@ -148,6 +151,10 @@ struct StickyNoteWindowView: View {
                 window?.makeFirstResponder(nil)
             }
         }
+        .onChange(of: draggedTabID) { _, id in
+            if id == nil { tabDetachPreview.dismiss() }
+        }
+        .onDisappear { tabDetachPreview.dismiss() }
         .task(id: store.searchFocusRequest?.id) {
             guard let request = store.searchFocusRequest,
                   request.noteID == note.id, request.tabID == selectedTab.id else { return }
@@ -374,6 +381,7 @@ struct StickyNoteWindowView: View {
                             .padding(.horizontal, horizontalPadding)
                         }
                         .buttonStyle(.plain)
+                        .highPriorityGesture(tabDetachGesture(note: note, tab: tab, width: width), including: note.tabs.count > 1 ? .all : .none)
                     }
                 }
 
@@ -383,10 +391,12 @@ struct StickyNoteWindowView: View {
                 }
             }
             .frame(width: width, height: MemoSurfaceMetrics.activeTabHeight)
+            .coordinateSpace(name: tab.id)
             .clipped()
             .help(L("현재 탭 — 다시 클릭하면 이름을 수정할 수 있어요"))
             .accessibilityAddTraits(.isSelected)
             .onHover(perform: onHover)
+            .opacity(draggedTabID == tab.id ? 0.55 : 1)
         } else {
             ZStack(alignment: .trailing) {
                 Button {
@@ -409,6 +419,7 @@ struct StickyNoteWindowView: View {
                     }
                 }
                 .buttonStyle(.plain)
+                .highPriorityGesture(tabDetachGesture(note: note, tab: tab, width: width), including: note.tabs.count > 1 ? .all : .none)
 
                 if showsClose {
                     tabCloseButton(note: note, tab: tab)
@@ -416,6 +427,7 @@ struct StickyNoteWindowView: View {
                 }
             }
             .frame(width: width, height: MemoSurfaceMetrics.inactiveTabHeight)
+            .coordinateSpace(name: tab.id)
             .contentShape(MemoTabShape())
             .help(Lf("%@ 탭으로 이동", tab.name))
             .padding(.bottom, 3)
@@ -428,7 +440,51 @@ struct StickyNoteWindowView: View {
                     .allowsHitTesting(false)
             }
             .onHover(perform: onHover)
+            .opacity(draggedTabID == tab.id ? 0.55 : 1)
         }
+    }
+
+    private func tabDetachGesture(note: StickyNote, tab: MemoTab, width: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 10, coordinateSpace: .named(tab.id))
+            .updating($draggedTabID) { _, dragging, _ in
+                dragging = tab.id
+            }
+            .onChanged { value in
+                guard !lock.isLocked, !store.isStorageBlocked else {
+                    tabDetachPreview.dismiss()
+                    return
+                }
+                tabDetachPreview.update(
+                    at: NSEvent.mouseLocation, grabOffset: value.startLocation,
+                    size: CGSize(width: width, height: MemoSurfaceMetrics.activeTabHeight),
+                    sharingType: settings.noteWindowSharingType
+                ) {
+                    ZStack {
+                        memoTabSurface(note, isSelected: true)
+                        tabLabel(note: note, tab: tab, showsSticker: width >= 54,
+                                 isSelected: true, reservesCloseSpace: false)
+                            .padding(.horizontal, width >= 74 ? 10 : 5)
+                    }
+                    .frame(width: width, height: MemoSurfaceMetrics.activeTabHeight)
+                    .allowsHitTesting(false)
+                }
+            }
+            .onEnded { value in
+                defer { tabDetachPreview.dismiss() }
+                guard !lock.isLocked, !store.isStorageBlocked,
+                      let window, let anchor = NSScreen.noteAnchor else { return }
+                let point = NSEvent.mouseLocation
+                // A small margin avoids detaching on an accidental release at the edge.
+                guard !window.frame.insetBy(dx: -12, dy: -12).contains(point) else { return }
+                editingTabID = nil
+                // Preserve the grabbed point instead of snapping the new window center to the pointer.
+                let position = NotePoint(
+                    x: point.x - value.startLocation.x + note.size.width / 2 - anchor.minX,
+                    y: anchor.maxY - point.y - value.startLocation.y
+                        - (MemoSurfaceMetrics.tabBarHeight - MemoSurfaceMetrics.activeTabHeight) + note.size.height / 2
+                )
+                store.detachTab(noteID: note.id, tabID: tab.id, position: position)
+            }
     }
 
     private func tabCloseButton(note: StickyNote, tab: MemoTab) -> some View {
@@ -465,7 +521,7 @@ struct StickyNoteWindowView: View {
                     Image(systemName: tab.stickerSymbol)
                         .font(.system(size: isSelected ? 10 : 9, weight: .semibold))
 
-                    if isSelected {
+                    if isSelected && note.tabs.count == 1 {
                         WindowMoveHandle(onDragEnded: saveWindowPosition, onDragCompleted: mergeAtDropLocation)
                     }
                 }

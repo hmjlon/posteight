@@ -531,6 +531,30 @@ final class PosteightStore: ObservableObject {
         return true
     }
 
+    /// Move the existing tab into its own note, preserving item identities and reminders.
+    @discardableResult
+    func detachTab(noteID: UUID, tabID: UUID, position: NotePoint) -> UUID? {
+        guard !isStorageBlocked,
+              let index = notes.firstIndex(where: { $0.id == noteID }),
+              notes[index].tabs.count > 1,
+              let tabIndex = notes[index].tabs.firstIndex(where: { $0.id == tabID }) else { return nil }
+        let historyBefore = editingSnapshot
+        defer { recordEdit(from: historyBefore, noteID: noteID) }
+        var updated = notes
+        var detached = updated[index]
+        detached.id = UUID()
+        detached.tabs = [updated[index].tabs.remove(at: tabIndex)]
+        detached.selectedTabID = tabID
+        detached.position = position
+        if updated[index].selectedTabID == tabID {
+            updated[index].selectedTabID = updated[index].tabs[min(tabIndex, updated[index].tabs.count - 1)].id
+        }
+        updated.append(detached)
+        notes = updated
+        flush()
+        return detached.id
+    }
+
     func selectTab(noteID: UUID, tabID: UUID) {
         updateNote(noteID) { note in
             guard note.tabs.contains(where: { $0.id == tabID }) else { return }
