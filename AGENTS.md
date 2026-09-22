@@ -246,15 +246,12 @@ POSTEIGHT_SYSTEM_LANGUAGE=en swift test
 
 - [ ] **`Packaging/Posteight.entitlements` 의 임시 예외를 지웠는가.**
       `com.apple.security.temporary-exception.files.home-relative-path.read-only` 는 샌드박스
-      이전에 만들어진 설치의 노트를 컨테이너로 한 번 복사해 오기 위한 것이다. 그 이전은
-      **샌드박스가 처음 나가는 릴리스 한 번**에 끝난다. 그 다음 릴리스부터는 지운다. 남겨 두면
+      이전에 만들어진 설치의 노트를 컨테이너로 한 번 복사해 오기 위한 것이다. **그 한 번은
+      샌드박스가 나간 v0.2.0 으로 이미 끝났다.** 남아 있는 것은 지울 것만 남은 상태다. 남겨 두면
       앱이 사용자 홈의 `Library/Application Support/Posteight/` 를 계속 읽을 수 있고, 샌드박스가
       막으라고 있는 자리에 구멍이 하나 열린 채로 배포된다. App Store 심사도 임시 예외를 받지
       않는다. 지울 때 `PosteightStore.migrateStore` 와 `legacyStoreDirectory` 도 같이 걷는다
       — 읽을 수 없는 경로를 읽으려 드는 코드만 남는다.
-
-      샌드박스는 a6b8f71 에서 들어왔고 아직 `release` 에 없다. 즉 **다음 릴리스가 그 한 번**이고,
-      지우는 것은 그 다음 릴리스다.
 
 릴리스는 손이 아니라 CI 가 만든다. `dev` 를 `release` 로 머지하면
 [`release.yml`](.github/workflows/release.yml) 이 돌면서 직전 릴리스에서 마이너를 하나 올린
