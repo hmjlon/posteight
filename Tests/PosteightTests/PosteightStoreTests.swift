@@ -236,7 +236,17 @@ struct TabCopyTests {
             TodoItem(title: "완료한 항목", isDone: true)
         ])
 
-        #expect(PosteightStore.tabPlainText(tab) == "오늘 할 일\n첫 번째\n완료한 항목")
+        #expect(PosteightStore.tabPlainText(tab) == "오늘 할 일\n\n- 첫 번째\n\n- 완료한 항목")
+    }
+
+    @Test("Formats items as a list when the title is empty")
+    func formatsItemsWithoutTitle() {
+        let tab = MemoTab(name: "메모 1", title: "   ", items: [
+            TodoItem(title: "첫 번째"),
+            TodoItem(title: "두 번째")
+        ])
+
+        #expect(PosteightStore.tabPlainText(tab) == "- 첫 번째\n\n- 두 번째")
     }
 
     /// 복사는 메모 글자가 앱 밖으로 나가는 유일한 경로다. 일반 페이스트보드는 모든

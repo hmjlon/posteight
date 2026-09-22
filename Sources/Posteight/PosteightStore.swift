@@ -920,9 +920,17 @@ final class PosteightStore: ObservableObject {
     }
 
     nonisolated static func tabPlainText(_ tab: MemoTab) -> String {
-        ([tab.title] + tab.items.map(\.title))
+        let title = tab.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? nil
+            : tab.title
+        let items = tab.items
+            .map(\.title)
             .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-            .joined(separator: "\n")
+            .map { "- \($0)" }
+
+        return [title, items.isEmpty ? nil : items.joined(separator: "\n\n")]
+            .compactMap { $0 }
+            .joined(separator: "\n\n")
     }
 
     /// Clipboard paths are concealed because the general pasteboard is readable by every
