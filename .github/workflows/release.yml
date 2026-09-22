@@ -147,8 +147,10 @@ jobs:
           ### Homebrew (권장)
 
           \`\`\`bash
-          brew install --cask hmjlon/tap/posteight
+          brew install --cask hmjlon/tap/posteight && xattr -dr com.apple.quarantine /Applications/Posteight.app
           \`\`\`
+
+          뒤쪽 절반이 앱을 열 수 있게 해 주는 부분이다. 아래 **처음 열 때** 를 보라.
 
           ### dmg 직접 내려받기
 
@@ -156,22 +158,27 @@ jobs:
 
           ### 처음 열 때
 
-          Posteight 는 아직 Apple 공증을 받지 않았다. 어느 쪽으로 설치하든 macOS 가
-          첫 실행을 한 번 막는다.
-
-          1. Posteight 를 연다 (차단 경고가 뜬다)
-          2. 시스템 설정 > 개인정보 보호 및 보안 을 연다
-          3. 아래로 내려 **그래도 열기** 를 누른다
-
-          터미널을 쓴다면 아래 한 줄이 같은 일을 한다.
+          Posteight 는 아직 Apple 공증을 받지 않았다. 어느 쪽으로 설치하든 앱에 격리
+          속성이 붙고, macOS 는 확인할 수 없는 격리된 앱의 실행을 막는다. 처음 열기
+          전에 그 속성을 떼어 낸다.
 
           \`\`\`bash
           xattr -dr com.apple.quarantine /Applications/Posteight.app
           \`\`\`
 
-          공증을 받기 전까지는 \`brew upgrade\` 로 새 버전을 받을 때마다 이 단계가
-          한 번씩 더 필요하다. ad-hoc 서명은 빌드마다 서명이 달라져서 Homebrew 가
-          이전에 승인한 앱과 같은 앱이라고 판단하지 못한다.
+          터미널을 쓰지 않는다면 시스템 설정으로 간다. 단계가 **연달아** 일어나야 한다.
+
+          1. Posteight 를 연다 (차단 경고가 뜬다)
+          2. **곧바로** 시스템 설정 > 개인정보 보호 및 보안 을 열고 보안 항목까지 내려간다
+          3. **그래도 열기** 를 누르고 인증한다
+
+          Apple 은 이 버튼을 차단된 실행 이후 **약 1시간 동안만** 보여 준다. 보이지
+          않으면 Posteight 를 한 번 더 열고 바로 다시 들어간다. Control-클릭해서 여는
+          예전 우회는 macOS 15 부터 없어졌다.
+
+          어느 쪽이든 \`brew upgrade\` 로 새 버전을 받을 때마다 다시 필요하다. ad-hoc
+          서명은 빌드마다 서명이 달라져서, macOS 가 이전에 승인한 앱과 같은 앱이라고
+          판단하지 못한다.
 
           ### 요구 사항
 

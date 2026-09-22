@@ -24,10 +24,12 @@ English · [한국어](README.ko.md)
 ### Homebrew
 
 ```bash
-brew install --cask hmjlon/tap/posteight
+brew install --cask hmjlon/tap/posteight && xattr -dr com.apple.quarantine /Applications/Posteight.app
 ```
 
-`brew upgrade` picks up later versions from the same tap.
+The second half is what lets the app open at all — see [First launch](#first-launch).
+`brew upgrade` picks up later versions from the same tap, and needs that same `xattr` line
+again each time.
 
 ### Download
 
@@ -36,22 +38,29 @@ open it, and drag **Posteight** to **Applications**.
 
 ### First launch
 
-Posteight is not notarized by Apple yet, so macOS blocks it the first time it runs —
-whichever way you installed it.
-
-1. Open Posteight. macOS shows a warning and refuses to launch it.
-2. Open **System Settings → Privacy & Security**.
-3. Scroll down and click **Open Anyway**.
-
-The same thing from a terminal:
+Posteight is not notarized by Apple yet. Both installs mark the app as quarantined, and
+macOS blocks a quarantined app that it cannot verify. Clearing that flag is the shortest
+way through — run this before opening Posteight for the first time:
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/Posteight.app
 ```
 
-It comes back on every update, including `brew upgrade`. Posteight is signed ad-hoc, so its
-signature changes with each build and Homebrew cannot tell the new version is the same app
-you already approved.
+**Without a terminal**, go through System Settings instead. The steps have to follow each
+other:
+
+1. Open Posteight. macOS shows a warning and refuses to launch it.
+2. **Right away**, open **System Settings → Privacy & Security** and scroll down to Security.
+3. Click **Open Anyway** and authenticate.
+
+Apple shows that button for about an hour after the blocked launch, and not before it. If
+it is not there, open Posteight once more and go straight back to Privacy & Security.
+Control-clicking the app and choosing **Open** is not a way around this either — macOS 15
+removed that shortcut.
+
+Either way, it comes back on every update, including `brew upgrade`. Posteight is signed
+ad-hoc, so its signature changes with each build and macOS cannot tell the new version is
+the same app you already approved.
 
 Notarization needs a paid Apple Developer Program membership. Until that is in place, this
 step is unavoidable for anyone but the person who built the app.

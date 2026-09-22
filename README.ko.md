@@ -24,10 +24,11 @@ Posteight 는 오늘 할 일을 바탕화면에 꺼내 둔다. 작업이 실제�
 ### Homebrew
 
 ```bash
-brew install --cask hmjlon/tap/posteight
+brew install --cask hmjlon/tap/posteight && xattr -dr com.apple.quarantine /Applications/Posteight.app
 ```
 
-다음 버전부터는 `brew upgrade` 로 받는다.
+뒤쪽 절반이 앱을 열 수 있게 해 주는 부분이다 — [처음 열 때](#처음-열-때) 를 보라.
+다음 버전부터는 `brew upgrade` 로 받고, 받을 때마다 저 `xattr` 한 줄이 다시 필요하다.
 
 ### 내려받기
 
@@ -36,21 +37,27 @@ brew install --cask hmjlon/tap/posteight
 
 ### 처음 열 때
 
-Posteight 는 아직 Apple 공증을 받지 않아서, 어느 쪽으로 설치하든 macOS 가 첫 실행을
-한 번 막는다.
-
-1. Posteight 를 연다. 경고가 뜨고 실행이 거부된다.
-2. **시스템 설정 → 개인정보 보호 및 보안** 을 연다.
-3. 아래로 내려 **그래도 열기** 를 누른다.
-
-터미널을 쓴다면 아래 한 줄로도 같다.
+Posteight 는 아직 Apple 공증을 받지 않았다. 어느 쪽으로 설치하든 앱에 격리 속성이 붙고,
+macOS 는 확인할 수 없는 격리된 앱의 실행을 막는다. 그 속성을 떼어 내는 게 가장 짧은
+길이다. Posteight 를 처음 열기 전에 실행한다.
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/Posteight.app
 ```
 
-`brew upgrade` 를 포함해 새 버전을 받을 때마다 다시 필요하다. Posteight 는 ad-hoc 서명이라
-빌드마다 서명이 달라지고, Homebrew 는 새 버전이 이미 승인한 그 앱인지 알아보지 못한다.
+**터미널을 쓰지 않는다면** 시스템 설정으로 간다. 단계가 **연달아** 일어나야 한다.
+
+1. Posteight 를 연다. 경고가 뜨고 실행이 거부된다.
+2. **곧바로** **시스템 설정 → 개인정보 보호 및 보안** 을 열고 보안 항목까지 내려간다.
+3. **그래도 열기** 를 누르고 인증한다.
+
+Apple 은 이 버튼을 차단된 실행 **이후 약 1시간 동안만** 보여 준다. 그전에는 아예 없다.
+버튼이 보이지 않으면 Posteight 를 한 번 더 열고 바로 다시 들어간다. 앱을 Control-클릭해서
+**열기** 를 누르는 것도 우회가 되지 않는다. macOS 15 에서 없어진 방법이다.
+
+어느 쪽이든 `brew upgrade` 를 포함해 새 버전을 받을 때마다 다시 필요하다. Posteight 는
+ad-hoc 서명이라 빌드마다 서명이 달라지고, macOS 는 새 버전이 이미 승인한 그 앱인지
+알아보지 못한다.
 
 공증에는 유료 Apple Developer Program 멤버십이 필요하다. 그전까지는 앱을 직접 빌드한
 사람이 아닌 이상 이 단계를 피할 수 없다.
