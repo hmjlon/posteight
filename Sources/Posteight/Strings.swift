@@ -178,6 +178,7 @@ private let englishStrings: [String: String] = [
     "형광펜": "Highlighter",
 
     // Models — stickers
+    "기본": "Default",
     "업무": "Work",
     "학업": "Study",
     "회의": "Meeting",
