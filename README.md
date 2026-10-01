@@ -2,7 +2,7 @@
 
 **Private sticky notes for your Mac — visible on your terms.**
 
-**[Download latest release](https://github.com/hmjlon/posteight/releases/latest)**
+[![Latest release](https://badgen.net/github/release/hmjlon/posteight/latest?label=download&color=ea7233)](https://github.com/hmjlon/posteight/releases/latest)
 
 Posteight keeps today's checklist out on the desktop, in small independent windows you can
 put where the work actually happens — and hide when someone walks over.
