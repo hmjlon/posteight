@@ -4,14 +4,21 @@
 
 [![Latest release](https://badgen.net/github/release/hmjlon/posteight/latest?label=download&color=ea7233)](https://github.com/hmjlon/posteight/releases/latest)
 
-[Visit the website](https://posteight.jiyoung110077.chatgpt.site/)
+[![Explore the Posteight website — private sticky notes for your Mac](docs/images/posteight-website.jpg)](https://posteight.jiyoung110077.chatgpt.site/)
+
+**[Explore the website →](https://posteight.jiyoung110077.chatgpt.site/)**
 
 Posteight keeps today's checklist out on the desktop, in small independent windows you can
 put where the work actually happens — and hide when someone walks over.
 
 English · [한국어](README.ko.md)
 
+<details>
+<summary>See Posteight on the desktop</summary>
+
 ![Posteight notes floating on the macOS desktop](docs/images/posteight-desktop-en.jpg)
+
+</details>
 
 ## Install
 

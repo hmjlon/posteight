@@ -4,14 +4,21 @@
 
 [![Latest release](https://badgen.net/github/release/hmjlon/posteight/latest?label=download&color=ea7233)](https://github.com/hmjlon/posteight/releases/latest)
 
-[홈페이지 둘러보기](https://posteight.jiyoung110077.chatgpt.site/)
+[![Posteight 홈페이지 둘러보기 — 맥을 위한 사적인 포스트잇](docs/images/posteight-website.jpg)](https://posteight.jiyoung110077.chatgpt.site/)
+
+**[홈페이지 둘러보기 →](https://posteight.jiyoung110077.chatgpt.site/) · 영문 페이지**
 
 Posteight 는 오늘 할 일을 바탕화면에 꺼내 둔다. 작업이 실제로 일어나는 자리마다
 독립된 작은 창을 놓고, 누가 다가오면 감춘다.
 
 [English](README.md) · 한국어
 
+<details>
+<summary>바탕화면에서 사용 중인 Posteight 보기</summary>
+
 ![바탕화면에 떠 있는 Posteight 메모들](docs/images/posteight-desktop-ko.jpg)
+
+</details>
 
 ## 설치
 
