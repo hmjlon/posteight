@@ -4,6 +4,8 @@
 
 [![Latest release](https://badgen.net/github/release/hmjlon/posteight/latest?label=download&color=ea7233)](https://github.com/hmjlon/posteight/releases/latest)
 
+[홈페이지 둘러보기](https://posteight.jiyoung110077.chatgpt.site/)
+
 Posteight 는 오늘 할 일을 바탕화면에 꺼내 둔다. 작업이 실제로 일어나는 자리마다
 독립된 작은 창을 놓고, 누가 다가오면 감춘다.
 

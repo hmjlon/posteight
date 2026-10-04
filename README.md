@@ -4,6 +4,8 @@
 
 [![Latest release](https://badgen.net/github/release/hmjlon/posteight/latest?label=download&color=ea7233)](https://github.com/hmjlon/posteight/releases/latest)
 
+[Visit the website](https://posteight.jiyoung110077.chatgpt.site/)
+
 Posteight keeps today's checklist out on the desktop, in small independent windows you can
 put where the work actually happens — and hide when someone walks over.
 
