@@ -20,6 +20,18 @@ struct NoteKeyboardShortcutTests {
             modifierFlags: [.command], timestamp: 0, windowNumber: 0, context: nil,
             characters: "ㅋ", charactersIgnoringModifiers: "ㅋ", isARepeat: false, keyCode: 6))
         #expect(NoteKeyboardShortcut(event: undo) == .undo)
+        let toggle = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero,
+            modifierFlags: [.command], timestamp: 0, windowNumber: 0, context: nil,
+            characters: "\r", charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36))
+        #expect(NoteKeyboardShortcut(event: toggle) == .toggleDone)
+    }
+
+    /// 그냥 Return 은 다음 행을 만드는 키다. 완료 토글이 가로채면 안 된다.
+    @Test func plainReturnIsNotToggleDone() throws {
+        let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero,
+            modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil,
+            characters: "\r", charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36))
+        #expect(NoteKeyboardShortcut(event: event) == nil)
     }
 
     @Test func ordinaryTypingDoesNotTriggerShortcuts() throws {

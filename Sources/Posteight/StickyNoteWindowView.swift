@@ -910,6 +910,10 @@ private struct NoteWindowConfigurator: NSViewRepresentable {
                 case .undo, .redo:
                     // Document history is routed once at app level, including hidden windows.
                     return event
+                case .toggleDone:
+                    // 할 일 행을 편집하는 중일 때만 그 행이 받고, 그 밖에서는 그대로 흘려보낸다.
+                    // 노션·Obsidian 의 체크박스 토글과 같은 키다.
+                    return PlainEditableTextField.performCommandReturn(in: self.window) ? nil : event
                 case nil:
                     // ⌘·⌃ 없는 키 입력은 전체 선택 표시를 내린다. macOS 의 모든 텍스트 입력은
                     // ⌘A 다음 입력을 교체로 처리하는데 여기서는 교체가 아니라 캐럿 자리에

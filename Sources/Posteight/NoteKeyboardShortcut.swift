@@ -2,7 +2,7 @@ import AppKit
 
 /// Key codes identify the physical shortcut keys even while the Korean IME is active.
 enum NoteKeyboardShortcut {
-    case addTab, deleteTab, selectAll, copy, close, undo, redo
+    case addTab, deleteTab, selectAll, copy, close, undo, redo, toggleDone
 
     init?(event: NSEvent) {
         let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
@@ -14,6 +14,7 @@ enum NoteKeyboardShortcut {
         case (53, []): self = .close
         case (6, [.command]): self = .undo
         case (6, [.command, .shift]): self = .redo
+        case (36, [.command]): self = .toggleDone
         default: return nil
         }
     }

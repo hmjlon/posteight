@@ -120,6 +120,7 @@ Dock 아이콘은 기본으로 켜져 있어서 실행 중인 Posteight 를 Dock
 | Command-Delete | 현재 탭을 휴지통으로 보내기 (확인 후) |
 | Command-Z / Shift-Command-Z | 메모 전체 실행 취소 / 다시 실행 |
 | Command-A → Command-C | 현재 탭 전체 선택 후 복사 |
+| Command-Return | 편집 중인 할 일 완료 / 완료 취소 |
 | Esc | 메모 숨기기 |
 | Command-, | 설정 |
 

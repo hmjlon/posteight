@@ -146,6 +146,55 @@ extension AppKitEditingTests {
             #expect(store.itemTitle(noteID: noteID, tabID: tab.id, itemID: secondID) == "")
         }
 
+        @Test func commandReturnFinishesCompositionThenTogglesTheEditedRow() async throws {
+            _ = NSApplication.shared
+            let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let store = PosteightStore(directory: directory)
+            let noteID = store.addNote()
+            let tab = try #require(store.notes.first { $0.id == noteID }?.selectedTab)
+            let itemID = try #require(tab.items.first?.id)
+            func isDone() -> Bool? {
+                store.notes.first { $0.id == noteID }?.selectedTab?.items.first { $0.id == itemID }?.isDone
+            }
+            let host = NSHostingView(rootView: HistoryFields(store: store, noteID: noteID, tabID: tab.id))
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 300, height: 100),
+                                  styleMask: [.titled], backing: .buffered, defer: false)
+            window.contentView = host
+            window.makeKeyAndOrderFront(nil)
+            defer {
+                window.makeFirstResponder(nil)
+                window.orderOut(nil)
+                window.contentView = nil
+            }
+            host.layoutSubtreeIfNeeded()
+            let fieldReady = try await waitForEditorState { findFields(in: host).count == 1 }
+            try #require(fieldReady)
+            let field = try #require(findFields(in: host).first)
+
+            // 아무것도 편집하지 않을 때는 키를 그대로 흘려보낸다.
+            #expect(!PlainEditableTextField.performCommandReturn(in: window))
+
+            window.makeFirstResponder(field)
+            let editing = try await waitForEditorState { field.currentEditor() != nil }
+            try #require(editing)
+            let editor = try #require(field.currentEditor() as? NSTextView)
+            editor.insertText("장보", replacementRange: NSRange(location: NSNotFound, length: 0))
+            editor.setMarkedText("기", selectedRange: NSRange(location: 1, length: 0),
+                                 replacementRange: NSRange(location: NSNotFound, length: 0))
+            #expect(store.itemTitle(noteID: noteID, tabID: tab.id, itemID: itemID) == "장보")
+
+            #expect(PlainEditableTextField.performCommandReturn(in: window))
+            #expect(!editor.hasMarkedText())
+            #expect(store.itemTitle(noteID: noteID, tabID: tab.id, itemID: itemID) == "장보기")
+            #expect(isDone() == true)
+            // 커서는 그 행에 남는다.
+            #expect(window.firstResponder === editor)
+
+            #expect(PlainEditableTextField.performCommandReturn(in: window))
+            #expect(isDone() == false)
+        }
+
         private func findFields(in view: NSView) -> [NSTextField] {
             if let field = view as? NSTextField { return [field] }
             return view.subviews.flatMap { findFields(in: $0) }
@@ -174,6 +223,8 @@ private struct HistoryFields: View {
                     ) else { return false }
                     focusedItemID = previous
                     return true
+                }, onCommandReturn: {
+                    store.toggleItem(noteID: noteID, tabID: tabID, itemID: item.id)
                 })
             }
         }

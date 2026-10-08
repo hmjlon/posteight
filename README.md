@@ -126,6 +126,7 @@ menu-bar-only app.
 | Command-Delete | Move the current tab to the Trash, after confirming |
 | Command-Z / Shift-Command-Z | Undo / redo across the whole memo |
 | Command-A, then Command-C | Select and copy the current tab |
+| Command-Return | Mark the task you are editing as done / not done |
 | Esc | Hide the memo |
 | Command-, | Settings |
 

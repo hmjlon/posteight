@@ -158,6 +158,7 @@ private let englishStrings: [String: String] = [
     "남은 일": "Remaining",
     "표시 없음": "None",
     "완료": "Done",
+    "완료 (편집 중 ⌘↩)": "Mark as done (⌘↩ while editing)",
 
     // MenuBarPanelView
     "새 메모": "New Memo",
@@ -265,7 +266,7 @@ private let englishStrings: [String: String] = [
     "닫기 — 메모는 그대로 있어요": "Close — the memo stays",
 
     // TodoItemRow
-    "완료 취소": "Undo",
+    "완료 취소 (편집 중 ⌘↩)": "Mark as not done (⌘↩ while editing)",
     "할 일을 입력하면 완료할 수 있어요": "Type something first, then you can check it off",
     "할 일 입력": "New item",
     "상단에 고정": "Pin to top",

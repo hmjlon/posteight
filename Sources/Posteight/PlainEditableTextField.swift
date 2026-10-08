@@ -21,6 +21,27 @@ struct PlainEditableTextField: NSViewRepresentable {
     var onMoveUp: (() -> Void)?
     var onMoveDown: (() -> Void)?
     var onDeleteEmpty: (() -> Bool)?
+    var onCommandReturn: (() -> Void)?
+
+    /// 메모 창의 키 모니터가 ⌘↩ 를 지금 편집 중인 필드로 넘긴다. 필드 편집기의 delegate 가 그 필드다.
+    ///
+    /// 한글을 조합하던 중이면 조합부터 끝낸다. "장보기" 의 "기" 는 다음 키가 올 때까지 조합 중으로
+    /// 남고, 모니터가 이 키를 삼키므로 입력기는 끝낼 기회를 얻지 못한다. 그대로 두면 "장보" 로
+    /// 완료되고 조합은 걸린 채 남는다. 순서는 Firefox 의 `CommitIMEComposition` 을 따랐다 —
+    /// 입력기 쪽 조합을 먼저 버리게 하고, 입력기가 스스로 확정하지 않았으면 필드에서 확정한다.
+    @MainActor static func performCommandReturn(in window: NSWindow?) -> Bool {
+        guard let editor = window?.firstResponder as? NSTextView,
+              let field = editor.delegate as? NSTextField,
+              let coordinator = field.delegate as? Coordinator,
+              let action = coordinator.parent.onCommandReturn else { return false }
+        if editor.hasMarkedText() {
+            editor.inputContext?.discardMarkedText()
+            if editor.hasMarkedText() { editor.unmarkText() }
+            coordinator.parent.text = editor.string
+        }
+        action()
+        return true
+    }
 
     func makeNSView(context: Context) -> NSTextField {
         let textField = FocusableTextField()
