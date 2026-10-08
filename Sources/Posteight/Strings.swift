@@ -228,6 +228,9 @@ private let englishStrings: [String: String] = [
     "화면 공유와 스크린샷에서 노트 감추기": "Hide notes from screen sharing and screenshots",
     "켜 두면 화면을 공유하거나 녹화할 때, 스크린샷을 찍을 때 노트가 찍히지 않습니다.":
         "With this on, notes stay out of screen shares, recordings and screenshots.",
+    "⌃⌥⌘H 로 모든 노트 숨기기와 되돌리기": "Hide and bring back all notes with ⌃⌥⌘H",
+    "다른 앱을 쓰는 중에도 동작합니다. 다른 앱이 같은 단축키를 쓰고 있으면 끄세요.":
+        "Works while you are in another app. Turn this off if another app uses the same shortcut.",
     "삭제한 항목은 %d일이 지나면 자동으로 사라집니다": "Deleted items disappear on their own after %d days",
     "알림": "Reminders",
     "알림 본문에 할 일 내용 표시": "Show task text in notifications",

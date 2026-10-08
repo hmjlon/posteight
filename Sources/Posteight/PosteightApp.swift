@@ -8,6 +8,16 @@ enum WindowID {
 
 struct NoteWindowVisibility {
     private(set) var hiddenNoteIDs: Set<UUID> = []
+    /// ⌃⌥⌘H 가 숨긴 메모. 다시 누르면 이것만 되돌린다.
+    private(set) var shortcutHiddenNoteIDs: Set<UUID> = []
+
+    enum ShortcutToggle: Equatable {
+        case hide(Set<UUID>)
+        case reveal(Set<UUID>)
+        /// 되돌릴 것을 기억하지 못할 때 — 팝오버로 전부 숨겼거나 막 실행했을 때. 아무 일도 안 일어나면
+        /// 키가 고장 난 것처럼 보이므로 Dock 아이콘을 누를 때처럼 전부 띄운다.
+        case revealAll
+    }
 
     mutating func hide(_ noteID: UUID) {
         hiddenNoteIDs.insert(noteID)
@@ -24,6 +34,23 @@ struct NoteWindowVisibility {
 
     mutating func remove(_ noteID: UUID) {
         hiddenNoteIDs.remove(noteID)
+        shortcutHiddenNoteIDs.remove(noteID)
+    }
+
+    /// 단축키 한 번. 떠 있는 메모가 있으면 그것들을 숨기고 기억한다. 없으면 기억해 둔 것을 되돌린다.
+    /// Esc 로 따로 닫아 둔 메모는 단축키가 숨긴 것이 아니므로 끌려 나오지 않는다.
+    mutating func toggleForShortcut(visible: Set<UUID>) -> ShortcutToggle {
+        if !visible.isEmpty {
+            hiddenNoteIDs.formUnion(visible)
+            shortcutHiddenNoteIDs = visible
+            return .hide(visible)
+        }
+        // 그사이 다른 경로로 다시 띄운 메모는 이미 숨김 상태가 아니다.
+        let restorable = shortcutHiddenNoteIDs.intersection(hiddenNoteIDs)
+        shortcutHiddenNoteIDs = []
+        guard !restorable.isEmpty else { return .revealAll }
+        hiddenNoteIDs.subtract(restorable)
+        return .reveal(restorable)
     }
 
     func isHidden(_ noteID: UUID) -> Bool {
@@ -230,6 +257,20 @@ final class NoteWindowCoordinator {
         windows[noteID]?.value?.orderOut(nil)
     }
 
+    /// 다른 앱을 쓰는 중에 누르는 키라서, 되돌릴 때 `orderFront` 로 보이게만 하고 포커스는 가져오지
+    /// 않는다. 화면 잠금을 풀 때와 같은 이유다.
+    func toggleFromShortcut() {
+        let visible = Set(windows.compactMap { $0.value.value?.isVisible == true ? $0.key : nil })
+        switch visibility.toggleForShortcut(visible: visible) {
+        case .hide(let noteIDs):
+            for noteID in noteIDs { windows[noteID]?.value?.orderOut(nil) }
+        case .reveal(let noteIDs):
+            for noteID in noteIDs { windows[noteID]?.value?.orderFront(nil) }
+        case .revealAll:
+            AppSettings.shared.requestShowAllNotes()
+        }
+    }
+
     func remove(_ noteID: UUID) {
         pendingNoteIDs.remove(noteID)
         visibility.remove(noteID)
@@ -349,6 +390,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Set the policy before SwiftUI installs MenuBarExtra. Changing it afterwards can
         // rebuild the scene and leave two status items alive for the same process.
         AppSettings.shared.applyActivationPolicy()
+    }
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        GlobalHideShortcut.update(enabled: AppSettings.shared.usesGlobalHideShortcut)
     }
 
     /// The app has no main window to reopen, so a Dock icon click brings the notes back instead.

@@ -103,7 +103,7 @@ Posteight 에는 메인 창이 없다. 상태 아이템이 유일한 상설 표�
 연달아 적을 수 있다.
 
 설정에서는 언어, 상태 아이템이 세는 것, 메모를 다른 앱 위에 띄울지와 화면 공유·스크린샷에서
-감출지, 알림에 할 일 내용을 보일지, 앱 잠금, 기본 폰트, 저장과 백업, Dock 아이콘을 정한다.
+감출지, Control-Option-Command-H 전역 단축키를 쓸지, 알림에 할 일 내용을 보일지, 앱 잠금, 기본 폰트, 저장과 백업, Dock 아이콘을 정한다.
 Dock 아이콘은 기본으로 켜져 있어서 실행 중인 Posteight 를 Dock 과 Command-Tab 으로 부를 수
 있고, 누르면 메모 창이 다시 나온다. 끄면 메뉴 막대에만 사는 앱이 된다.
 
@@ -125,6 +125,7 @@ Dock 아이콘은 기본으로 켜져 있어서 실행 중인 Posteight 를 Dock
 | Command-Z / Shift-Command-Z | 메모 전체 실행 취소 / 다시 실행 |
 | Command-A → Command-C | 현재 탭 전체 선택 후 복사 |
 | Command-Return | 편집 중인 할 일 완료 / 완료 취소 |
+| Control-Option-Command-H | 모든 메모 숨기기 / 되돌리기. 다른 앱을 쓰는 중에도 동작한다 |
 | Esc | 메모 숨기기 |
 | Command-, | 설정 |
 

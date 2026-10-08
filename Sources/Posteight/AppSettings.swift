@@ -39,6 +39,7 @@ final class AppSettings: ObservableObject {
         static let hidesFromCapture = "posteight.hidesNotesFromScreenCapture"
         static let reminderPreview = "posteight.showsReminderPreview"
         static let language = "posteight.language"
+        static let globalHideShortcut = "posteight.usesGlobalHideShortcut"
     }
 
     @Published var showsDockIcon: Bool {
@@ -96,6 +97,16 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    /// 켜 두는 것이 기본이다. 다른 앱이 같은 키를 쓰는지는 미리 알 길이 없어서(`GlobalHideShortcut`),
+    /// 겹칠 때 Posteight 쪽을 끌 수 있게만 둔다.
+    @Published var usesGlobalHideShortcut: Bool {
+        didSet {
+            guard usesGlobalHideShortcut != oldValue else { return }
+            UserDefaults.standard.set(usesGlobalHideShortcut, forKey: Key.globalHideShortcut)
+            GlobalHideShortcut.update(enabled: usesGlobalHideShortcut)
+        }
+    }
+
     /// Bumped when the Dock icon is clicked, so the menu bar label can bring the card back.
     @Published private(set) var showAllNotesRequests = 0
 
@@ -115,6 +126,7 @@ final class AppSettings: ObservableObject {
         keepsNotesOnTop = defaults.object(forKey: Key.notesOnTop) as? Bool ?? true
         hidesNotesFromScreenCapture = defaults.object(forKey: Key.hidesFromCapture) as? Bool ?? true
         showsReminderPreview = defaults.object(forKey: Key.reminderPreview) as? Bool ?? false
+        usesGlobalHideShortcut = defaults.object(forKey: Key.globalHideShortcut) as? Bool ?? true
         menuBarCountStyle = (defaults.string(forKey: Key.countStyle)
             .flatMap(MenuBarCountStyle.init(rawValue:))) ?? .remaining
         language = (defaults.string(forKey: Key.language)

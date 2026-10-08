@@ -107,7 +107,8 @@ tab of the memo you used last, without opening any memo window. The line under t
 where it will land. The popover stays open, so you can add several in a row.
 
 Settings covers the language, what the status item counts, whether notes stay in front of
-other apps and out of screen shares and screenshots, whether reminders show task text, app
+other apps and out of screen shares and screenshots, whether Control-Option-Command-H works
+from any app, whether reminders show task text, app
 lock, the default font, storage and backups, and whether Posteight keeps a Dock icon. The
 Dock icon is on by default, so a running Posteight can be reached from the Dock and
 Command-Tab, and clicking it brings the memo windows back. Turning it off leaves a
@@ -131,6 +132,7 @@ menu-bar-only app.
 | Command-Z / Shift-Command-Z | Undo / redo across the whole memo |
 | Command-A, then Command-C | Select and copy the current tab |
 | Command-Return | Mark the task you are editing as done / not done |
+| Control-Option-Command-H | Hide all memos / bring them back — works from any app |
 | Esc | Hide the memo |
 | Command-, | Settings |
 

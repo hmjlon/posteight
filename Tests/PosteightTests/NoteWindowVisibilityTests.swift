@@ -154,3 +154,40 @@ struct ScreenCaptureExclusionTests {
         #expect(settings.noteWindowSharingType == .readOnly)
     }
 }
+
+@Suite("Global hide shortcut")
+struct GlobalHideShortcutToggleTests {
+    @Test("떠 있는 메모를 숨기고, 다시 누르면 그것만 되돌린다")
+    func hidesThenRevealsTheSameMemos() {
+        let shown = UUID(), alsoShown = UUID(), closedWithEsc = UUID()
+        var visibility = NoteWindowVisibility()
+        visibility.hide(closedWithEsc)
+
+        #expect(visibility.toggleForShortcut(visible: [shown, alsoShown]) == .hide([shown, alsoShown]))
+        #expect(visibility.isHidden(shown) && visibility.isHidden(alsoShown))
+
+        // Esc 로 따로 닫아 둔 메모는 단축키가 숨긴 것이 아니다.
+        #expect(visibility.toggleForShortcut(visible: []) == .reveal([shown, alsoShown]))
+        #expect(!visibility.isHidden(shown) && !visibility.isHidden(alsoShown))
+        #expect(visibility.isHidden(closedWithEsc))
+    }
+
+    @Test("그사이 다시 띄웠거나 지운 메모는 되돌릴 목록에서 빠진다")
+    func skipsMemosThatChangedInBetween() {
+        let reopened = UUID(), trashed = UUID(), stillHidden = UUID()
+        var visibility = NoteWindowVisibility()
+        _ = visibility.toggleForShortcut(visible: [reopened, trashed, stillHidden])
+        visibility.present(reopened)
+        visibility.remove(trashed)
+
+        #expect(visibility.toggleForShortcut(visible: []) == .reveal([stillHidden]))
+    }
+
+    /// 팝오버로 전부 숨겼거나 막 실행했을 때. 아무 일도 없으면 키가 고장 난 것처럼 보인다.
+    @Test("기억해 둔 것이 없으면 전부 띄운다")
+    func revealsAllWhenNothingIsRemembered() {
+        var visibility = NoteWindowVisibility()
+        visibility.hideAll(registered: [UUID()], pending: [])
+        #expect(visibility.toggleForShortcut(visible: []) == .revealAll)
+    }
+}
