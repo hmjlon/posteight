@@ -249,6 +249,19 @@ struct TabCopyTests {
         #expect(PosteightStore.tabPlainText(tab) == "- 첫 번째\n\n- 두 번째")
     }
 
+    @Test("Exports Markdown checkboxes that keep completion")
+    func formatsMarkdown() {
+        let tab = MemoTab(name: "메모 1", title: " 오늘 할 일 ", items: [
+            TodoItem(title: "장보기"),
+            TodoItem(title: "   "),
+            TodoItem(title: "메일 답장", isDone: true)
+        ])
+
+        #expect(PosteightStore.tabMarkdown(tab) == "오늘 할 일\n\n- [ ] 장보기\n- [x] 메일 답장")
+        #expect(PosteightStore.tabMarkdown(MemoTab(name: "메모 1", title: "", items: [TodoItem(title: "하나")]))
+            == "- [ ] 하나")
+    }
+
     /// 복사는 메모 글자가 앱 밖으로 나가는 유일한 경로다. 일반 페이스트보드는 모든
     /// 프로세스가 읽고, 클립보드 관리자는 지나간 것을 영구 기록으로 남긴다.
     @MainActor
@@ -269,6 +282,10 @@ struct TabCopyTests {
 
         let pasted = try #require(pasteboard.string(forType: .string))
         #expect(pasted == PosteightStore.tabPlainText(tab))
+        #expect(pasteboard.string(forType: PosteightStore.concealedPasteboardType) != nil)
+
+        store.copyTabToClipboard(noteID: noteID, tabID: tab.id, markdown: true, to: pasteboard)
+        #expect(pasteboard.string(forType: .string) == PosteightStore.tabMarkdown(tab))
         #expect(pasteboard.string(forType: PosteightStore.concealedPasteboardType) != nil)
     }
 }

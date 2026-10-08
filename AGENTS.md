@@ -144,8 +144,10 @@ README 이미지를 다시 찍을 때는 **설정 → 노트** 의 "화면 공�
   않는다. 샌드박스가 막으라고 있는 자리에 구멍을 내고, App Store 심사도 받지 않는다.
   Release 는 `CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO` 다 — 빼면 Xcode 가 ad-hoc 서명을
   배포 신원으로 보지 않아 `get-task-allow` 를 배포 빌드에까지 주입한다.
-- 네트워크 호출도, 계정도, API 키도 없다. 밖으로 나가는 경로는 메모 창에서 Command-A →
-  Command-C 로 현재 탭을 클립보드에 복사하는 것 하나뿐이고, 그것도 명시적인 동작이다.
+- 네트워크 호출도, 계정도, API 키도 없다. 밖으로 나가는 경로는 현재 탭을 클립보드에 복사하는
+  것뿐이다 — Command-A → Command-C(`tabPlainText`) 와 내보내기 버튼(`tabMarkdown`). 둘 다
+  명시적인 동작이고 같은 `writeConcealed` 를 거친다. 노션 같은 서비스로 직접 보내는 연동은
+  OAuth 와 서버가 필요해서 하지 않는다. 붙여넣기가 그 자리를 대신한다.
 - 환경변수는 `POSTEIGHT_SYSTEM_LANGUAGE` 하나뿐이고 테스트 전용이다.
 
 ## 작업 시 주의할 점

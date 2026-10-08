@@ -114,6 +114,7 @@ menu-bar-only app.
 - Choose **Search Notes…** in the menu bar to search names, titles, tasks, and details across all tabs. Click a result to open the matching location in its memo.
 - Drag task handles to reorder, or use the context menu to move tasks to another memo. Pin tasks to the top or sort by completion state.
 - Schedule reminders for individual tasks. Notifications require permission in the installed app. They show a short notice instead of the task text unless you turn on **Settings → Reminders → Show task text in notifications**.
+- The export button at the bottom of a memo copies the current tab as Markdown — `- [ ] to do` / `- [x] done`. Paste it into Notion or Obsidian and it becomes checkboxes, completion included.
 - Set the default font and text size in Settings, or pick a different font and size for one memo from its pencil case. Import your own TTF, OTF, or TTC font files.
 
 ### Keyboard shortcuts
@@ -160,8 +161,9 @@ Settings → App → Open Folder takes you there. Notes from v0.1.0 are copied h
 first time v0.2.0 runs. If you are upgrading straight from v0.1.0, run v0.2.0 once first.
 
 There is no account, no sync, and no telemetry. Export is explicit: Command-A selects the
-current tab in a memo window and Command-C copies it to the clipboard, marked so clipboard
-managers keep it out of their history.
+current tab in a memo window and Command-C copies it, or the export button copies it as
+Markdown. Either way the clipboard entry is marked so clipboard managers keep it out of their
+history.
 
 Enable **Settings → App lock** to lock all of Posteight from the menu bar. Unlocking uses Touch ID
 or your Mac login password, so Posteight stores no separate password. While locked, the app hides

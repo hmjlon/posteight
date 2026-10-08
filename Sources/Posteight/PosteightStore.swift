@@ -826,6 +826,19 @@ final class PosteightStore: ObservableObject {
             .joined(separator: "\n\n")
     }
 
+    /// 내보내기용. 노션과 Obsidian 은 붙여넣은 `- [ ]` / `- [x]` 를 체크박스로 바꾸므로, 완료 상태가
+    /// 그대로 따라간다. ⌘C 의 `tabPlainText` 는 아무 데나 붙이는 글이라 따로 둔다.
+    nonisolated static func tabMarkdown(_ tab: MemoTab) -> String {
+        let title = tab.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let items = tab.items
+            .filter { !$0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .map { "- [\($0.isDone ? "x" : " ")] \($0.title)" }
+
+        return [title.isEmpty ? nil : title, items.isEmpty ? nil : items.joined(separator: "\n")]
+            .compactMap { $0 }
+            .joined(separator: "\n\n")
+    }
+
     /// Clipboard paths are concealed because the general pasteboard is readable by every
     /// process and syncs through Universal Clipboard, and a clipboard manager (Maccy, Raycast)
     /// files whatever passes through it into a permanent plain-text history.
@@ -834,10 +847,11 @@ final class PosteightStore: ObservableObject {
     func copyTabToClipboard(
         noteID: UUID,
         tabID: UUID,
+        markdown: Bool = false,
         to pasteboard: NSPasteboard = .general
     ) {
         guard let tab = tab(noteID: noteID, tabID: tabID) else { return }
-        writeConcealed(Self.tabPlainText(tab), to: pasteboard)
+        writeConcealed(markdown ? Self.tabMarkdown(tab) : Self.tabPlainText(tab), to: pasteboard)
     }
 
     private func writeConcealed(_ text: String, to pasteboard: NSPasteboard) {
