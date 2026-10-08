@@ -202,6 +202,9 @@ final class NoteWindowCoordinator {
             // Showing every note has to reach the ones stranded off screen, too.
             window.moveOnScreenIfNeeded()
             window.makeKeyAndOrderFront(nil)
+            // 앱이 활성이 아니면 — ⌃⌥⌘H 가 전부 띄울 때 — `makeKeyAndOrderFront` 는 앞에 있는 다른
+            // 앱의 창을 넘지 못한다. 메모를 위에 두기를 끈 사람에게는 아무것도 안 뜬 것처럼 보인다.
+            if !NSApp.isActive { window.orderFrontRegardless() }
             return
         }
 
@@ -257,15 +260,18 @@ final class NoteWindowCoordinator {
         windows[noteID]?.value?.orderOut(nil)
     }
 
-    /// 다른 앱을 쓰는 중에 누르는 키라서, 되돌릴 때 `orderFront` 로 보이게만 하고 포커스는 가져오지
-    /// 않는다. 화면 잠금을 풀 때와 같은 이유다.
+    /// 다른 앱을 쓰는 중에 누르는 키라서, 되돌릴 때 보이게만 하고 포커스는 가져오지 않는다. 다만
+    /// `orderFront` 로는 안 된다. 앱이 활성이 아니면 앞에 있는 앱의 창 뒤에 들어가서, 메모를 위에
+    /// 두기를 끈 사람에게는 키가 고장 난 것처럼 보인다. `orderFrontRegardless` 는 key 창도 활성 앱도
+    /// 바꾸지 않고 맨 앞에 올린다. 화면 잠금을 풀 때는 그대로 `orderFront` 다 — 그때는 사용자가 띄워
+    /// 달라고 누른 것이 아니고, 잠그기 전에도 다른 앱의 창 뒤에 있었을 수 있다.
     func toggleFromShortcut() {
         let visible = Set(windows.compactMap { $0.value.value?.isVisible == true ? $0.key : nil })
         switch visibility.toggleForShortcut(visible: visible) {
         case .hide(let noteIDs):
             for noteID in noteIDs { windows[noteID]?.value?.orderOut(nil) }
         case .reveal(let noteIDs):
-            for noteID in noteIDs { windows[noteID]?.value?.orderFront(nil) }
+            for noteID in noteIDs { windows[noteID]?.value?.orderFrontRegardless() }
         case .revealAll:
             AppSettings.shared.requestShowAllNotes()
         }
