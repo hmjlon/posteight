@@ -303,6 +303,15 @@ final class PosteightStore: ObservableObject {
 
     @discardableResult
     func addNote(language: AppLanguage = .korean, origin: NotePoint = NotePoint(x: 0, y: 0)) -> UUID {
+        let historyBefore = editingSnapshot
+        let noteID = appendNote(language: language, origin: origin)
+        recordEdit(from: historyBefore, noteID: noteID)
+        return noteID
+    }
+
+    /// 기록은 부르는 쪽이 남긴다. 빠른 입력은 메모를 만든 것과 할 일을 넣은 것을 한 기록으로 묶는다.
+    @discardableResult
+    private func appendNote(language: AppLanguage, origin: NotePoint) -> UUID {
         let position = nextNotePosition(origin: origin)
         let note = StickyNote(
             stickerSymbol: "tag",
@@ -317,9 +326,7 @@ final class PosteightStore: ObservableObject {
                 )
             ]
         )
-        let historyBefore = editingSnapshot
         notes.append(note)
-        recordEdit(from: historyBefore, noteID: note.id)
         // 새 창이 key 가 되는 알림은 창이 자리를 잡기 전에 지나갈 수 있다. 방금 만든 메모가 지금 쓰는 메모다.
         lastActiveNoteID = note.id
         return note.id
@@ -638,10 +645,12 @@ final class PosteightStore: ObservableObject {
                       origin: NotePoint = NotePoint(x: 0, y: 0)) -> UUID? {
         let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty else { return nil }
-        if quickCaptureTarget == nil { addNote(language: language, origin: origin) }
+        // 새 메모를 만든 것까지 이 기록 하나에 들어간다. `addNote` 를 거치면 기록이 둘이라 ⌘Z 한 번에
+        // 빈 메모가 남는다.
+        let historyBefore = editingSnapshot
+        if quickCaptureTarget == nil { appendNote(language: language, origin: origin) }
         guard let (note, tab) = quickCaptureTarget else { return nil }
         var itemID = UUID()
-        let historyBefore = editingSnapshot
         defer { recordEdit(from: historyBefore, noteID: note.id, tabID: tab.id) }
         _ = updateTab(noteID: note.id, tabID: tab.id) { tab in
             if let last = tab.items.indices.last,

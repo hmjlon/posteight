@@ -556,9 +556,15 @@ struct QuickCaptureTests {
         let store = store()
         for note in store.notes { store.moveNoteToTrash(note.id) }
         try #require(store.notes.isEmpty)
+        store.clearEditingHistory()
         store.quickCapture("메일 답장")
         #expect(store.notes.count == 1)
         #expect(store.notes.first?.selectedTab?.items.map(\.title) == ["메일 답장"])
+
+        // 만든 메모까지 한 번에 되돌아간다. 빈 메모가 남지 않는다.
+        #expect(store.undo())
+        #expect(store.notes.isEmpty)
+        #expect(!store.undo())
     }
 }
 
