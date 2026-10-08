@@ -102,6 +102,10 @@ beside it — or no number at all. The loop traces itself as items get done and 
 nothing is left. Clicking it opens the popover — a new memo, search, showing or hiding every
 memo at once, the trash, locking the app when app lock is on, settings, and quit.
 
+Type a task into the field at the top of the popover and press Return: it goes into the current
+tab of the memo you used last, without opening any memo window. The line under the field shows
+where it will land. The popover stays open, so you can add several in a row.
+
 Settings covers the language, what the status item counts, whether notes stay in front of
 other apps and out of screen shares and screenshots, whether reminders show task text, app
 lock, the default font, storage and backups, and whether Posteight keeps a Dock icon. The

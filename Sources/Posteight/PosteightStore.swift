@@ -7,6 +7,8 @@ final class PosteightStore: ObservableObject {
     // Presentation state is shared across note windows and never persisted.
     @Published var presentedDetailItemID: UUID?
     @Published var searchFocusRequest: SearchFocusRequest?
+    /// 마지막으로 앞에 있던 메모. 메뉴 막대 빠른 입력이 여기에 넣는다. 다시 실행하면 비어 있다.
+    @Published var lastActiveNoteID: UUID?
 
     func finishSearchFocus(_ id: UUID) {
         if searchFocusRequest?.id == id { searchFocusRequest = nil }
@@ -318,6 +320,8 @@ final class PosteightStore: ObservableObject {
         let historyBefore = editingSnapshot
         notes.append(note)
         recordEdit(from: historyBefore, noteID: note.id)
+        // 새 창이 key 가 되는 알림은 창이 자리를 잡기 전에 지나갈 수 있다. 방금 만든 메모가 지금 쓰는 메모다.
+        lastActiveNoteID = note.id
         return note.id
     }
 
@@ -616,6 +620,40 @@ final class PosteightStore: ObservableObject {
             tab.items.append(TodoItem(id: itemID, title: ""))
         }
         return didAdd ? itemID : nil
+    }
+
+    /// 메뉴 막대 빠른 입력이 넣을 자리. 마지막으로 앞에 있던 메모의 현재 탭이고, 그 메모를 모르면
+    /// — 막 실행했거나 휴지통으로 갔으면 — 첫 메모다. 사용자가 고르게 하지 않는다.
+    var quickCaptureTarget: (note: StickyNote, tab: MemoTab)? {
+        guard let note = notes.first(where: { $0.id == lastActiveNoteID }) ?? notes.first,
+              let tab = note.selectedTab else { return nil }
+        return (note, tab)
+    }
+
+    /// 메모 창을 열지 않고 할 일 한 줄을 넣는다. 메모가 하나도 없으면 새로 만든다. 탭 끝의 빈 행은
+    /// 새 메모가 처음부터 들고 있는 자리라 그 행을 채운다 — 그 아래에 붙이면 빈 줄이 위에 남는다.
+    /// 실행 취소 한 번에 통째로 되돌아가도록 기록도 한 번만 남긴다.
+    @discardableResult
+    func quickCapture(_ title: String, language: AppLanguage = .korean,
+                      origin: NotePoint = NotePoint(x: 0, y: 0)) -> UUID? {
+        let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return nil }
+        if quickCaptureTarget == nil { addNote(language: language, origin: origin) }
+        guard let (note, tab) = quickCaptureTarget else { return nil }
+        var itemID = UUID()
+        let historyBefore = editingSnapshot
+        defer { recordEdit(from: historyBefore, noteID: note.id, tabID: tab.id) }
+        _ = updateTab(noteID: note.id, tabID: tab.id) { tab in
+            if let last = tab.items.indices.last,
+               tab.items[last].title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               (tab.items[last].detail ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                tab.items[last].title = title
+                itemID = tab.items[last].id
+            } else {
+                tab.items.append(TodoItem(id: itemID, title: title))
+            }
+        }
+        return itemID
     }
 
     func updateItemTitle(noteID: UUID, tabID: UUID, itemID: UUID, title: String) {

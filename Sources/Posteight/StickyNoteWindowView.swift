@@ -164,6 +164,11 @@ struct StickyNoteWindowView: View {
         .onChange(of: selectedTab.id) { _, _ in
             isAllContentSelected = false
         }
+        // 메뉴 막대 빠른 입력이 넣을 메모.
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { notification in
+            guard (notification.object as? NSWindow) === window else { return }
+            store.lastActiveNoteID = noteID
+        }
         // 창이 key 를 잃으면 전체 선택을 내린다. 이게 없으면 다른 앱에 갔다가 ⌘` 로
         // 돌아왔을 때 — 마우스 클릭이 없으니 해제 경로를 하나도 지나지 않는다 — 여전히
         // 전체가 선택된 채라, 사용자가 방금 고른 줄 아는 것 대신 ⌘C 가 탭 전체를

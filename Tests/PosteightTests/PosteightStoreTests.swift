@@ -496,3 +496,68 @@ struct NotePositionRoundTripTests {
         #expect(window.frame.origin.y.truncatingRemainder(dividingBy: 1) == 0)
     }
 }
+
+@Suite("Quick capture")
+@MainActor
+struct QuickCaptureTests {
+    private func store() -> PosteightStore {
+        PosteightStore(directory: FileManager.default.temporaryDirectory
+            .appendingPathComponent("posteight-tests-\(UUID().uuidString)", isDirectory: true))
+    }
+
+    private func titles(_ store: PosteightStore, _ noteID: UUID) -> [String]? {
+        store.notes.first { $0.id == noteID }?.selectedTab?.items.map(\.title)
+    }
+
+    @Test("Goes to the last used memo, or the first memo when that is unknown")
+    func target() throws {
+        let store = store()
+        let first = try #require(store.notes.first?.id)
+        let noteID = store.addNote()
+        #expect(store.quickCaptureTarget?.note.id == noteID)
+
+        // 막 실행했을 때처럼 마지막 메모를 모르면 첫 메모다.
+        store.lastActiveNoteID = nil
+        #expect(store.quickCaptureTarget?.note.id == first)
+
+        // 휴지통으로 간 메모를 가리키고 있어도 마찬가지다.
+        store.lastActiveNoteID = noteID
+        store.moveNoteToTrash(noteID)
+        #expect(store.quickCaptureTarget?.note.id == first)
+    }
+
+    @Test("Fills a new memo's empty row instead of leaving a blank line above")
+    func fillsEmptyRow() throws {
+        let store = store()
+        let noteID = store.addNote()
+        #expect(titles(store, noteID) == [""])
+
+        store.quickCapture("메일 답장")
+        #expect(titles(store, noteID) == ["메일 답장"])
+        store.quickCapture("  장보기  ")
+        #expect(titles(store, noteID) == ["메일 답장", "장보기"])
+
+        #expect(store.quickCapture("   ") == nil)
+        #expect(titles(store, noteID) == ["메일 답장", "장보기"])
+    }
+
+    @Test("One undo takes the captured line back out")
+    func undoesInOneStep() throws {
+        let store = store()
+        let noteID = store.addNote()
+        store.clearEditingHistory()
+        store.quickCapture("메일 답장")
+        #expect(store.undo())
+        #expect(titles(store, noteID) == [""])
+    }
+
+    @Test("Creates a memo when there is none to put it in")
+    func createsMemo() throws {
+        let store = store()
+        for note in store.notes { store.moveNoteToTrash(note.id) }
+        try #require(store.notes.isEmpty)
+        store.quickCapture("메일 답장")
+        #expect(store.notes.count == 1)
+        #expect(store.notes.first?.selectedTab?.items.map(\.title) == ["메일 답장"])
+    }
+}

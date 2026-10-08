@@ -162,6 +162,7 @@ private let englishStrings: [String: String] = [
 
     // MenuBarPanelView
     "새 메모": "New Memo",
+    "마지막으로 쓴 메모의 현재 탭에 들어가요": "Goes into the current tab of the memo you used last",
     "메모 보기": "Show Memos",
     "모든 메모 숨기기": "Hide All Memos",
     "휴지통": "Trash",

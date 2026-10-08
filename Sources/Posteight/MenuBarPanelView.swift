@@ -27,6 +27,9 @@ struct MenuBarPanelView: View {
             } else if store.isStorageBlocked {
                 StorageStatusView()
             } else {
+                QuickCaptureField()
+                Divider()
+                    .padding(.vertical, 4)
                 StorageStatusView()
                 ReminderStatusView()
                 PanelRow(title: L("새 메모"), systemImage: "plus", shortcut: "⌘N") {
@@ -77,6 +80,8 @@ struct MenuBarPanelView: View {
         }
         .padding(8)
         .frame(width: 224)
+        // 빠른 입력이 탭 이름과 적는 글을 보여 주므로, 메모 창과 같은 설정으로 화면 공유에서 감춘다.
+        .excludedFromScreenCapture()
     }
 
     private var header: some View {
@@ -130,6 +135,56 @@ struct MenuBarPanelView: View {
     private func open(windowID: String) {
         openWindow(id: windowID)
         NSApp.activate(ignoringOtherApps: true)
+    }
+}
+
+/// 메모 창을 열지 않고 할 일 한 줄을 넣는다. Enter 뒤에도 팝오버를 닫지 않아서 여러 줄을 연달아
+/// 적을 수 있다. 넣을 자리는 고르지 않고 보여만 준다 — 엉뚱한 탭이면 바로 알아챌 수 있게.
+private struct QuickCaptureField: View {
+    @EnvironmentObject private var store: PosteightStore
+    @ObservedObject private var settings = AppSettings.shared
+    @State private var text = ""
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            TextField(L("할 일 입력"), text: $text)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .focused($isFocused)
+                .onSubmit {
+                    store.quickCapture(text, language: settings.language, origin: NSScreen.noteSpawnOrigin)
+                    text = ""
+                }
+                .padding(.horizontal, 7)
+                .padding(.vertical, 6)
+                .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
+
+            HStack(spacing: 5) {
+                if let target = store.quickCaptureTarget {
+                    Circle()
+                        .fill(Color(hex: target.note.paperHex))
+                        .overlay(Circle().stroke(Color.primary.opacity(0.25), lineWidth: 0.5))
+                        .frame(width: 8, height: 8)
+                    Text("→ " + destination(target.tab))
+                } else {
+                    Text("→ " + L("새 메모"))
+                }
+            }
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .font(.system(size: 10.5, weight: .medium, design: .rounded))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 7)
+            .help(L("마지막으로 쓴 메모의 현재 탭에 들어가요"))
+        }
+        .padding(.horizontal, 2)
+        .onAppear { isFocused = true }
+    }
+
+    private func destination(_ tab: MemoTab) -> String {
+        let title = tab.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return title.isEmpty ? tab.name : tab.name + " · " + title
     }
 }
 
