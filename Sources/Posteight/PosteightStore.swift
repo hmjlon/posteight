@@ -877,6 +877,72 @@ final class PosteightStore: ObservableObject {
             .joined(separator: "\n\n")
     }
 
+    /// 붙여넣은 여러 줄을 항목으로 읽는다. `tabMarkdown` 의 반대이고, 노션·Obsidian·슬랙에서 복사한
+    /// 목록도 같은 모양이다. 줄 앞의 제목(`#`)·글머리(`-` `*` `+` `•` `1.` `1)`)·체크박스 표시를
+    /// 떼고, `[x]` 면 완료로 둔다. 들여쓴 하위 항목은 평평하게 펴고, 글이 남지 않는 줄은 건너뛴다.
+    /// 번호는 세 자리까지만 본다 — "2026. 10. 9 회의" 의 연도를 번호로 떼지 않게.
+    nonisolated static func pastedItems(_ text: String, now: Date = Date()) -> [TodoItem] {
+        text.split(whereSeparator: \.isNewline).compactMap { rawLine in
+            var line = rawLine.trimmingCharacters(in: .whitespaces)
+            if let marker = line.range(of: #"^(#{1,6}|[-*+•]|\d{1,3}[.)])\s+"#, options: .regularExpression) {
+                line.removeSubrange(marker)
+            }
+            var isDone = false
+            if let box = line.range(of: #"^\[[ xX]\]\s*"#, options: .regularExpression) {
+                isDone = line[box].contains { $0 == "x" || $0 == "X" }
+                line.removeSubrange(box)
+            }
+            let title = line.trimmingCharacters(in: .whitespaces)
+            guard !title.isEmpty else { return nil }
+            return TodoItem(title: title, isDone: isDone, completedAt: isDone ? now : nil)
+        }
+    }
+
+    /// 할 일 행에 붙여넣은 글을 목록으로 받는다. 그 행의 제목이 비어 있거나 행 글자를 전부 골라
+    /// 두었으면(`replacingCurrent`) 첫 줄이 그 행이 되고, 나머지는 — 아니면 전부 — 바로 아래에
+    /// 들어간다. 노션처럼 첫 줄을 커서 자리에 이어 붙이지 않는다. 체크리스트에서는 두 항목이 한 행에
+    /// 섞일 뿐이다. 고정 행에 붙여넣으면 고정 묶음 다음에 넣어서 "고정은 맨 위" 를 지키고, 완료 정렬
+    /// 기록은 손으로 옮길 때처럼 버린다. 기록은 한 번만 남긴다.
+    ///
+    /// 한 줄은 `- [ ]` 같은 표시가 있고 행을 통째로 채우는 자리일 때만 받는다. 노션에서 할 일 하나를
+    /// 복사하면 그 한 줄이 오기 때문이다. 글이 있는 행 중간에 넣는 "1) …" 은 그냥 글자다.
+    ///
+    /// 받았으면 커서를 옮길 수 있게 마지막으로 들어간 행을, 받지 않았으면 `nil` 을 돌려준다.
+    @discardableResult
+    func pasteItems(_ text: String, noteID: UUID, tabID: UUID, at itemID: UUID,
+                    replacingCurrent: Bool = false) -> UUID? {
+        var incoming = Self.pastedItems(text)
+        guard !incoming.isEmpty,
+              let current = tab(noteID: noteID, tabID: tabID)?.items.first(where: { $0.id == itemID })
+        else { return nil }
+        let fillsCurrent = replacingCurrent || !current.hasTitle
+        if !text.contains(where: \.isNewline) {
+            let hasMarker = incoming[0].title != text.trimmingCharacters(in: .whitespaces)
+            guard fillsCurrent, hasMarker else { return nil }
+        }
+        var lastID: UUID?
+        let historyBefore = editingSnapshot
+        defer { recordEdit(from: historyBefore, noteID: noteID, tabID: tabID) }
+        _ = updateTab(noteID: noteID, tabID: tabID) { tab in
+            guard let index = tab.items.firstIndex(where: { $0.id == itemID }) else { return }
+            if fillsCurrent {
+                let first = incoming.removeFirst()
+                tab.items[index].title = first.title
+                tab.items[index].isDone = first.isDone
+                tab.items[index].completedAt = first.completedAt
+                lastID = itemID
+            }
+            var insertAt = index + 1
+            if tab.items[index].isPinned, let lastPinned = tab.items.lastIndex(where: \.isPinned) {
+                insertAt = lastPinned + 1
+            }
+            tab.items.insert(contentsOf: incoming, at: insertAt)
+            lastID = incoming.last?.id ?? lastID
+            tab.completionGroupingOriginalOrder = nil
+        }
+        return lastID
+    }
+
     /// Clipboard paths are concealed because the general pasteboard is readable by every
     /// process and syncs through Universal Clipboard, and a clipboard manager (Maccy, Raycast)
     /// files whatever passes through it into a permanent plain-text history.

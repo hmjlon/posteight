@@ -120,6 +120,7 @@ menu-bar-only app.
 - Drag task handles to reorder, or use the context menu to move tasks to another memo. Pin tasks to the top or sort by completion state.
 - Schedule reminders for individual tasks. Notifications require permission in the installed app. They show a short notice instead of the task text unless you turn on **Settings → Reminders → Show task text in notifications**.
 - The export button at the bottom of a memo copies the current tab as Markdown — `- [ ] to do` / `- [x] done`. Paste it into Notion or Obsidian and it becomes checkboxes, completion included.
+- The other way round, pasting a multi-line list into a task row turns each line into a task. Markers like `- [ ]`, `- ` and `1. ` are dropped, and `- [x]` comes in as done. Pasting on an empty row fills it first, and with the row's text selected the paste replaces it. On an empty row even a single line such as `- [ ] groceries` loses its marker. One Command-Z takes the whole paste back.
 - Set the default font and text size in Settings, or pick a different font and size for one memo from its pencil case. Import your own TTF, OTF, or TTC font files.
 
 ### Keyboard shortcuts

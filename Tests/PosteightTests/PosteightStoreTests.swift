@@ -561,3 +561,159 @@ struct QuickCaptureTests {
         #expect(store.notes.first?.selectedTab?.items.map(\.title) == ["메일 답장"])
     }
 }
+
+@Suite("Paste lines")
+@MainActor
+struct PasteLinesTests {
+    private func store() -> PosteightStore {
+        PosteightStore(directory: FileManager.default.temporaryDirectory
+            .appendingPathComponent("posteight-tests-\(UUID().uuidString)", isDirectory: true))
+    }
+
+    private func items(_ store: PosteightStore, _ noteID: UUID) -> [TodoItem] {
+        store.notes.first { $0.id == noteID }?.selectedTab?.items ?? []
+    }
+
+    /// 새 메모 하나와 그 탭에 주어진 제목의 행들. 첫 행은 메모가 들고 태어나는 빈 행을 쓴다.
+    private func memo(_ store: PosteightStore, titles: [String]) throws -> (noteID: UUID, tabID: UUID, ids: [UUID]) {
+        let noteID = store.addNote()
+        let tab = try #require(store.notes.first { $0.id == noteID }?.selectedTab)
+        var ids = [try #require(tab.items.first?.id)]
+        for _ in titles.dropFirst() { ids.append(try #require(store.addItem(to: noteID, tabID: tab.id))) }
+        for (id, title) in zip(ids, titles) {
+            store.updateItemTitle(noteID: noteID, tabID: tab.id, itemID: id, title: title)
+        }
+        return (noteID, tab.id, ids)
+    }
+
+    @Test("Reads checkboxes, bullets, numbers and headings, and skips what has no text")
+    func readsLines() {
+        let text = "# 회의\n- [ ] 장보기\n- [x] 메일 답장\n* [X] 큰 X\n+ [ ] 플러스\n[ ] 글머리 없음\n"
+            + "- 세탁소\n• 슬랙\n1. 번호\n2) 괄호 번호\n    - [ ] 하위 항목\n\n- [ ]\n"
+            + "2026. 10. 9 회의\r\n그냥 줄  "
+        let items = PosteightStore.pastedItems(text)
+        #expect(items.map(\.title) == ["회의", "장보기", "메일 답장", "큰 X", "플러스", "글머리 없음",
+                                       "세탁소", "슬랙", "번호", "괄호 번호", "하위 항목",
+                                       "2026. 10. 9 회의", "그냥 줄"])
+        #expect(items.map(\.isDone) == [false, false, true, true, false, false,
+                                        false, false, false, false, false, false, false])
+        #expect(items.allSatisfy { ($0.completedAt != nil) == $0.isDone })
+    }
+
+    @Test("What the export writes comes back with its completion")
+    func roundTripsTheExport() {
+        let tab = MemoTab(name: "메모 1", title: "오늘 할 일", items: [
+            TodoItem(title: "장보기"), TodoItem(title: "메일 답장", isDone: true)
+        ])
+        let items = PosteightStore.pastedItems(PosteightStore.tabMarkdown(tab))
+        // 제목 줄은 항목 하나가 된다. 새 탭은 늘 날짜가 제목으로 들어 있어 되돌릴 자리가 없다.
+        #expect(items.map(\.title) == ["오늘 할 일", "장보기", "메일 답장"])
+        #expect(items.map(\.isDone) == [false, false, true])
+    }
+
+    @Test("An empty row takes the first line and the rest go right below it")
+    func fillsTheEmptyRow() throws {
+        let store = store()
+        let memo = try memo(store, titles: [""])
+        let lastID = store.pasteItems("- [ ] 장보기\n- [x] 메일 답장", noteID: memo.noteID,
+                                      tabID: memo.tabID, at: memo.ids[0])
+        let items = items(store, memo.noteID)
+        #expect(items.map(\.title) == ["장보기", "메일 답장"])
+        #expect(items.map(\.isDone) == [false, true])
+        #expect(items.first?.id == memo.ids[0])
+        #expect(lastID == items.last?.id)
+    }
+
+    @Test("A row with text stays as it is and the lines go right below it, not at the end")
+    func keepsARowWithText() throws {
+        let store = store()
+        let memo = try memo(store, titles: ["위", "아래"])
+        store.pasteItems("하나\n둘", noteID: memo.noteID, tabID: memo.tabID, at: memo.ids[0])
+        #expect(items(store, memo.noteID).map(\.title) == ["위", "하나", "둘", "아래"])
+    }
+
+    @Test("Pasting on a pinned row lands after the pinned block, unpinned")
+    func keepsPinnedFirst() throws {
+        let store = store()
+        let memo = try memo(store, titles: ["고정 1", "고정 2", "보통"])
+        store.toggleItemPin(noteID: memo.noteID, tabID: memo.tabID, itemID: memo.ids[0])
+        store.toggleItemPin(noteID: memo.noteID, tabID: memo.tabID, itemID: memo.ids[1])
+        store.pasteItems("하나\n둘", noteID: memo.noteID, tabID: memo.tabID, at: memo.ids[0])
+        let items = items(store, memo.noteID)
+        #expect(items.map(\.title) == ["고정 1", "고정 2", "하나", "둘", "보통"])
+        #expect(items.map(\.isPinned) == [true, true, false, false, false])
+    }
+
+    @Test("Drops the completion sort record, the same as moving a row by hand")
+    func dropsTheSortRecord() throws {
+        let store = store()
+        let memo = try memo(store, titles: ["하나", "둘"])
+        // 순서가 실제로 바뀔 때만 정렬 기록이 생긴다.
+        store.toggleItem(noteID: memo.noteID, tabID: memo.tabID, itemID: memo.ids[0])
+        _ = store.toggleItemsByCompletion(noteID: memo.noteID, tabID: memo.tabID)
+        try #require(store.isCompletionGroupingActive(noteID: memo.noteID, tabID: memo.tabID))
+        store.pasteItems("셋\n넷", noteID: memo.noteID, tabID: memo.tabID, at: memo.ids[1])
+        #expect(!store.isCompletionGroupingActive(noteID: memo.noteID, tabID: memo.tabID))
+    }
+
+    @Test("One undo takes the whole paste back, including the filled row")
+    func undoesInOneStep() throws {
+        let store = store()
+        let memo = try memo(store, titles: [""])
+        store.clearEditingHistory()
+        store.pasteItems("하나\n둘\n셋", noteID: memo.noteID, tabID: memo.tabID, at: memo.ids[0])
+        #expect(store.undo())
+        #expect(items(store, memo.noteID).map(\.title) == [""])
+    }
+
+    /// 노션에서 할 일 하나만 복사하면 표시가 붙은 한 줄이 온다.
+    @Test("A single line with a marker fills an empty row, completion included")
+    func singleLineFillsAnEmptyRow() throws {
+        let store = store()
+        let memo = try memo(store, titles: [""])
+        #expect(store.pasteItems("- [x] 메일 답장", noteID: memo.noteID, tabID: memo.tabID, at: memo.ids[0]) == memo.ids[0])
+        #expect(items(store, memo.noteID).map(\.title) == ["메일 답장"])
+        #expect(items(store, memo.noteID).map(\.isDone) == [true])
+    }
+
+    @Test("A single line is plain text on a row that has text, or when it carries no marker")
+    func singleLineIsOtherwiseText() throws {
+        let store = store()
+        let memo = try memo(store, titles: ["위", ""])
+        #expect(store.pasteItems("1) 항목", noteID: memo.noteID, tabID: memo.tabID, at: memo.ids[0]) == nil)
+        #expect(store.pasteItems("장보기", noteID: memo.noteID, tabID: memo.tabID, at: memo.ids[1]) == nil)
+        #expect(items(store, memo.noteID).map(\.title) == ["위", ""])
+    }
+
+    @Test("With the whole row selected, the paste replaces it")
+    func replacesASelectedRow() throws {
+        let store = store()
+        let memo = try memo(store, titles: ["옛 제목", "그대로"])
+        store.pasteItems("- [x] 새 제목", noteID: memo.noteID, tabID: memo.tabID, at: memo.ids[0],
+                         replacingCurrent: true)
+        #expect(items(store, memo.noteID).map(\.title) == ["새 제목", "그대로"])
+        #expect(items(store, memo.noteID).first?.isDone == true)
+        store.pasteItems("하나\n둘", noteID: memo.noteID, tabID: memo.tabID, at: memo.ids[1],
+                         replacingCurrent: true)
+        #expect(items(store, memo.noteID).map(\.title) == ["새 제목", "하나", "둘"])
+    }
+
+    @Test("A row with details but no title is filled, and keeps its details")
+    func keepsDetailsOfAnUntitledRow() throws {
+        let store = store()
+        let memo = try memo(store, titles: [""])
+        store.updateItemDetail(noteID: memo.noteID, tabID: memo.tabID, itemID: memo.ids[0], detail: "세부")
+        store.pasteItems("하나\n둘", noteID: memo.noteID, tabID: memo.tabID, at: memo.ids[0])
+        let items = items(store, memo.noteID)
+        #expect(items.map(\.title) == ["하나", "둘"])
+        #expect(items.first?.detail == "세부")
+    }
+
+    @Test("Blank lines alone change nothing")
+    func ignoresBlankPaste() throws {
+        let store = store()
+        let memo = try memo(store, titles: ["그대로"])
+        #expect(store.pasteItems("\n  \n- [ ]\n", noteID: memo.noteID, tabID: memo.tabID, at: memo.ids[0]) == nil)
+        #expect(items(store, memo.noteID).map(\.title) == ["그대로"])
+    }
+}
