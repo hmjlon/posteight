@@ -653,9 +653,7 @@ final class PosteightStore: ObservableObject {
         var itemID = UUID()
         defer { recordEdit(from: historyBefore, noteID: note.id, tabID: tab.id) }
         _ = updateTab(noteID: note.id, tabID: tab.id) { tab in
-            if let last = tab.items.indices.last,
-               tab.items[last].title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-               (tab.items[last].detail ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if let last = tab.items.indices.last, !tab.items[last].hasContent {
                 tab.items[last].title = title
                 itemID = tab.items[last].id
             } else {
