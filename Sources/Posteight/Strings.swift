@@ -64,7 +64,6 @@ enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
 private let englishStrings: [String: String] = [
     "저장된 메모를 읽지 못했어요. 원본을 보호하기 위해 편집과 저장을 멈췄어요.": "Unable to read saved notes. Editing and saving are paused to protect the original files.",
     "메모를 저장하지 못했어요. 저장 공간과 폴더 권한을 확인한 뒤 다시 시도해 주세요.": "Unable to save notes. Check free disk space and folder permissions, then try again.",
-    "이전 메모를 가져오지 못했어요. 원본은 그대로 있어요. 저장 폴더를 확인한 뒤 다시 시도해 주세요.": "Unable to migrate your previous notes. The originals are unchanged. Check the storage folder and try again.",
     "다시 시도": "Try Again",
     "저장과 백업": "Storage and Backup",
     "최근 백업": "Latest backup",
@@ -159,9 +158,11 @@ private let englishStrings: [String: String] = [
     "남은 일": "Remaining",
     "표시 없음": "None",
     "완료": "Done",
+    "완료 (편집 중 ⌘↩)": "Mark as done (⌘↩ while editing)",
 
     // MenuBarPanelView
     "새 메모": "New Memo",
+    "마지막으로 쓴 메모의 현재 탭에 들어가요": "Goes into the current tab of the memo you used last",
     "메모 보기": "Show Memos",
     "모든 메모 숨기기": "Hide All Memos",
     "휴지통": "Trash",
@@ -178,6 +179,7 @@ private let englishStrings: [String: String] = [
     "형광펜": "Highlighter",
 
     // Models — stickers
+    "기본": "Default",
     "업무": "Work",
     "학업": "Study",
     "회의": "Meeting",
@@ -226,6 +228,9 @@ private let englishStrings: [String: String] = [
     "화면 공유와 스크린샷에서 노트 감추기": "Hide notes from screen sharing and screenshots",
     "켜 두면 화면을 공유하거나 녹화할 때, 스크린샷을 찍을 때 노트가 찍히지 않습니다.":
         "With this on, notes stay out of screen shares, recordings and screenshots.",
+    "⌃⌥⌘H 로 모든 노트 숨기기와 되돌리기": "Hide and bring back all notes with ⌃⌥⌘H",
+    "다른 앱을 쓰는 중에도 동작합니다. 다른 앱이 같은 단축키를 쓰고 있으면 끄세요.":
+        "Works while you are in another app. Turn this off if another app uses the same shortcut.",
     "삭제한 항목은 %d일이 지나면 자동으로 사라집니다": "Deleted items disappear on their own after %d days",
     "알림": "Reminders",
     "알림 본문에 할 일 내용 표시": "Show task text in notifications",
@@ -249,6 +254,7 @@ private let englishStrings: [String: String] = [
     "할 일 추가": "Add item",
     "미완료 항목을 위로 정리": "Move unfinished items to the top",
     "정렬 이전 순서로 되돌리기": "Restore the order from before sorting",
+    "Markdown으로 복사 — 노션에 붙여넣으면 체크박스로 들어가요": "Copy as Markdown — pastes into Notion as checkboxes",
     "가로 크기 조절": "Resize width",
     "세로 크기 조절": "Resize height",
     "대각선 크기 조절": "Resize",
@@ -264,7 +270,7 @@ private let englishStrings: [String: String] = [
     "닫기 — 메모는 그대로 있어요": "Close — the memo stays",
 
     // TodoItemRow
-    "완료 취소": "Undo",
+    "완료 취소 (편집 중 ⌘↩)": "Mark as not done (⌘↩ while editing)",
     "할 일을 입력하면 완료할 수 있어요": "Type something first, then you can check it off",
     "할 일 입력": "New item",
     "상단에 고정": "Pin to top",

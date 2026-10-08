@@ -7,6 +7,8 @@ final class PosteightStore: ObservableObject {
     // Presentation state is shared across note windows and never persisted.
     @Published var presentedDetailItemID: UUID?
     @Published var searchFocusRequest: SearchFocusRequest?
+    /// 마지막으로 앞에 있던 메모. 메뉴 막대 빠른 입력이 여기에 넣는다. 다시 실행하면 비어 있다.
+    @Published var lastActiveNoteID: UUID?
 
     func finishSearchFocus(_ id: UUID) {
         if searchFocusRequest?.id == id { searchFocusRequest = nil }
@@ -143,110 +145,9 @@ final class PosteightStore: ObservableObject {
         return UserDefaults(suiteName: "com.younjiyoung.posteight") ?? .standard
     }
 
-    static private(set) var migrationIsBlocked = false
-
-    static let storeDirectory: URL = {
-        let directory = FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Posteight", isDirectory: true)
-        // Both this store and NoteFontLibrary derive their paths from here, and either can be
-        // built first. Migrating inside this one-time initialiser is what guarantees neither
-        // reaches the container before an older install's files have been copied into it — a
-        // font library that got there first would write an empty manifest and the notes
-        // migration would then see a populated container and skip.
-        if let legacy = legacyStoreDirectory, legacy != directory {
-            do { try prepareMigration(from: legacy, to: directory) }
-            catch { migrationIsBlocked = true }
-        }
-        return directory
-    }()
-
-    /// Where the store lived before the app was sandboxed. Under the sandbox `NSHomeDirectory()`
-    /// is the container, so the real home has to come from the password database.
-    nonisolated static var legacyStoreDirectory: URL? {
-        guard let entry = getpwuid(getuid()), let home = entry.pointee.pw_dir else { return nil }
-        return URL(fileURLWithPath: String(cString: home), isDirectory: true)
-            .appendingPathComponent("Library/Application Support/Posteight", isDirectory: true)
-    }
-
-    nonisolated static let migratedItems = ["notes.json", "trash.json", "trashed-tabs.json", "Fonts"]
-
-    /// Turning on the sandbox moves Application Support into the container. macOS migrates the
-    /// old location automatically only when it is named after the bundle id, and this app's
-    /// folder is `Posteight` rather than `com.younjiyoung.posteight`, so nothing is moved for us
-    /// and an upgrade would look exactly like every note being thrown away.
-    ///
-    /// Copies, never moves: leaving the originals in place keeps a way back if this release has
-    /// to be rolled back. Runs once — anything already in the container means this has either
-    /// run before or the install started life there, and in both cases the container wins.
-    /// A marker survives interrupted copies. Archive partial files and retry from the untouched
-    /// source rather than mistaking their existence for a completed migration.
-    nonisolated static let migrationMarker = ".migration-in-progress"
-
-    nonisolated static func prepareMigration(from source: URL, to destination: URL) throws {
-        let manager = FileManager.default
-        let marker = destination.appendingPathComponent(migrationMarker)
-        if manager.fileExists(atPath: marker.path) {
-            // A terminated copy may have left an incomplete file or Fonts directory. Keep those
-            // bytes for inspection, then retry from the untouched source instead of adopting them.
-            let sourceItems = try manager.contentsOfDirectory(atPath: source.path)
-            guard migratedItems.contains(where: sourceItems.contains) else { throw StorageFailure.migration }
-            let archive = destination.appendingPathComponent("InterruptedMigration-" + UUID().uuidString)
-            try manager.createDirectory(at: archive, withIntermediateDirectories: true,
-                                        attributes: [.posixPermissions: 0o700])
-            for item in migratedItems {
-                let partial = destination.appendingPathComponent(item)
-                if manager.fileExists(atPath: partial.path) {
-                    try manager.moveItem(at: partial, to: archive.appendingPathComponent(item))
-                }
-            }
-            narrowPermissions(of: archive)
-            try manager.removeItem(at: marker)
-        }
-        if migratedItems.contains(where: {
-            manager.fileExists(atPath: destination.appendingPathComponent($0).path)
-        }) { return }
-        let contents: [String]
-        do { contents = try manager.contentsOfDirectory(atPath: source.path) }
-        catch let error as CocoaError where error.code == .fileReadNoSuchFile { return }
-        guard migratedItems.contains(where: contents.contains) else { return }
-        guard migrateStore(from: source, to: destination) else { throw StorageFailure.migration }
-    }
-
-    @discardableResult
-    nonisolated static func migrateStore(from source: URL, to destination: URL) -> Bool {
-        let manager = FileManager.default
-        let marker = destination.appendingPathComponent(migrationMarker)
-        guard !manager.fileExists(atPath: marker.path),
-              manager.fileExists(atPath: source.path),
-              !migratedItems.contains(where: {
-                  manager.fileExists(atPath: destination.appendingPathComponent($0).path)
-              }) else { return false }
-        var attempted: [URL] = []
-        do {
-            try manager.createDirectory(at: destination, withIntermediateDirectories: true,
-                                        attributes: [.posixPermissions: 0o700])
-            try Data().write(to: marker, options: .atomic)
-            for item in migratedItems where manager.fileExists(atPath: source.appendingPathComponent(item).path) {
-                let target = destination.appendingPathComponent(item)
-                // Include an incomplete directory copy in rollback, too.
-                attempted.append(target)
-                try manager.copyItem(at: source.appendingPathComponent(item), to: target)
-            }
-            narrowPermissions(of: destination)
-            try manager.removeItem(at: marker)
-            return !attempted.isEmpty
-        } catch {
-            NSLog("Posteight: migration failed: \(error)")
-            var rolledBack = true
-            for target in attempted where manager.fileExists(atPath: target.path) {
-                do { try manager.removeItem(at: target) }
-                catch { rolledBack = false }
-            }
-            if rolledBack { try? manager.removeItem(at: marker) }
-            return false
-        }
-    }
+    static let storeDirectory = FileManager.default
+        .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("Posteight", isDirectory: true)
 
     /// `0700` for directories, `0600` for files, all the way down.
     private nonisolated static func narrowPermissions(of directory: URL) {
@@ -341,8 +242,6 @@ final class PosteightStore: ObservableObject {
     private var isLoading = false
     private var needsSessionBackup = false
     private var loadedSnapshot: StoreBackup?
-    private let migrationSource: URL?
-    private let usesDefaultDirectory: Bool
     private var backupURL: URL { directory.appendingPathComponent("backup.json") }
     private var pendingRestoreURL: URL { directory.appendingPathComponent("pending-restore.json") }
 
@@ -352,13 +251,9 @@ final class PosteightStore: ObservableObject {
     /// has to be filled in. It defaults to the source language so tests do not depend on the
     /// language of the machine running them.
     /// `defaults` 도 테스트만 넘긴다. 위치 기준 이전 표시가 실제 앱의 도메인에 남지 않게 한다.
-    init(directory: URL? = nil, language: AppLanguage = .korean, legacyDirectory: URL? = nil,
-         defaults: UserDefaults? = nil) {
+    init(directory: URL? = nil, language: AppLanguage = .korean, defaults: UserDefaults? = nil) {
         self.defaults = defaults ?? Self.appDefaults
-        let resolvedDirectory = directory ?? Self.storeDirectory
-        self.usesDefaultDirectory = directory == nil
-        self.migrationSource = directory == nil ? Self.legacyStoreDirectory : legacyDirectory
-        let directory = resolvedDirectory
+        let directory = directory ?? Self.storeDirectory
         self.directory = directory
         self.loadLanguage = language
         self.notesURL = directory.appendingPathComponent("notes.json")
@@ -408,6 +303,15 @@ final class PosteightStore: ObservableObject {
 
     @discardableResult
     func addNote(language: AppLanguage = .korean, origin: NotePoint = NotePoint(x: 0, y: 0)) -> UUID {
+        let historyBefore = editingSnapshot
+        let noteID = appendNote(language: language, origin: origin)
+        recordEdit(from: historyBefore, noteID: noteID)
+        return noteID
+    }
+
+    /// 기록은 부르는 쪽이 남긴다. 빠른 입력은 메모를 만든 것과 할 일을 넣은 것을 한 기록으로 묶는다.
+    @discardableResult
+    private func appendNote(language: AppLanguage, origin: NotePoint) -> UUID {
         let position = nextNotePosition(origin: origin)
         let note = StickyNote(
             stickerSymbol: "tag",
@@ -422,9 +326,9 @@ final class PosteightStore: ObservableObject {
                 )
             ]
         )
-        let historyBefore = editingSnapshot
         notes.append(note)
-        recordEdit(from: historyBefore, noteID: note.id)
+        // 새 창이 key 가 되는 알림은 창이 자리를 잡기 전에 지나갈 수 있다. 방금 만든 메모가 지금 쓰는 메모다.
+        lastActiveNoteID = note.id
         return note.id
     }
 
@@ -529,6 +433,30 @@ final class PosteightStore: ObservableObject {
         notes = merged
         flush()
         return true
+    }
+
+    /// Move the existing tab into its own note, preserving item identities and reminders.
+    @discardableResult
+    func detachTab(noteID: UUID, tabID: UUID, position: NotePoint) -> UUID? {
+        guard !isStorageBlocked,
+              let index = notes.firstIndex(where: { $0.id == noteID }),
+              notes[index].tabs.count > 1,
+              let tabIndex = notes[index].tabs.firstIndex(where: { $0.id == tabID }) else { return nil }
+        let historyBefore = editingSnapshot
+        defer { recordEdit(from: historyBefore, noteID: noteID) }
+        var updated = notes
+        var detached = updated[index]
+        detached.id = UUID()
+        detached.tabs = [updated[index].tabs.remove(at: tabIndex)]
+        detached.selectedTabID = tabID
+        detached.position = position
+        if updated[index].selectedTabID == tabID {
+            updated[index].selectedTabID = updated[index].tabs[min(tabIndex, updated[index].tabs.count - 1)].id
+        }
+        updated.append(detached)
+        notes = updated
+        flush()
+        return detached.id
     }
 
     func selectTab(noteID: UUID, tabID: UUID) {
@@ -699,6 +627,40 @@ final class PosteightStore: ObservableObject {
             tab.items.append(TodoItem(id: itemID, title: ""))
         }
         return didAdd ? itemID : nil
+    }
+
+    /// 메뉴 막대 빠른 입력이 넣을 자리. 마지막으로 앞에 있던 메모의 현재 탭이고, 그 메모를 모르면
+    /// — 막 실행했거나 휴지통으로 갔으면 — 첫 메모다. 사용자가 고르게 하지 않는다.
+    var quickCaptureTarget: (note: StickyNote, tab: MemoTab)? {
+        guard let note = notes.first(where: { $0.id == lastActiveNoteID }) ?? notes.first,
+              let tab = note.selectedTab else { return nil }
+        return (note, tab)
+    }
+
+    /// 메모 창을 열지 않고 할 일 한 줄을 넣는다. 메모가 하나도 없으면 새로 만든다. 탭 끝의 빈 행은
+    /// 새 메모가 처음부터 들고 있는 자리라 그 행을 채운다 — 그 아래에 붙이면 빈 줄이 위에 남는다.
+    /// 실행 취소 한 번에 통째로 되돌아가도록 기록도 한 번만 남긴다.
+    @discardableResult
+    func quickCapture(_ title: String, language: AppLanguage = .korean,
+                      origin: NotePoint = NotePoint(x: 0, y: 0)) -> UUID? {
+        let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return nil }
+        // 새 메모를 만든 것까지 이 기록 하나에 들어간다. `addNote` 를 거치면 기록이 둘이라 ⌘Z 한 번에
+        // 빈 메모가 남는다.
+        let historyBefore = editingSnapshot
+        if quickCaptureTarget == nil { appendNote(language: language, origin: origin) }
+        guard let (note, tab) = quickCaptureTarget else { return nil }
+        var itemID = UUID()
+        defer { recordEdit(from: historyBefore, noteID: note.id, tabID: tab.id) }
+        _ = updateTab(noteID: note.id, tabID: tab.id) { tab in
+            if let last = tab.items.indices.last, !tab.items[last].hasContent {
+                tab.items[last].title = title
+                itemID = tab.items[last].id
+            } else {
+                tab.items.append(TodoItem(id: itemID, title: title))
+            }
+        }
+        return itemID
     }
 
     func updateItemTitle(noteID: UUID, tabID: UUID, itemID: UUID, title: String) {
@@ -896,9 +858,101 @@ final class PosteightStore: ObservableObject {
     }
 
     nonisolated static func tabPlainText(_ tab: MemoTab) -> String {
-        ([tab.title] + tab.items.map(\.title))
+        let title = tab.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? nil
+            : tab.title
+        let items = tab.items
+            .map(\.title)
             .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-            .joined(separator: "\n")
+            .map { "- \($0)" }
+
+        return [title, items.isEmpty ? nil : items.joined(separator: "\n\n")]
+            .compactMap { $0 }
+            .joined(separator: "\n\n")
+    }
+
+    /// 내보내기용. 노션과 Obsidian 은 붙여넣은 `- [ ]` / `- [x]` 를 체크박스로 바꾸므로, 완료 상태가
+    /// 그대로 따라간다. ⌘C 의 `tabPlainText` 는 아무 데나 붙이는 글이라 따로 둔다.
+    nonisolated static func tabMarkdown(_ tab: MemoTab) -> String {
+        let title = tab.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let items = tab.items
+            .filter { !$0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .map { "- [\($0.isDone ? "x" : " ")] \($0.title)" }
+
+        return [title.isEmpty ? nil : title, items.isEmpty ? nil : items.joined(separator: "\n")]
+            .compactMap { $0 }
+            .joined(separator: "\n\n")
+    }
+
+    /// 붙여넣은 여러 줄을 항목으로 읽는다. `tabMarkdown` 의 반대이고, 노션·Obsidian·슬랙에서 복사한
+    /// 목록도 같은 모양이다. 줄 앞의 제목(`#`)·글머리(`-` `*` `+` `•` `1.` `1)`)·체크박스 표시를
+    /// 떼고, `[x]` 면 완료로 둔다. 들여쓴 하위 항목은 평평하게 펴고, 글이 남지 않는 줄은 건너뛴다.
+    /// 번호는 세 자리까지만 본다 — "2026. 10. 9 회의" 의 연도를 번호로 떼지 않게. 같은 이유로
+    /// "10. 9 치과" 처럼 `.` 뒤에 숫자 한두 자리가 따로 서 있으면 번호가 아니라 월·일로 본다.
+    /// "1. 10분 운동" 은 숫자 뒤에 글자가 붙어 있어 번호다. "1. 2 eggs" 는 날짜로 읽혀 그대로 남는데,
+    /// 번호 하나를 덜 떼는 쪽이 날짜의 월을 지우는 쪽보다 낫다.
+    nonisolated static func pastedItems(_ text: String, now: Date = Date()) -> [TodoItem] {
+        text.split(whereSeparator: \.isNewline).compactMap { rawLine in
+            var line = rawLine.trimmingCharacters(in: .whitespaces)
+            if let marker = line.range(of: #"^(#{1,6}|[-*+•]|\d{1,3}\)|\d{1,3}\.(?!\s+\d{1,2}\.?(\s|$)))\s+"#,
+                                       options: .regularExpression) {
+                line.removeSubrange(marker)
+            }
+            var isDone = false
+            if let box = line.range(of: #"^\[[ xX]\]\s*"#, options: .regularExpression) {
+                isDone = line[box].contains { $0 == "x" || $0 == "X" }
+                line.removeSubrange(box)
+            }
+            let title = line.trimmingCharacters(in: .whitespaces)
+            guard !title.isEmpty else { return nil }
+            return TodoItem(title: title, isDone: isDone, completedAt: isDone ? now : nil)
+        }
+    }
+
+    /// 할 일 행에 붙여넣은 글을 목록으로 받는다. 그 행의 제목이 비어 있거나 행 글자를 전부 골라
+    /// 두었으면(`replacingCurrent`) 첫 줄이 그 행이 되고, 나머지는 — 아니면 전부 — 바로 아래에
+    /// 들어간다. 노션처럼 첫 줄을 커서 자리에 이어 붙이지 않는다. 체크리스트에서는 두 항목이 한 행에
+    /// 섞일 뿐이다. 고정 행에 붙여넣으면 고정 묶음 다음에 넣어서 "고정은 맨 위" 를 지키고, 완료 정렬
+    /// 기록은 손으로 옮길 때처럼 버린다. 기록은 한 번만 남긴다.
+    ///
+    /// 한 줄은 `- [ ]` 같은 표시가 있고 행을 통째로 채우는 자리일 때만 받는다. 노션에서 할 일 하나를
+    /// 복사하면 그 한 줄이 오기 때문이다. 글이 있는 행 중간에 넣는 "1) …" 은 그냥 글자다. 줄바꿈이
+    /// 있는지가 아니라 글이 있는 줄 수로 센다 — 줄을 세 번 클릭해 복사하면 끝에 줄바꿈이 따라온다.
+    ///
+    /// 받았으면 커서를 옮길 수 있게 마지막으로 들어간 행을, 받지 않았으면 `nil` 을 돌려준다.
+    @discardableResult
+    func pasteItems(_ text: String, noteID: UUID, tabID: UUID, at itemID: UUID,
+                    replacingCurrent: Bool = false) -> UUID? {
+        var incoming = Self.pastedItems(text)
+        guard !incoming.isEmpty,
+              let current = tab(noteID: noteID, tabID: tabID)?.items.first(where: { $0.id == itemID })
+        else { return nil }
+        let fillsCurrent = replacingCurrent || !current.hasTitle
+        if incoming.count == 1 {
+            let hasMarker = incoming[0].title != text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard fillsCurrent, hasMarker else { return nil }
+        }
+        var lastID: UUID?
+        let historyBefore = editingSnapshot
+        defer { recordEdit(from: historyBefore, noteID: noteID, tabID: tabID) }
+        _ = updateTab(noteID: noteID, tabID: tabID) { tab in
+            guard let index = tab.items.firstIndex(where: { $0.id == itemID }) else { return }
+            if fillsCurrent {
+                let first = incoming.removeFirst()
+                tab.items[index].title = first.title
+                tab.items[index].isDone = first.isDone
+                tab.items[index].completedAt = first.completedAt
+                lastID = itemID
+            }
+            var insertAt = index + 1
+            if tab.items[index].isPinned, let lastPinned = tab.items.lastIndex(where: \.isPinned) {
+                insertAt = lastPinned + 1
+            }
+            tab.items.insert(contentsOf: incoming, at: insertAt)
+            lastID = incoming.last?.id ?? lastID
+            tab.completionGroupingOriginalOrder = nil
+        }
+        return lastID
     }
 
     /// Clipboard paths are concealed because the general pasteboard is readable by every
@@ -909,10 +963,11 @@ final class PosteightStore: ObservableObject {
     func copyTabToClipboard(
         noteID: UUID,
         tabID: UUID,
+        markdown: Bool = false,
         to pasteboard: NSPasteboard = .general
     ) {
         guard let tab = tab(noteID: noteID, tabID: tabID) else { return }
-        writeConcealed(Self.tabPlainText(tab), to: pasteboard)
+        writeConcealed(markdown ? Self.tabMarkdown(tab) : Self.tabPlainText(tab), to: pasteboard)
     }
 
     private func writeConcealed(_ text: String, to pasteboard: NSPasteboard) {
@@ -966,11 +1021,6 @@ final class PosteightStore: ObservableObject {
         isLoading = true
         defer { isLoading = false }
         do {
-            if let migrationSource, migrationSource != directory {
-                do { try Self.prepareMigration(from: migrationSource, to: directory) }
-                catch { throw StorageFailure.migration }
-            }
-            if usesDefaultDirectory { Self.migrationIsBlocked = false }
             try finishPendingRestore()
             let loadedNotes: [StickyNote]? = try read(notesURL, key: storageKey, legacy: legacyStorageKey)
             let loadedTrash: [TrashedStickyNote]? = try read(trashURL, key: trashStorageKey, legacy: legacyTrashStorageKey)
@@ -1120,7 +1170,6 @@ final class PosteightStore: ObservableObject {
     /// Validate before touching the live store. Preserve the original bytes, including corrupt
     /// files, before replacing anything. A failed restore leaves backup.json available for retry.
     func restoreBackup() throws {
-        guard storageError != .migration else { throw StorageFailure.migration }
         let snapshot = try JSONDecoder().decode(StoreBackup.self, from: Data(contentsOf: backupURL))
         try snapshot.validate()
         // 아직 디스크에 없는 편집 — 디바운스에 걸렸거나 직전 저장이 실패한 것 — 을 먼저 쓴다.

@@ -425,6 +425,7 @@ enum DesignTokens {
     ]
 
     static let stickers: [StickerOption] = [
+        StickerOption(koreanTitle: "기본", symbol: "tag"),
         StickerOption(koreanTitle: "업무", symbol: "briefcase"),
         StickerOption(koreanTitle: "학업", symbol: "book"),
         StickerOption(koreanTitle: "회의", symbol: "person.2"),

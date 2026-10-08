@@ -1,25 +1,24 @@
 import AppKit
 import SwiftUI
 
+/// 자리를 적는 일은 여기서 하지 않는다. 창이 움직일 때마다 메모 창이 직접 적는다
+/// (`NoteWindowConfigurator.Coordinator.observeMoves`). 이 손잡이는 탭이 하나일 때만 있어서, 여기에
+/// 맡기면 탭이 둘 이상인 메모의 자리가 적히지 않는다.
 struct WindowMoveHandle: NSViewRepresentable {
-    let onDragEnded: () -> Void
-    var onDragCompleted: (() -> Void)? = nil
+    let onDragCompleted: () -> Void
 
     func makeNSView(context: Context) -> NativeWindowDragView {
         let view = NativeWindowDragView()
-        view.onDragEnded = onDragEnded
         view.onDragCompleted = onDragCompleted
         return view
     }
 
     func updateNSView(_ nsView: NativeWindowDragView, context: Context) {
-        nsView.onDragEnded = onDragEnded
         nsView.onDragCompleted = onDragCompleted
     }
 }
 
 final class NativeWindowDragView: NSView {
-    var onDragEnded: (() -> Void)?
     var onDragCompleted: (() -> Void)?
 
     override func mouseDown(with event: NSEvent) {
@@ -34,28 +33,7 @@ final class NativeWindowDragView: NSView {
         false
     }
 
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        NotificationCenter.default.removeObserver(
-            self,
-            name: NSWindow.didMoveNotification,
-            object: nil
-        )
-
-        guard let window else { return }
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(windowDidMove),
-            name: NSWindow.didMoveNotification,
-            object: window
-        )
-    }
-
     override func resetCursorRects() {
         addCursorRect(bounds, cursor: .openHand)
-    }
-
-    @objc private func windowDidMove() {
-        onDragEnded?()
     }
 }

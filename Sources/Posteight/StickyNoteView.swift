@@ -16,6 +16,7 @@ struct StickyNoteView: View {
     @State private var focusedItemID: UUID?
     @State private var preparedSearchID: UUID?
     @State private var resizeAnchor: CGPoint?
+    @State private var didExport = false
 
     private var searchRequest: SearchFocusRequest? {
         guard let request = store.searchFocusRequest,
@@ -146,6 +147,27 @@ struct StickyNoteView: View {
                     ? L("정렬 이전 순서로 되돌리기") : L("미완료 항목을 위로 정리"))
                 .accessibilityLabel(store.isCompletionGroupingActive(noteID: note.id, tabID: tab.id)
                     ? L("정렬 이전 순서로 되돌리기") : L("미완료 항목을 위로 정리"))
+
+                Button {
+                    store.copyTabToClipboard(noteID: note.id, tabID: tab.id, markdown: true)
+                    didExport = true
+                } label: {
+                    Image(systemName: didExport ? "checkmark" : "square.and.arrow.up")
+                        .symbolRenderingMode(.monochrome)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.black.opacity(0.52))
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(L("Markdown으로 복사 — 노션에 붙여넣으면 체크박스로 들어가요"))
+                .accessibilityLabel(L("Markdown으로 복사 — 노션에 붙여넣으면 체크박스로 들어가요"))
+                // 복사는 눈에 보이는 변화가 없어서, 잠깐 체크 표시로 됐다는 걸 알린다.
+                .task(id: didExport) {
+                    guard didExport else { return }
+                    try? await Task.sleep(for: .seconds(1.2))
+                    didExport = false
+                }
 
                 Spacer()
                 Button(action: onDelete) {

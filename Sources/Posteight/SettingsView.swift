@@ -73,6 +73,11 @@ struct SettingsView: View {
                 Text(L("켜 두면 화면을 공유하거나 녹화할 때, 스크린샷을 찍을 때 노트가 찍히지 않습니다."))
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
+
+                Toggle(L("⌃⌥⌘H 로 모든 노트 숨기기와 되돌리기"), isOn: $settings.usesGlobalHideShortcut)
+                Text(L("다른 앱을 쓰는 중에도 동작합니다. 다른 앱이 같은 단축키를 쓰고 있으면 끄세요."))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
             }
 
             Section(L("알림")) {
@@ -93,7 +98,6 @@ struct SettingsView: View {
             AppLockSettingsSection()
 
             FontSettingsSection()
-                .disabled(store.storageError == .migration)
 
             StorageRecoverySection()
 

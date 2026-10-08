@@ -58,7 +58,7 @@ struct TodoItemRow: View {
             .buttonStyle(.plain)
             .disabled(!hasContent)
             .opacity(hasContent ? 1 : 0.28)
-            .help(hasContent ? (item.isDone ? L("완료 취소") : L("완료")) : L("할 일을 입력하면 완료할 수 있어요"))
+            .help(hasContent ? (item.isDone ? L("완료 취소 (편집 중 ⌘↩)") : L("완료 (편집 중 ⌘↩)")) : L("할 일을 입력하면 완료할 수 있어요"))
 
             ZStack(alignment: .leading) {
                 PlainEditableTextField(
@@ -100,6 +100,13 @@ struct TodoItemRow: View {
                         ) else { return false }
                         focusedItemID = previousID
                         return true
+                    },
+                    onCommandReturn: toggleDone,
+                    onPaste: { text, replacesAll in
+                        let lastID = store.pasteItems(text, noteID: note.id, tabID: tab.id, at: item.id,
+                                                      replacingCurrent: replacesAll)
+                        if let lastID { focusedItemID = lastID }
+                        return lastID != nil
                     }
                 )
                 .frame(height: 26 + max(0, fontSizeAdjustment))

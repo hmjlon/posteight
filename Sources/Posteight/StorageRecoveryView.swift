@@ -11,12 +11,8 @@ struct StorageStatusView: View {
                     .font(.caption)
                     .foregroundStyle(.red)
                 Button(L("다시 시도")) {
-                    let wasMigration = store.storageError == .migration
                     if store.isStorageBlocked { store.retryLoading() }
                     else { store.flush() }
-                    if wasMigration && !store.isStorageBlocked {
-                        NoteFontLibrary.shared.reloadAfterMigration()
-                    }
                 }
             }
             .padding(8)
@@ -45,7 +41,7 @@ struct StorageRecoverySection: View {
                 }
                 .disabled(store.isStorageBlocked)
                 Button(L("백업 복원…")) { confirmsRestore = true }
-                    .disabled(store.backupDate == nil || store.storageError == .migration)
+                    .disabled(store.backupDate == nil)
             }
             Text(L("앱을 연 뒤 첫 저장 전에 이전 메모를 자동 백업해요. 직접 백업하면 기존 백업을 교체해요. 메모와 휴지통만 포함하며, 설정과 폰트 파일은 포함하지 않아요."))
                 .font(.caption).foregroundStyle(.secondary)

@@ -42,45 +42,6 @@ struct StorageRecoveryTests {
         #expect(try Data(contentsOf: root.appendingPathComponent("trashed-tabs.json")) == corrupt)
     }
 
-    @Test("Failed migration remains retryable after the app loads and flushes")
-    func failedMigrationThenRetry() throws {
-        let root = directory()
-        defer { try? FileManager.default.removeItem(at: root) }
-        let legacy = root.appendingPathComponent("legacy")
-        let destination = root.appendingPathComponent("container")
-        let old = PosteightStore(directory: legacy)
-        let id = old.addNote()
-        old.flush()
-        let trash = legacy.appendingPathComponent("trash.json")
-        try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: trash.path)
-        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: trash.path) }
-        let store = PosteightStore(directory: destination, legacyDirectory: legacy)
-        #expect(store.storageError == .migration)
-        #expect(store.isStorageBlocked)
-        store.flush()
-        for name in PosteightStore.migratedItems {
-            #expect(!FileManager.default.fileExists(atPath: destination.appendingPathComponent(name).path))
-        }
-        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: trash.path)
-        store.retryLoading()
-        #expect(!store.isStorageBlocked)
-        #expect(store.notes.contains { $0.id == id })
-        store.flush()
-        #expect(PosteightStore(directory: destination).notes.contains { $0.id == id })
-    }
-
-    @Test("Interrupted migration marker takes precedence over partially copied data")
-    func interruptedMigration() throws {
-        let root = directory()
-        defer { try? FileManager.default.removeItem(at: root) }
-        let store = PosteightStore(directory: root)
-        store.flush()
-        try Data().write(to: root.appendingPathComponent(PosteightStore.migrationMarker))
-        let blocked = PosteightStore(directory: root, legacyDirectory: root.appendingPathComponent("legacy"))
-        #expect(blocked.storageError == .migration)
-        #expect(blocked.isStorageBlocked)
-    }
-
     @Test("Save errors are visible and retry keeps edits in memory")
     func failedSave() throws {
         let root = directory()
@@ -338,38 +299,4 @@ struct StorageRecoveryTests {
         try store.restoreBackup()
         #expect(store.notes.contains { $0.id == id })
     }
-
-    @Test("A new installation with no legacy folder can save normally")
-    func noLegacyFolder() {
-        let root = directory()
-        defer { try? FileManager.default.removeItem(at: root) }
-        let store = PosteightStore(directory: root.appendingPathComponent("container"),
-                                  legacyDirectory: root.appendingPathComponent("missing"))
-        #expect(!store.isStorageBlocked)
-        store.flush()
-        #expect(store.storageError == nil)
-    }
-
-    @Test("Interrupted migration preserves partial bytes and retries from the original")
-    func resumeMigration() throws {
-        let root = directory()
-        defer { try? FileManager.default.removeItem(at: root) }
-        let legacy = root.appendingPathComponent("legacy")
-        let destination = root.appendingPathComponent("container")
-        let original = PosteightStore(directory: legacy)
-        let id = original.addNote()
-        original.flush()
-        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
-        let partial = Data("incomplete copy".utf8)
-        try partial.write(to: destination.appendingPathComponent("notes.json"))
-        try Data().write(to: destination.appendingPathComponent(PosteightStore.migrationMarker))
-        let store = PosteightStore(directory: destination, legacyDirectory: legacy)
-        #expect(!store.isStorageBlocked)
-        #expect(store.notes.contains { $0.id == id })
-        let archive = try #require(FileManager.default.contentsOfDirectory(at: destination, includingPropertiesForKeys: nil)
-            .first { $0.lastPathComponent.hasPrefix("InterruptedMigration-") })
-        #expect(try Data(contentsOf: archive.appendingPathComponent("notes.json")) == partial)
-        store.flush()
-    }
-
 }

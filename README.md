@@ -2,14 +2,23 @@
 
 **Private sticky notes for your Mac — visible on your terms.**
 
-[![Latest release](https://img.shields.io/github/v/release/hmjlon/posteight?label=download)](https://github.com/hmjlon/posteight/releases/latest)
+[![Latest release](https://badgen.net/github/release/hmjlon/posteight/latest?label=download&color=ea7233)](https://github.com/hmjlon/posteight/releases/latest)
+
+[![Explore the Posteight website — private sticky notes for your Mac](docs/images/posteight-website.jpg)](https://posteight.jiyoung110077.chatgpt.site/)
+
+**[Explore the website →](https://posteight.jiyoung110077.chatgpt.site/)**
 
 Posteight keeps today's checklist out on the desktop, in small independent windows you can
 put where the work actually happens — and hide when someone walks over.
 
 English · [한국어](README.ko.md)
 
+<details>
+<summary>See Posteight on the desktop</summary>
+
 ![Posteight notes floating on the macOS desktop](docs/images/posteight-desktop-en.jpg)
+
+</details>
 
 ## Install
 
@@ -24,10 +33,12 @@ English · [한국어](README.ko.md)
 ### Homebrew
 
 ```bash
-brew install --cask hmjlon/tap/posteight
+brew install --cask hmjlon/tap/posteight && xattr -dr com.apple.quarantine /Applications/Posteight.app
 ```
 
-`brew upgrade` picks up later versions from the same tap.
+The second half is what lets the app open at all — see [First launch](#first-launch).
+`brew upgrade` picks up later versions from the same tap, and needs that same `xattr` line
+again each time.
 
 ### Download
 
@@ -36,22 +47,29 @@ open it, and drag **Posteight** to **Applications**.
 
 ### First launch
 
-Posteight is not notarized by Apple yet, so macOS blocks it the first time it runs —
-whichever way you installed it.
-
-1. Open Posteight. macOS shows a warning and refuses to launch it.
-2. Open **System Settings → Privacy & Security**.
-3. Scroll down and click **Open Anyway**.
-
-The same thing from a terminal:
+Posteight is not notarized by Apple yet. Both installs mark the app as quarantined, and
+macOS blocks a quarantined app that it cannot verify. Clearing that flag is the shortest
+way through — run this before opening Posteight for the first time:
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/Posteight.app
 ```
 
-It comes back on every update, including `brew upgrade`. Posteight is signed ad-hoc, so its
-signature changes with each build and Homebrew cannot tell the new version is the same app
-you already approved.
+**Without a terminal**, go through System Settings instead. The steps have to follow each
+other:
+
+1. Open Posteight. macOS shows a warning and refuses to launch it.
+2. **Right away**, open **System Settings → Privacy & Security** and scroll down to Security.
+3. Click **Open Anyway** and authenticate.
+
+Apple shows that button for about an hour after the blocked launch, and not before it. If
+it is not there, open Posteight once more and go straight back to Privacy & Security.
+Control-clicking the app and choosing **Open** is not a way around this either — macOS 15
+removed that shortcut.
+
+Either way, it comes back on every update, including `brew upgrade`. Posteight is signed
+ad-hoc, so its signature changes with each build and macOS cannot tell the new version is
+the same app you already approved.
 
 Notarization needs a paid Apple Developer Program membership. Until that is in place, this
 step is unavoidable for anyone but the person who built the app.
@@ -84,8 +102,13 @@ beside it — or no number at all. The loop traces itself as items get done and 
 nothing is left. Clicking it opens the popover — a new memo, search, showing or hiding every
 memo at once, the trash, locking the app when app lock is on, settings, and quit.
 
+Type a task into the field at the top of the popover and press Return: it goes into the current
+tab of the memo you used last, without opening any memo window. The line under the field shows
+where it will land. The popover stays open, so you can add several in a row.
+
 Settings covers the language, what the status item counts, whether notes stay in front of
-other apps and out of screen shares and screenshots, whether reminders show task text, app
+other apps and out of screen shares and screenshots, whether Control-Option-Command-H works
+from any app, whether reminders show task text, app
 lock, the default font, storage and backups, and whether Posteight keeps a Dock icon. The
 Dock icon is on by default, so a running Posteight can be reached from the Dock and
 Command-Tab, and clicking it brings the memo windows back. Turning it off leaves a
@@ -96,6 +119,8 @@ menu-bar-only app.
 - Choose **Search Notes…** in the menu bar to search names, titles, tasks, and details across all tabs. Click a result to open the matching location in its memo.
 - Drag task handles to reorder, or use the context menu to move tasks to another memo. Pin tasks to the top or sort by completion state.
 - Schedule reminders for individual tasks. Notifications require permission in the installed app. They show a short notice instead of the task text unless you turn on **Settings → Reminders → Show task text in notifications**.
+- The export button at the bottom of a memo copies the current tab as Markdown — `- [ ] to do` / `- [x] done`. Paste it into Notion or Obsidian and it becomes checkboxes, completion included.
+- The other way round, pasting a multi-line list into a task row turns each line into a task. Markers like `- [ ]`, `- ` and `1. ` are dropped, and `- [x]` comes in as done. Pasting on an empty row fills it first, and with the row's text selected the paste replaces it. On an empty row even a single line such as `- [ ] groceries` loses its marker. One Command-Z takes the whole paste back.
 - Set the default font and text size in Settings, or pick a different font and size for one memo from its pencil case. Import your own TTF, OTF, or TTC font files.
 
 ### Keyboard shortcuts
@@ -107,6 +132,8 @@ menu-bar-only app.
 | Command-Delete | Move the current tab to the Trash, after confirming |
 | Command-Z / Shift-Command-Z | Undo / redo across the whole memo |
 | Command-A, then Command-C | Select and copy the current tab |
+| Command-Return | Mark the task you are editing as done / not done |
+| Control-Option-Command-H | Hide all memos / bring them back — works from any app |
 | Esc | Hide the memo |
 | Command-, | Settings |
 
@@ -115,7 +142,7 @@ field, Command-A selects within that field only.
 
 ### Storage errors and backups
 
-If saved files cannot be read or previous notes cannot be migrated, editing and saving pause to protect the originals. The menu bar and **Settings → Storage and Backup** show the error. Resolve the cause and select **Try Again**. Edits that fail to save remain in memory while the app is open; resolve save errors before quitting.
+If saved files cannot be read, editing and saving pause to protect the originals. The menu bar and **Settings → Storage and Backup** show the error. Resolve the cause and select **Try Again**. Edits that fail to save remain in memory while the app is open; resolve save errors before quitting.
 
 Successfully loaded notes are backed up to `backup.json` before the first save after launch. **Back Up Current Notes** replaces that backup with the current contents. **Restore Backup…** replaces notes and trash with the backup, archiving the original files in a `BeforeRestore-…` folder. A restore interrupted by quitting resumes on the next launch.
 
@@ -138,12 +165,13 @@ The menus macOS draws itself — File, Edit, Window — still follow the system 
 Posteight runs in the App Sandbox, so your notes live inside its own container —
 `~/Library/Containers/com.younjiyoung.posteight/Data/Library/Application Support/Posteight/`.
 File permissions restrict reading and writing to your user account. Files are not encrypted; these permissions do not prevent access by other programs running as the same user.
-Settings → App → Open Folder takes you there. Notes from versions before the sandbox are
-copied over once, on first launch, and the old folder is left untouched.
+Settings → App → Open Folder takes you there. Notes from v0.1.0 are copied here once, the
+first time v0.2.0 runs. If you are upgrading straight from v0.1.0, run v0.2.0 once first.
 
 There is no account, no sync, and no telemetry. Export is explicit: Command-A selects the
-current tab in a memo window and Command-C copies it to the clipboard, marked so clipboard
-managers keep it out of their history.
+current tab in a memo window and Command-C copies it, or the export button copies it as
+Markdown. Either way the clipboard entry is marked so clipboard managers keep it out of their
+history.
 
 Enable **Settings → App lock** to lock all of Posteight from the menu bar. Unlocking uses Touch ID
 or your Mac login password, so Posteight stores no separate password. While locked, the app hides

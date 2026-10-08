@@ -18,6 +18,8 @@ struct StickyNoteWindowView: View {
     @State private var isCardHovered = false
     @State private var editingTabID: UUID?
     @State private var hoveredTabID: UUID?
+    @GestureState private var draggedTabID: UUID?
+    @State private var tabDetachPreview = TabDetachPreview()
     @State private var lastMergeAttempt = Date.distantPast
     @State private var isAllContentSelected = false
 
@@ -112,6 +114,7 @@ struct StickyNoteWindowView: View {
                     return true
                 },
                 onMoveEnded: { if !store.isStorageBlocked { mergeAtDropLocation() } },
+                onMoved: saveWindowPosition,
                 onAddTab: {
                     guard !store.isStorageBlocked else { return }
                     editingTabID = nil
@@ -139,6 +142,7 @@ struct StickyNoteWindowView: View {
         }
         .onChange(of: lock.isLocked) { _, locked in
             if locked {
+                tabDetachPreview.dismiss()
                 store.searchFocusRequest = nil
                 isPencilCaseOpen = false
                 showsDeleteConfirmation = false
@@ -148,6 +152,10 @@ struct StickyNoteWindowView: View {
                 window?.makeFirstResponder(nil)
             }
         }
+        .onChange(of: draggedTabID) { _, id in
+            if id == nil { tabDetachPreview.dismiss() }
+        }
+        .onDisappear { tabDetachPreview.dismiss() }
         .task(id: store.searchFocusRequest?.id) {
             guard let request = store.searchFocusRequest,
                   request.noteID == note.id, request.tabID == selectedTab.id else { return }
@@ -156,6 +164,11 @@ struct StickyNoteWindowView: View {
         }
         .onChange(of: selectedTab.id) { _, _ in
             isAllContentSelected = false
+        }
+        // 메뉴 막대 빠른 입력이 넣을 메모.
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { notification in
+            guard (notification.object as? NSWindow) === window else { return }
+            store.lastActiveNoteID = noteID
         }
         // 창이 key 를 잃으면 전체 선택을 내린다. 이게 없으면 다른 앱에 갔다가 ⌘` 로
         // 돌아왔을 때 — 마우스 클릭이 없으니 해제 경로를 하나도 지나지 않는다 — 여전히
@@ -374,6 +387,7 @@ struct StickyNoteWindowView: View {
                             .padding(.horizontal, horizontalPadding)
                         }
                         .buttonStyle(.plain)
+                        .highPriorityGesture(tabDetachGesture(note: note, tab: tab, width: width), including: note.tabs.count > 1 ? .all : .none)
                     }
                 }
 
@@ -383,10 +397,12 @@ struct StickyNoteWindowView: View {
                 }
             }
             .frame(width: width, height: MemoSurfaceMetrics.activeTabHeight)
+            .coordinateSpace(name: tab.id)
             .clipped()
             .help(L("현재 탭 — 다시 클릭하면 이름을 수정할 수 있어요"))
             .accessibilityAddTraits(.isSelected)
             .onHover(perform: onHover)
+            .opacity(draggedTabID == tab.id ? 0.55 : 1)
         } else {
             ZStack(alignment: .trailing) {
                 Button {
@@ -409,6 +425,7 @@ struct StickyNoteWindowView: View {
                     }
                 }
                 .buttonStyle(.plain)
+                .highPriorityGesture(tabDetachGesture(note: note, tab: tab, width: width), including: note.tabs.count > 1 ? .all : .none)
 
                 if showsClose {
                     tabCloseButton(note: note, tab: tab)
@@ -416,6 +433,7 @@ struct StickyNoteWindowView: View {
                 }
             }
             .frame(width: width, height: MemoSurfaceMetrics.inactiveTabHeight)
+            .coordinateSpace(name: tab.id)
             .contentShape(MemoTabShape())
             .help(Lf("%@ 탭으로 이동", tab.name))
             .padding(.bottom, 3)
@@ -428,7 +446,51 @@ struct StickyNoteWindowView: View {
                     .allowsHitTesting(false)
             }
             .onHover(perform: onHover)
+            .opacity(draggedTabID == tab.id ? 0.55 : 1)
         }
+    }
+
+    private func tabDetachGesture(note: StickyNote, tab: MemoTab, width: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 10, coordinateSpace: .named(tab.id))
+            .updating($draggedTabID) { _, dragging, _ in
+                dragging = tab.id
+            }
+            .onChanged { value in
+                guard !lock.isLocked, !store.isStorageBlocked else {
+                    tabDetachPreview.dismiss()
+                    return
+                }
+                tabDetachPreview.update(
+                    at: NSEvent.mouseLocation, grabOffset: value.startLocation,
+                    size: CGSize(width: width, height: MemoSurfaceMetrics.activeTabHeight),
+                    sharingType: settings.noteWindowSharingType
+                ) {
+                    ZStack {
+                        memoTabSurface(note, isSelected: true)
+                        tabLabel(note: note, tab: tab, showsSticker: width >= 54,
+                                 isSelected: true, reservesCloseSpace: false)
+                            .padding(.horizontal, width >= 74 ? 10 : 5)
+                    }
+                    .frame(width: width, height: MemoSurfaceMetrics.activeTabHeight)
+                    .allowsHitTesting(false)
+                }
+            }
+            .onEnded { value in
+                defer { tabDetachPreview.dismiss() }
+                guard !lock.isLocked, !store.isStorageBlocked,
+                      let window, let anchor = NSScreen.noteAnchor else { return }
+                let point = NSEvent.mouseLocation
+                // A small margin avoids detaching on an accidental release at the edge.
+                guard !window.frame.insetBy(dx: -12, dy: -12).contains(point) else { return }
+                editingTabID = nil
+                // Preserve the grabbed point instead of snapping the new window center to the pointer.
+                let position = NotePoint(
+                    x: point.x - value.startLocation.x + note.size.width / 2 - anchor.minX,
+                    y: anchor.maxY - point.y - value.startLocation.y
+                        - (MemoSurfaceMetrics.tabBarHeight - MemoSurfaceMetrics.activeTabHeight) + note.size.height / 2
+                )
+                store.detachTab(noteID: note.id, tabID: tab.id, position: position)
+            }
     }
 
     private func tabCloseButton(note: StickyNote, tab: MemoTab) -> some View {
@@ -465,8 +527,8 @@ struct StickyNoteWindowView: View {
                     Image(systemName: tab.stickerSymbol)
                         .font(.system(size: isSelected ? 10 : 9, weight: .semibold))
 
-                    if isSelected {
-                        WindowMoveHandle(onDragEnded: saveWindowPosition, onDragCompleted: mergeAtDropLocation)
+                    if isSelected && note.tabs.count == 1 {
+                        WindowMoveHandle(onDragCompleted: mergeAtDropLocation)
                     }
                 }
                 .frame(width: 15, height: 18)
@@ -694,6 +756,7 @@ private struct NoteWindowConfigurator: NSViewRepresentable {
     let onCopyAll: () -> Bool
     let onClearSelection: () -> Bool
     let onMoveEnded: () -> Void
+    let onMoved: () -> Void
     let onAddTab: () -> Void
     let onWindowAvailable: (NSWindow) -> Void
 
@@ -721,12 +784,14 @@ private struct NoteWindowConfigurator: NSViewRepresentable {
             coordinator.onCopyAll = onCopyAll
             coordinator.onClearSelection = onClearSelection
             coordinator.onMoveEnded = onMoveEnded
+            coordinator.onMoved = onMoved
             coordinator.window = window
             onWindowAvailable(window)
             window.title = windowTitle
             guard !coordinator.didConfigure else { return }
             coordinator.didConfigure = true
             coordinator.installEscapeMonitor()
+            coordinator.observeMoves(of: window)
 
             // A window can be recycled for another note after a delete faded this one out.
             window.alphaValue = 1
@@ -775,9 +840,23 @@ private struct NoteWindowConfigurator: NSViewRepresentable {
         var onCopyAll: (() -> Bool)?
         var onClearSelection: (() -> Bool)?
         var onMoveEnded: (() -> Void)?
+        var onMoved: (() -> Void)?
         private var dragStartFrame: NSRect?
         nonisolated(unsafe) private var dragMonitor: Any?
         nonisolated(unsafe) private var escapeMonitor: Any?
+        nonisolated(unsafe) private var moveObserver: Any?
+
+        /// 창이 움직일 때마다 자리를 적는다. 마우스로 끈 것만이 아니라 창 메뉴의 타일 배치, 창 관리
+        /// 앱, `moveOnScreenIfNeeded` 가 옮긴 것까지. 예전에는 선택된 탭의 이동 손잡이가 이 일을
+        /// 했는데, 탭이 둘 이상이면 그 자리를 탭 떼어 내기가 차지해서 손잡이와 함께 저장도 사라졌다.
+        func observeMoves(of window: NSWindow) {
+            guard moveObserver == nil else { return }
+            moveObserver = NotificationCenter.default.addObserver(
+                forName: NSWindow.didMoveNotification, object: window, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.onMoved?() }
+            }
+        }
 
         /// 종이의 빈 곳을 클릭하면 편집을 끝낸다.
         ///
@@ -854,6 +933,10 @@ private struct NoteWindowConfigurator: NSViewRepresentable {
                 case .undo, .redo:
                     // Document history is routed once at app level, including hidden windows.
                     return event
+                case .toggleDone:
+                    // 할 일 행을 편집하는 중일 때만 그 행이 받고, 그 밖에서는 그대로 흘려보낸다.
+                    // 노션·Obsidian 의 체크박스 토글과 같은 키다.
+                    return PlainEditableTextField.performCommandReturn(in: self.window) ? nil : event
                 case nil:
                     // ⌘·⌃ 없는 키 입력은 전체 선택 표시를 내린다. macOS 의 모든 텍스트 입력은
                     // ⌘A 다음 입력을 교체로 처리하는데 여기서는 교체가 아니라 캐럿 자리에
@@ -869,6 +952,7 @@ private struct NoteWindowConfigurator: NSViewRepresentable {
         }
 
         deinit {
+            if let moveObserver { NotificationCenter.default.removeObserver(moveObserver) }
             if let dragMonitor { NSEvent.removeMonitor(dragMonitor) }
             if let escapeMonitor {
                 NSEvent.removeMonitor(escapeMonitor)
