@@ -183,6 +183,25 @@ struct GlobalHideShortcutToggleTests {
         #expect(visibility.toggleForShortcut(visible: []) == .reveal([stillHidden]))
     }
 
+    /// 막 실행했거나 메모를 막 만든 순간. `register` 는 숨김으로 기록된 창을 내리므로, 숨긴 직후에
+    /// 생성이 끝난 창이 혼자 떠오르지 않는다.
+    @Test("만들어지는 중인 창도 함께 숨기고, 다시 누르면 함께 되돌린다")
+    func hidesWindowsStillBeingCreated() {
+        let shown = UUID(), creating = UUID()
+        var visibility = NoteWindowVisibility()
+        #expect(visibility.toggleForShortcut(visible: [shown], pending: [creating]) == .hide([shown, creating]))
+        #expect(visibility.isHidden(creating))
+        #expect(visibility.toggleForShortcut(visible: []) == .reveal([shown, creating]))
+        #expect(!visibility.isHidden(creating))
+    }
+
+    /// 생성이 끝나지 않은 창을 떠 있는 것으로 치면, 그 창이 끝내 뜨지 않을 때 되돌리기가 영영 막힌다.
+    @Test("만들어지는 중인 창만으로는 숨기지 않는다")
+    func pendingAloneIsNotShown() {
+        var visibility = NoteWindowVisibility()
+        #expect(visibility.toggleForShortcut(visible: [], pending: [UUID()]) == .revealAll)
+    }
+
     /// 팝오버로 전부 숨겼거나 막 실행했을 때. 아무 일도 없으면 키가 고장 난 것처럼 보인다.
     @Test("기억해 둔 것이 없으면 전부 띄운다")
     func revealsAllWhenNothingIsRemembered() {

@@ -39,11 +39,16 @@ struct NoteWindowVisibility {
 
     /// 단축키 한 번. 떠 있는 메모가 있으면 그것들을 숨기고 기억한다. 없으면 기억해 둔 것을 되돌린다.
     /// Esc 로 따로 닫아 둔 메모는 단축키가 숨긴 것이 아니므로 끌려 나오지 않는다.
-    mutating func toggleForShortcut(visible: Set<UUID>) -> ShortcutToggle {
+    ///
+    /// 숨길 때는 만들어지는 중인 창(`pending`)도 함께 숨긴다. `hideAll` 과 같은 이유다 — 막 실행했거나
+    /// 메모를 막 만든 순간에 누르면, 숨긴 직후에 생성이 끝난 창이 혼자 떠오른다. 숨길지 되돌릴지는 떠
+    /// 있는 창으로만 정한다. 생성이 끝나지 않은 창 하나 때문에 되돌리기가 영영 막히면 안 된다.
+    mutating func toggleForShortcut(visible: Set<UUID>, pending: Set<UUID> = []) -> ShortcutToggle {
         if !visible.isEmpty {
-            hiddenNoteIDs.formUnion(visible)
-            shortcutHiddenNoteIDs = visible
-            return .hide(visible)
+            let hidden = visible.union(pending)
+            hiddenNoteIDs.formUnion(hidden)
+            shortcutHiddenNoteIDs = hidden
+            return .hide(hidden)
         }
         // 그사이 다른 경로로 다시 띄운 메모는 이미 숨김 상태가 아니다.
         let restorable = shortcutHiddenNoteIDs.intersection(hiddenNoteIDs)
@@ -267,7 +272,7 @@ final class NoteWindowCoordinator {
     /// 달라고 누른 것이 아니고, 잠그기 전에도 다른 앱의 창 뒤에 있었을 수 있다.
     func toggleFromShortcut() {
         let visible = Set(windows.compactMap { $0.value.value?.isVisible == true ? $0.key : nil })
-        switch visibility.toggleForShortcut(visible: visible) {
+        switch visibility.toggleForShortcut(visible: visible, pending: pendingNoteIDs) {
         case .hide(let noteIDs):
             for noteID in noteIDs { windows[noteID]?.value?.orderOut(nil) }
         case .reveal(let noteIDs):
