@@ -93,7 +93,6 @@ struct SettingsView: View {
             AppLockSettingsSection()
 
             FontSettingsSection()
-                .disabled(store.storageError == .migration)
 
             StorageRecoverySection()
 

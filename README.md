@@ -133,7 +133,7 @@ field, Command-A selects within that field only.
 
 ### Storage errors and backups
 
-If saved files cannot be read or previous notes cannot be migrated, editing and saving pause to protect the originals. The menu bar and **Settings → Storage and Backup** show the error. Resolve the cause and select **Try Again**. Edits that fail to save remain in memory while the app is open; resolve save errors before quitting.
+If saved files cannot be read, editing and saving pause to protect the originals. The menu bar and **Settings → Storage and Backup** show the error. Resolve the cause and select **Try Again**. Edits that fail to save remain in memory while the app is open; resolve save errors before quitting.
 
 Successfully loaded notes are backed up to `backup.json` before the first save after launch. **Back Up Current Notes** replaces that backup with the current contents. **Restore Backup…** replaces notes and trash with the backup, archiving the original files in a `BeforeRestore-…` folder. A restore interrupted by quitting resumes on the next launch.
 
@@ -156,8 +156,8 @@ The menus macOS draws itself — File, Edit, Window — still follow the system 
 Posteight runs in the App Sandbox, so your notes live inside its own container —
 `~/Library/Containers/com.younjiyoung.posteight/Data/Library/Application Support/Posteight/`.
 File permissions restrict reading and writing to your user account. Files are not encrypted; these permissions do not prevent access by other programs running as the same user.
-Settings → App → Open Folder takes you there. Notes from versions before the sandbox are
-copied over once, on first launch, and the old folder is left untouched.
+Settings → App → Open Folder takes you there. Notes from v0.1.0 are copied here once, the
+first time v0.2.0 runs. If you are upgrading straight from v0.1.0, run v0.2.0 once first.
 
 There is no account, no sync, and no telemetry. Export is explicit: Command-A selects the
 current tab in a memo window and Command-C copies it to the clipboard, marked so clipboard

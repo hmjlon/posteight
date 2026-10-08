@@ -143,110 +143,9 @@ final class PosteightStore: ObservableObject {
         return UserDefaults(suiteName: "com.younjiyoung.posteight") ?? .standard
     }
 
-    static private(set) var migrationIsBlocked = false
-
-    static let storeDirectory: URL = {
-        let directory = FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Posteight", isDirectory: true)
-        // Both this store and NoteFontLibrary derive their paths from here, and either can be
-        // built first. Migrating inside this one-time initialiser is what guarantees neither
-        // reaches the container before an older install's files have been copied into it — a
-        // font library that got there first would write an empty manifest and the notes
-        // migration would then see a populated container and skip.
-        if let legacy = legacyStoreDirectory, legacy != directory {
-            do { try prepareMigration(from: legacy, to: directory) }
-            catch { migrationIsBlocked = true }
-        }
-        return directory
-    }()
-
-    /// Where the store lived before the app was sandboxed. Under the sandbox `NSHomeDirectory()`
-    /// is the container, so the real home has to come from the password database.
-    nonisolated static var legacyStoreDirectory: URL? {
-        guard let entry = getpwuid(getuid()), let home = entry.pointee.pw_dir else { return nil }
-        return URL(fileURLWithPath: String(cString: home), isDirectory: true)
-            .appendingPathComponent("Library/Application Support/Posteight", isDirectory: true)
-    }
-
-    nonisolated static let migratedItems = ["notes.json", "trash.json", "trashed-tabs.json", "Fonts"]
-
-    /// Turning on the sandbox moves Application Support into the container. macOS migrates the
-    /// old location automatically only when it is named after the bundle id, and this app's
-    /// folder is `Posteight` rather than `com.younjiyoung.posteight`, so nothing is moved for us
-    /// and an upgrade would look exactly like every note being thrown away.
-    ///
-    /// Copies, never moves: leaving the originals in place keeps a way back if this release has
-    /// to be rolled back. Runs once — anything already in the container means this has either
-    /// run before or the install started life there, and in both cases the container wins.
-    /// A marker survives interrupted copies. Archive partial files and retry from the untouched
-    /// source rather than mistaking their existence for a completed migration.
-    nonisolated static let migrationMarker = ".migration-in-progress"
-
-    nonisolated static func prepareMigration(from source: URL, to destination: URL) throws {
-        let manager = FileManager.default
-        let marker = destination.appendingPathComponent(migrationMarker)
-        if manager.fileExists(atPath: marker.path) {
-            // A terminated copy may have left an incomplete file or Fonts directory. Keep those
-            // bytes for inspection, then retry from the untouched source instead of adopting them.
-            let sourceItems = try manager.contentsOfDirectory(atPath: source.path)
-            guard migratedItems.contains(where: sourceItems.contains) else { throw StorageFailure.migration }
-            let archive = destination.appendingPathComponent("InterruptedMigration-" + UUID().uuidString)
-            try manager.createDirectory(at: archive, withIntermediateDirectories: true,
-                                        attributes: [.posixPermissions: 0o700])
-            for item in migratedItems {
-                let partial = destination.appendingPathComponent(item)
-                if manager.fileExists(atPath: partial.path) {
-                    try manager.moveItem(at: partial, to: archive.appendingPathComponent(item))
-                }
-            }
-            narrowPermissions(of: archive)
-            try manager.removeItem(at: marker)
-        }
-        if migratedItems.contains(where: {
-            manager.fileExists(atPath: destination.appendingPathComponent($0).path)
-        }) { return }
-        let contents: [String]
-        do { contents = try manager.contentsOfDirectory(atPath: source.path) }
-        catch let error as CocoaError where error.code == .fileReadNoSuchFile { return }
-        guard migratedItems.contains(where: contents.contains) else { return }
-        guard migrateStore(from: source, to: destination) else { throw StorageFailure.migration }
-    }
-
-    @discardableResult
-    nonisolated static func migrateStore(from source: URL, to destination: URL) -> Bool {
-        let manager = FileManager.default
-        let marker = destination.appendingPathComponent(migrationMarker)
-        guard !manager.fileExists(atPath: marker.path),
-              manager.fileExists(atPath: source.path),
-              !migratedItems.contains(where: {
-                  manager.fileExists(atPath: destination.appendingPathComponent($0).path)
-              }) else { return false }
-        var attempted: [URL] = []
-        do {
-            try manager.createDirectory(at: destination, withIntermediateDirectories: true,
-                                        attributes: [.posixPermissions: 0o700])
-            try Data().write(to: marker, options: .atomic)
-            for item in migratedItems where manager.fileExists(atPath: source.appendingPathComponent(item).path) {
-                let target = destination.appendingPathComponent(item)
-                // Include an incomplete directory copy in rollback, too.
-                attempted.append(target)
-                try manager.copyItem(at: source.appendingPathComponent(item), to: target)
-            }
-            narrowPermissions(of: destination)
-            try manager.removeItem(at: marker)
-            return !attempted.isEmpty
-        } catch {
-            NSLog("Posteight: migration failed: \(error)")
-            var rolledBack = true
-            for target in attempted where manager.fileExists(atPath: target.path) {
-                do { try manager.removeItem(at: target) }
-                catch { rolledBack = false }
-            }
-            if rolledBack { try? manager.removeItem(at: marker) }
-            return false
-        }
-    }
+    static let storeDirectory = FileManager.default
+        .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("Posteight", isDirectory: true)
 
     /// `0700` for directories, `0600` for files, all the way down.
     private nonisolated static func narrowPermissions(of directory: URL) {
@@ -341,8 +240,6 @@ final class PosteightStore: ObservableObject {
     private var isLoading = false
     private var needsSessionBackup = false
     private var loadedSnapshot: StoreBackup?
-    private let migrationSource: URL?
-    private let usesDefaultDirectory: Bool
     private var backupURL: URL { directory.appendingPathComponent("backup.json") }
     private var pendingRestoreURL: URL { directory.appendingPathComponent("pending-restore.json") }
 
@@ -352,13 +249,9 @@ final class PosteightStore: ObservableObject {
     /// has to be filled in. It defaults to the source language so tests do not depend on the
     /// language of the machine running them.
     /// `defaults` 도 테스트만 넘긴다. 위치 기준 이전 표시가 실제 앱의 도메인에 남지 않게 한다.
-    init(directory: URL? = nil, language: AppLanguage = .korean, legacyDirectory: URL? = nil,
-         defaults: UserDefaults? = nil) {
+    init(directory: URL? = nil, language: AppLanguage = .korean, defaults: UserDefaults? = nil) {
         self.defaults = defaults ?? Self.appDefaults
-        let resolvedDirectory = directory ?? Self.storeDirectory
-        self.usesDefaultDirectory = directory == nil
-        self.migrationSource = directory == nil ? Self.legacyStoreDirectory : legacyDirectory
-        let directory = resolvedDirectory
+        let directory = directory ?? Self.storeDirectory
         self.directory = directory
         self.loadLanguage = language
         self.notesURL = directory.appendingPathComponent("notes.json")
@@ -998,11 +891,6 @@ final class PosteightStore: ObservableObject {
         isLoading = true
         defer { isLoading = false }
         do {
-            if let migrationSource, migrationSource != directory {
-                do { try Self.prepareMigration(from: migrationSource, to: directory) }
-                catch { throw StorageFailure.migration }
-            }
-            if usesDefaultDirectory { Self.migrationIsBlocked = false }
             try finishPendingRestore()
             let loadedNotes: [StickyNote]? = try read(notesURL, key: storageKey, legacy: legacyStorageKey)
             let loadedTrash: [TrashedStickyNote]? = try read(trashURL, key: trashStorageKey, legacy: legacyTrashStorageKey)
@@ -1152,7 +1040,6 @@ final class PosteightStore: ObservableObject {
     /// Validate before touching the live store. Preserve the original bytes, including corrupt
     /// files, before replacing anything. A failed restore leaves backup.json available for retry.
     func restoreBackup() throws {
-        guard storageError != .migration else { throw StorageFailure.migration }
         let snapshot = try JSONDecoder().decode(StoreBackup.self, from: Data(contentsOf: backupURL))
         try snapshot.validate()
         // 아직 디스크에 없는 편집 — 디바운스에 걸렸거나 직전 저장이 실패한 것 — 을 먼저 쓴다.

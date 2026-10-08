@@ -64,7 +64,6 @@ enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
 private let englishStrings: [String: String] = [
     "저장된 메모를 읽지 못했어요. 원본을 보호하기 위해 편집과 저장을 멈췄어요.": "Unable to read saved notes. Editing and saving are paused to protect the original files.",
     "메모를 저장하지 못했어요. 저장 공간과 폴더 권한을 확인한 뒤 다시 시도해 주세요.": "Unable to save notes. Check free disk space and folder permissions, then try again.",
-    "이전 메모를 가져오지 못했어요. 원본은 그대로 있어요. 저장 폴더를 확인한 뒤 다시 시도해 주세요.": "Unable to migrate your previous notes. The originals are unchanged. Check the storage folder and try again.",
     "다시 시도": "Try Again",
     "저장과 백업": "Storage and Backup",
     "최근 백업": "Latest backup",

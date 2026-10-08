@@ -134,15 +134,14 @@ README 이미지를 다시 찍을 때는 **설정 → 노트** 의 "화면 공�
   `trash.json`, `trashed-tabs.json` 으로 저장된다(`PosteightStore.storeDirectory`). 임포트한
   폰트와 그 매니페스트는 같은 자리의 `Fonts/` 다. 파일은 `0600`, 디렉터리는 `0700` 으로 만든다.
   테스트는 자기 `directory` 를 넘기기 때문에 실제 노트를 건드리지 않는다.
-- 샌드박스 이전 설치는 `~/Library/Application Support/Posteight/` 에 저장했다.
-  `PosteightStore.migrateStore(from:to:)` 가 첫 실행에 한 번 컨테이너로 복사하고 원본은
-  남긴다. 호출 지점이 `storeDirectory` 의 1회성 초기화 안에 있는 것은 의도다 — 스토어와
-  `NoteFontLibrary` 중 어느 쪽이 먼저 만들어질지 정해져 있지 않아서, 그 바깥에서 부르면
-  폰트 라이브러리가 먼저 컨테이너에 닿아 마이그레이션이 통째로 건너뛰어진다.
+- 샌드박스 이전(v0.1.0) 설치는 `~/Library/Application Support/Posteight/` 에 저장했다.
+  v0.2.0 이 첫 실행에 한 번 컨테이너로 복사했고, 그 코드와 예전 경로 읽기 임시 예외는 그다음
+  릴리스에서 걷었다. 지금 앱은 그 경로를 읽지 못한다. v0.1.0 에서 바로 올라온 사용자는
+  v0.2.0 을 한 번 거쳐야 한다.
 - 설정은 `UserDefaults` 의 `posteight.*` 키에 있다. 컨테이너로는 macOS 가 알아서 옮긴다.
 - entitlements 는 `Packaging/Posteight.entitlements` 에 있고 App Sandbox, 파일 선택 패널용
-  `files.user-selected.read-only`, 그리고 위 마이그레이션을 위한 예전 경로 읽기 임시 예외
-  셋뿐이다. **임시 예외는 한 릴리스용이다. 마이그레이션이 한 바퀴 돌고 나면 지운다.**
+  `files.user-selected.read-only` 둘뿐이다. 임시 예외(`temporary-exception.*`)는 다시 넣지
+  않는다. 샌드박스가 막으라고 있는 자리에 구멍을 내고, App Store 심사도 받지 않는다.
   Release 는 `CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO` 다 — 빼면 Xcode 가 ad-hoc 서명을
   배포 신원으로 보지 않아 `get-task-allow` 를 배포 빌드에까지 주입한다.
 - 네트워크 호출도, 계정도, API 키도 없다. 밖으로 나가는 경로는 메모 창에서 Command-A →
@@ -241,17 +240,6 @@ POSTEIGHT_SYSTEM_LANGUAGE=en swift test
   만든 메모가 아니다. 항상 `store.notes.first { $0.id == noteID }` 로 집는다.
 
 ## 릴리스
-
-### 머지 전에 확인할 것
-
-- [ ] **`Packaging/Posteight.entitlements` 의 임시 예외를 지웠는가.**
-      `com.apple.security.temporary-exception.files.home-relative-path.read-only` 는 샌드박스
-      이전에 만들어진 설치의 노트를 컨테이너로 한 번 복사해 오기 위한 것이다. **그 한 번은
-      샌드박스가 나간 v0.2.0 으로 이미 끝났다.** 남아 있는 것은 지울 것만 남은 상태다. 남겨 두면
-      앱이 사용자 홈의 `Library/Application Support/Posteight/` 를 계속 읽을 수 있고, 샌드박스가
-      막으라고 있는 자리에 구멍이 하나 열린 채로 배포된다. App Store 심사도 임시 예외를 받지
-      않는다. 지울 때 `PosteightStore.migrateStore` 와 `legacyStoreDirectory` 도 같이 걷는다
-      — 읽을 수 없는 경로를 읽으려 드는 코드만 남는다.
 
 릴리스는 손이 아니라 CI 가 만든다. `dev` 를 `release` 로 머지하면
 [`release.yml`](.github/workflows/release.yml) 이 돌면서 직전 릴리스에서 마이너를 하나 올린
