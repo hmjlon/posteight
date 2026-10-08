@@ -114,6 +114,7 @@ struct StickyNoteWindowView: View {
                     return true
                 },
                 onMoveEnded: { if !store.isStorageBlocked { mergeAtDropLocation() } },
+                onMoved: saveWindowPosition,
                 onAddTab: {
                     guard !store.isStorageBlocked else { return }
                     editingTabID = nil
@@ -527,7 +528,7 @@ struct StickyNoteWindowView: View {
                         .font(.system(size: isSelected ? 10 : 9, weight: .semibold))
 
                     if isSelected && note.tabs.count == 1 {
-                        WindowMoveHandle(onDragEnded: saveWindowPosition, onDragCompleted: mergeAtDropLocation)
+                        WindowMoveHandle(onDragCompleted: mergeAtDropLocation)
                     }
                 }
                 .frame(width: 15, height: 18)
@@ -755,6 +756,7 @@ private struct NoteWindowConfigurator: NSViewRepresentable {
     let onCopyAll: () -> Bool
     let onClearSelection: () -> Bool
     let onMoveEnded: () -> Void
+    let onMoved: () -> Void
     let onAddTab: () -> Void
     let onWindowAvailable: (NSWindow) -> Void
 
@@ -782,12 +784,14 @@ private struct NoteWindowConfigurator: NSViewRepresentable {
             coordinator.onCopyAll = onCopyAll
             coordinator.onClearSelection = onClearSelection
             coordinator.onMoveEnded = onMoveEnded
+            coordinator.onMoved = onMoved
             coordinator.window = window
             onWindowAvailable(window)
             window.title = windowTitle
             guard !coordinator.didConfigure else { return }
             coordinator.didConfigure = true
             coordinator.installEscapeMonitor()
+            coordinator.observeMoves(of: window)
 
             // A window can be recycled for another note after a delete faded this one out.
             window.alphaValue = 1
@@ -836,9 +840,23 @@ private struct NoteWindowConfigurator: NSViewRepresentable {
         var onCopyAll: (() -> Bool)?
         var onClearSelection: (() -> Bool)?
         var onMoveEnded: (() -> Void)?
+        var onMoved: (() -> Void)?
         private var dragStartFrame: NSRect?
         nonisolated(unsafe) private var dragMonitor: Any?
         nonisolated(unsafe) private var escapeMonitor: Any?
+        nonisolated(unsafe) private var moveObserver: Any?
+
+        /// 창이 움직일 때마다 자리를 적는다. 마우스로 끈 것만이 아니라 창 메뉴의 타일 배치, 창 관리
+        /// 앱, `moveOnScreenIfNeeded` 가 옮긴 것까지. 예전에는 선택된 탭의 이동 손잡이가 이 일을
+        /// 했는데, 탭이 둘 이상이면 그 자리를 탭 떼어 내기가 차지해서 손잡이와 함께 저장도 사라졌다.
+        func observeMoves(of window: NSWindow) {
+            guard moveObserver == nil else { return }
+            moveObserver = NotificationCenter.default.addObserver(
+                forName: NSWindow.didMoveNotification, object: window, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.onMoved?() }
+            }
+        }
 
         /// 종이의 빈 곳을 클릭하면 편집을 끝낸다.
         ///
@@ -934,6 +952,7 @@ private struct NoteWindowConfigurator: NSViewRepresentable {
         }
 
         deinit {
+            if let moveObserver { NotificationCenter.default.removeObserver(moveObserver) }
             if let dragMonitor { NSEvent.removeMonitor(dragMonitor) }
             if let escapeMonitor {
                 NSEvent.removeMonitor(escapeMonitor)
