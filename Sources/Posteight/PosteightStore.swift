@@ -880,11 +880,15 @@ final class PosteightStore: ObservableObject {
     /// 붙여넣은 여러 줄을 항목으로 읽는다. `tabMarkdown` 의 반대이고, 노션·Obsidian·슬랙에서 복사한
     /// 목록도 같은 모양이다. 줄 앞의 제목(`#`)·글머리(`-` `*` `+` `•` `1.` `1)`)·체크박스 표시를
     /// 떼고, `[x]` 면 완료로 둔다. 들여쓴 하위 항목은 평평하게 펴고, 글이 남지 않는 줄은 건너뛴다.
-    /// 번호는 세 자리까지만 본다 — "2026. 10. 9 회의" 의 연도를 번호로 떼지 않게.
+    /// 번호는 세 자리까지만 본다 — "2026. 10. 9 회의" 의 연도를 번호로 떼지 않게. 같은 이유로
+    /// "10. 9 치과" 처럼 `.` 뒤에 숫자 한두 자리가 따로 서 있으면 번호가 아니라 월·일로 본다.
+    /// "1. 10분 운동" 은 숫자 뒤에 글자가 붙어 있어 번호다. "1. 2 eggs" 는 날짜로 읽혀 그대로 남는데,
+    /// 번호 하나를 덜 떼는 쪽이 날짜의 월을 지우는 쪽보다 낫다.
     nonisolated static func pastedItems(_ text: String, now: Date = Date()) -> [TodoItem] {
         text.split(whereSeparator: \.isNewline).compactMap { rawLine in
             var line = rawLine.trimmingCharacters(in: .whitespaces)
-            if let marker = line.range(of: #"^(#{1,6}|[-*+•]|\d{1,3}[.)])\s+"#, options: .regularExpression) {
+            if let marker = line.range(of: #"^(#{1,6}|[-*+•]|\d{1,3}\)|\d{1,3}\.(?!\s+\d{1,2}\.?(\s|$)))\s+"#,
+                                       options: .regularExpression) {
                 line.removeSubrange(marker)
             }
             var isDone = false

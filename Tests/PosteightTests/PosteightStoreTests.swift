@@ -600,6 +600,13 @@ struct PasteLinesTests {
         #expect(items.allSatisfy { ($0.completedAt != nil) == $0.isDone })
     }
 
+    @Test("A month and day is a date, not a list number")
+    func keepsKoreanDates() {
+        let text = "10. 9 치과 예약\n10. 12. 세금 납부\n12. 25\n1. 10분 운동\n2. 3개 사기\n3. 회의"
+        #expect(PosteightStore.pastedItems(text).map(\.title)
+                == ["10. 9 치과 예약", "10. 12. 세금 납부", "12. 25", "10분 운동", "3개 사기", "회의"])
+    }
+
     @Test("What the export writes comes back with its completion")
     func roundTripsTheExport() {
         let tab = MemoTab(name: "메모 1", title: "오늘 할 일", items: [
