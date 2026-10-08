@@ -905,7 +905,8 @@ final class PosteightStore: ObservableObject {
     /// 기록은 손으로 옮길 때처럼 버린다. 기록은 한 번만 남긴다.
     ///
     /// 한 줄은 `- [ ]` 같은 표시가 있고 행을 통째로 채우는 자리일 때만 받는다. 노션에서 할 일 하나를
-    /// 복사하면 그 한 줄이 오기 때문이다. 글이 있는 행 중간에 넣는 "1) …" 은 그냥 글자다.
+    /// 복사하면 그 한 줄이 오기 때문이다. 글이 있는 행 중간에 넣는 "1) …" 은 그냥 글자다. 줄바꿈이
+    /// 있는지가 아니라 글이 있는 줄 수로 센다 — 줄을 세 번 클릭해 복사하면 끝에 줄바꿈이 따라온다.
     ///
     /// 받았으면 커서를 옮길 수 있게 마지막으로 들어간 행을, 받지 않았으면 `nil` 을 돌려준다.
     @discardableResult
@@ -916,8 +917,8 @@ final class PosteightStore: ObservableObject {
               let current = tab(noteID: noteID, tabID: tabID)?.items.first(where: { $0.id == itemID })
         else { return nil }
         let fillsCurrent = replacingCurrent || !current.hasTitle
-        if !text.contains(where: \.isNewline) {
-            let hasMarker = incoming[0].title != text.trimmingCharacters(in: .whitespaces)
+        if incoming.count == 1 {
+            let hasMarker = incoming[0].title != text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard fillsCurrent, hasMarker else { return nil }
         }
         var lastID: UUID?

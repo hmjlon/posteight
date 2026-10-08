@@ -685,6 +685,20 @@ struct PasteLinesTests {
         #expect(items(store, memo.noteID).map(\.title) == ["위", ""])
     }
 
+    /// 줄을 세 번 클릭해 복사하면 끝에 줄바꿈이 따라온다. 그래도 한 줄이다.
+    @Test("A line copied with its line break is still a single line")
+    func trailingLineBreakIsStillOneLine() throws {
+        let store = store()
+        let memo = try memo(store, titles: ["위", ""])
+        #expect(store.pasteItems("장보기\n", noteID: memo.noteID, tabID: memo.tabID, at: memo.ids[0]) == nil)
+        #expect(store.pasteItems("\r\n장보기\r\n", noteID: memo.noteID, tabID: memo.tabID, at: memo.ids[1]) == nil)
+        #expect(items(store, memo.noteID).map(\.title) == ["위", ""])
+
+        #expect(store.pasteItems("- [x] 메일 답장\n", noteID: memo.noteID, tabID: memo.tabID, at: memo.ids[1]) == memo.ids[1])
+        #expect(items(store, memo.noteID).map(\.title) == ["위", "메일 답장"])
+        #expect(items(store, memo.noteID).last?.isDone == true)
+    }
+
     @Test("With the whole row selected, the paste replaces it")
     func replacesASelectedRow() throws {
         let store = store()

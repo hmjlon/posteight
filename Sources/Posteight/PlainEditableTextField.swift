@@ -23,7 +23,7 @@ struct PlainEditableTextField: NSViewRepresentable {
     var onDeleteEmpty: (() -> Bool)?
     var onCommandReturn: (() -> Void)?
     /// 붙여넣기를 먼저 받아 본다. 붙여넣을 글과 필드 글자 전체가 선택돼 있는지를 받고, 처리했으면
-    /// `true`. `false` 거나 없으면 AppKit 기본대로 붙여넣는다 — 한 줄 필드라 줄바꿈은 공백이 된다.
+    /// `true`. `false` 면 필드에 글자로 넣는다. 한 줄 필드라 줄은 공백으로 잇고, 빈 줄은 버린다.
     var onPaste: ((_ text: String, _ replacesAll: Bool) -> Bool)?
 
     /// 메모 창의 키 모니터가 ⌘↩ 를 지금 편집 중인 필드로 넘긴다. 필드 편집기의 delegate 가 그 필드다.
@@ -280,7 +280,16 @@ private final class LinePasteFieldEditor: NSTextView {
         PlainEditableTextField.finishComposition(in: self, coordinator: coordinator)
         let length = (string as NSString).length
         let replacesAll = length > 0 && selectedRange() == NSRange(location: 0, length: length)
-        guard onPaste(text, replacesAll) else { return super.readSelection(from: pboard, type: type) }
+        guard onPaste(text, replacesAll) else {
+            guard text.contains(where: \.isNewline) else { return super.readSelection(from: pboard, type: type) }
+            // AppKit 기본 붙여넣기는 줄바꿈마다 공백을 남긴다. 세 번 클릭해 복사한 줄이면 끝에 공백이
+            // 붙고, 빈 줄뿐이면 공백만 들어간다. 글이 있는 줄만 공백으로 이어 넣는다.
+            let line = text.split(whereSeparator: \.isNewline)
+                .filter { !$0.allSatisfy(\.isWhitespace) }
+                .joined(separator: " ")
+            if !line.isEmpty { insertText(line, replacementRange: selectedRange()) }
+            return true
+        }
         // 지금 편집 중인 행이 채워졌으면 그 글을 보여 준다. 편집 중에는 `updateNSView` 가 필드를
         // 덮어쓰지 않고, 스토어 쓰기는 실행 취소 때만 편집기를 다시 읽게 한다.
         let current = coordinator.parent.text

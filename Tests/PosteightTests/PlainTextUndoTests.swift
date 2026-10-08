@@ -246,6 +246,19 @@ extension AppKitEditingTests {
             pasteboard.setString(" 답장", forType: .string)
             #expect(lastEditor.readSelection(from: pasteboard))
             #expect(titles() == ["장보기", "메일 답장 답장"])
+
+            // 세 번 클릭해 복사한 줄은 끝에 줄바꿈이 붙어 온다. 그래도 한 줄이라 캐럿 자리에 들어가고,
+            // 줄바꿈은 공백으로 남지 않는다.
+            pasteboard.clearContents()
+            pasteboard.setString(" 끝\n", forType: .string)
+            #expect(lastEditor.readSelection(from: pasteboard))
+            #expect(titles() == ["장보기", "메일 답장 답장 끝"])
+
+            // 빈 줄뿐이면 아무것도 들어가지 않는다.
+            pasteboard.clearContents()
+            pasteboard.setString("\n  \n", forType: .string)
+            #expect(lastEditor.readSelection(from: pasteboard))
+            #expect(titles() == ["장보기", "메일 답장 답장 끝"])
         }
 
         @Test func pastingFinishesCompositionAndReplacesASelectedRow() async throws {
@@ -336,7 +349,7 @@ private struct HistoryFields: View {
                     let last = store.pasteItems(text, noteID: noteID, tabID: tabID, at: item.id,
                                                 replacingCurrent: replacesAll)
                     if let last { focusedItemID = last }
-                    return last != nil || text.contains(where: \.isNewline)
+                    return last != nil
                 })
             }
         }

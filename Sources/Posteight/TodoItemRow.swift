@@ -106,8 +106,7 @@ struct TodoItemRow: View {
                         let lastID = store.pasteItems(text, noteID: note.id, tabID: tab.id, at: item.id,
                                                       replacingCurrent: replacesAll)
                         if let lastID { focusedItemID = lastID }
-                        // 빈 줄뿐인 여러 줄도 삼킨다. 기본 붙여넣기는 그것을 공백으로 넣는다.
-                        return lastID != nil || text.contains(where: \.isNewline)
+                        return lastID != nil
                     }
                 )
                 .frame(height: 26 + max(0, fontSizeAdjustment))
