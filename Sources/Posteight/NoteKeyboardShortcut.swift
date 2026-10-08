@@ -14,7 +14,8 @@ enum NoteKeyboardShortcut {
         case (53, []): self = .close
         case (6, [.command]): self = .undo
         case (6, [.command, .shift]): self = .redo
-        case (36, [.command]): self = .toggleDone
+        // Return 과 숫자 키패드의 Enter(fn-Return 도 이것이다).
+        case (36, [.command]), (76, [.command]): self = .toggleDone
         default: return nil
         }
     }

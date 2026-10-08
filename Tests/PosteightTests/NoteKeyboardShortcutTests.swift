@@ -24,6 +24,11 @@ struct NoteKeyboardShortcutTests {
             modifierFlags: [.command], timestamp: 0, windowNumber: 0, context: nil,
             characters: "\r", charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36))
         #expect(NoteKeyboardShortcut(event: toggle) == .toggleDone)
+        // 숫자 키패드의 Enter. 키패드 키에는 `.numericPad` 가 붙어 온다.
+        let keypadToggle = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero,
+            modifierFlags: [.command, .numericPad], timestamp: 0, windowNumber: 0, context: nil,
+            characters: "\u{3}", charactersIgnoringModifiers: "\u{3}", isARepeat: false, keyCode: 76))
+        #expect(NoteKeyboardShortcut(event: keypadToggle) == .toggleDone)
     }
 
     /// 그냥 Return 은 다음 행을 만드는 키다. 완료 토글이 가로채면 안 된다.
